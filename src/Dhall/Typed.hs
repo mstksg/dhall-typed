@@ -25,6 +25,7 @@ module Dhall.Typed where
 import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
 import           Data.Kind
+import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
 import           Data.Singletons
 import           Data.Singletons.Prelude.List              (Sing(..))
@@ -32,6 +33,7 @@ import           Data.Singletons.Prelude.Maybe
 import           Data.Singletons.Prelude.Tuple
 import           Data.Singletons.Sigma
 import           Data.Singletons.TH
+import           Data.Text                                 (Text)
 import           Data.Type.Equality
 import           Data.Void
 import           Dhall.Typed.Prod
@@ -39,6 +41,7 @@ import           GHC.Generics
 import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
 import qualified Control.Applicative                       as P
+import qualified Data.List.NonEmpty                        as NE
 import qualified Dhall                         as D hiding (Type)
 import qualified Dhall.Core                                as D
 import qualified Dhall.TypeCheck                           as D
@@ -138,18 +141,26 @@ data Builtin :: ExprType t -> ExprType t -> Type where
 
 deriving instance Show (Builtin a b)
 
+data Lets :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
+    LØ :: Sing '(l, b) -> Expr vs b -> Expr ('(l, b) ': vs) a -> Lets vs a
+    LS :: Sing '(l, b) -> Expr vs b -> Lets ('(l, b) ': vs) a -> Lets vs a
+
+deriving instance Show (Lets vs a)
+
 data ExprFst :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type where
     EF :: Expr vs a -> ExprFst vs '(t, a)
 
 data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
     ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETType (TypeType t))
     Var        :: IxN vs n a b -> Expr vs b
+    Lam        :: Sing v -> Expr (v ': vs) a -> Expr vs a
     App        :: Expr vs (a ':-> b) -> Expr vs a -> Expr vs b
-    Lam        :: Sing v -> Expr ( v ': vs) a -> Expr vs a
+    Let        :: Lets vs a -> Expr vs a
     BoolLit    :: Bool    -> Expr vs 'Bool
     NaturalLit :: Natural -> Expr vs 'Natural
     IntegerLit :: Integer -> Expr vs 'Integer
     DoubleLit  :: Double  -> Expr vs 'Double
+    TextLit    :: [(Text, Expr vs 'Text)] -> Text -> Expr vs 'Text
     Op         :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
     BoolIf     :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
     Builtin    :: Builtin a b -> Expr vs (a ':-> b)
@@ -202,13 +213,31 @@ matchIxN t = go
           SS n -> go n vs (f . IO)
         Disproved _ -> go m vs (f . IS)
 
+fromLets
+    :: Sing vs
+    -> NonEmpty (D.Binding () D.X)
+    -> D.Expr () D.X
+    -> (forall a. Sing a -> Lets vs a -> Maybe r)
+    -> Maybe r
+fromLets vs (D.Binding (FromSing b) _ x :| bs) y f = do
+    SE tx x' <- fromSomeDhall vs x
+    let v = STuple2 b tx
+    case NE.nonEmpty bs of
+      Nothing -> do
+        SE ty y' <- fromSomeDhall (v `SCons` vs) y
+        f ty (LØ v x' y')
+      Just bs' -> fromLets (v `SCons` vs) bs' y $ \ty l ->  -- is this right? what about unknown types depending on x?
+        f ty (LS v x' l)
+
 fromSomeDhall :: forall vs. Sing vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
 fromSomeDhall vs = \case
-    D.Const c      -> withSomeSing (fromConst c) $ Just . typeLit . SETType
-    D.Var (D.V (FromSing x) (fromNatural.fromIntegral->FromSing n)) ->
-                      matchIxN x n vs $ \i r -> Just $ SE r (Var i)
+    D.Const c       -> withSomeSing (fromConst c) $ Just . typeLit . SETType
+    D.Var (D.V x n) -> withSomeSing x                              $ \x' ->
+                       withSomeSing (fromNatural (fromIntegral n)) $ \n' ->
+                       matchIxN x' n' vs                           $ \i r ->
+                         Just $ SE r (Var i)
     D.Lam (FromSing x) tx y -> do
-      SE _ (ETypeLit tx') <- fromSomeDhall vs tx
+      SE _ (ETypeLit tx') <- fromSomeDhall vs tx        -- is this right? can it be anything else? maybe something not normalized?
       let v = STuple2 x tx'
       SE ty y' <- fromSomeDhall (v `SCons` vs) y
       pure $ SE ty (Lam v y')
@@ -216,6 +245,8 @@ fromSomeDhall vs = \case
       SE (a :%-> b) f' <- fromSomeDhall vs f
       x'               <- fromDhall a vs x
       pure $ SE b (App f' x')
+    D.Let bs y  -> fromLets vs bs y $ \ty -> Just . SE ty . Let
+    D.Annot x _ -> fromSomeDhall vs x
     D.Bool         -> Just $ typeLit SBool
     D.BoolLit b    -> Just $ SE SBool (BoolLit b)
     D.BoolAnd x y  -> SE SBool <$> op BoolOr SBool x y
@@ -244,6 +275,9 @@ fromSomeDhall vs = \case
     D.DoubleLit f      -> Just $ SE SDouble  (DoubleLit f)
     D.DoubleShow       -> Just $ builtin SDouble  SText    DoubleShow
     D.Text             -> Just $ typeLit SText
+    D.TextLit (D.Chunks ts t0) -> do
+      ts' <- (traverse . traverse) (fromDhall SText vs) ts
+      pure $ SE SText (TextLit ts' t0)
     _ -> undefined
   where
     typeLit :: Sing t -> SomeExpr vs
@@ -393,4 +427,6 @@ fromSomeDhall vs = \case
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
-
+-- -- | The body of an interpolated @Text@ literal
+-- data Chunks s a = Chunks [(Text, Expr s a)] Text
+--     deriving (Functor, Foldable, Generic, Traversable, Show, Eq, Data)
