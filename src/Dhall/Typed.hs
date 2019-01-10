@@ -1,4 +1,5 @@
 {-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE InstanceSigs           #-}
@@ -14,30 +15,38 @@
 {-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE ViewPatterns           #-}
 
 module Dhall.Typed where
 
 -- module Dhall.Typed (
 --   ) where
 
-import           Control.Applicative hiding   (Const(..))
+import           Control.Applicative hiding    (Const(..))
 import           Control.Monad
 import           Data.Kind
+import           Data.Maybe
 import           Data.Singletons
+import           Data.Singletons.Prelude.Maybe
 import           Data.Singletons.Sigma
 import           Data.Singletons.TH
 import           Data.Type.Equality
 import           Data.Void
 import           Dhall.Typed.Prod
 import           GHC.Generics
-import           GHC.TypeLits                 (Symbol)
+import           GHC.TypeLits                  (Symbol)
 import           Numeric.Natural
-import qualified Control.Applicative          as P
-import qualified Dhall                        as D
-import qualified Dhall.Core                   as D
-import qualified Dhall.TypeCheck              as D
+import qualified Control.Applicative           as P
+import qualified Dhall                         as D hiding (Type)
+import qualified Dhall.Core                    as D
+import qualified Dhall.TypeCheck               as D
 
 $(singletons [d|
+  data ExprTypeType = Type
+                    | Kind
+                    | Sort
+    deriving (Eq, Ord, Show)
+
   data ExprType t = Bool
                   | Natural
                   | Integer
@@ -48,7 +57,42 @@ $(singletons [d|
                   | Record [(t, ExprType t)]
                   | Union  [(t, ExprType t)]
                   | ExprType t :-> ExprType t
-    deriving (Eq, Show)
+                  | ETType ExprTypeType
+    deriving (Eq, Ord, Show)
+
+  rulePairs :: ExprTypeType -> ExprTypeType -> Maybe ExprTypeType
+  rulePairs a b = case b of
+    Type -> Just Type
+    Kind -> case a of
+      Type -> Nothing
+      Kind -> Just Kind
+      Sort -> Just Sort
+    Sort -> case a of
+      Type -> Nothing
+      Kind -> Nothing
+      Sort -> Just Sort
+
+  axioms :: ExprTypeType -> ExprTypeType
+  axioms = \case
+    Type -> Kind
+    Kind -> Sort
+    Sort -> error "❰Sort❱ has no type, kind, or sort"
+
+  typeType :: ExprType t -> ExprTypeType
+  typeType = \case
+    Bool       -> Type
+    Natural    -> Type
+    Integer    -> Type
+    Double     -> Type
+    Text       -> Type
+    List _     -> Type
+    Optional _ -> Type
+    Record _   -> Type
+    Union _    -> Type
+    a :-> b    -> case typeType a `rulePairs` typeType b of
+      Nothing -> error "No dependent types"
+      Just t  -> t
+    ETType t -> axioms t
   |])
 
 data N = Z | S N
@@ -90,15 +134,16 @@ data ExprFst :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type
     EF :: Expr vs a -> ExprFst vs '(t, a)
 
 data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
+    ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETType (TypeType t))
     Var        :: IxN vs n a b -> Expr vs b
-    Lam        :: Expr vs a -> Expr (v ': vs) a
+    Lam        :: Sing v -> Expr ( v ': vs) a -> Expr vs a
     BoolLit    :: Bool    -> Expr vs 'Bool
     NaturalLit :: Natural -> Expr vs 'Natural
     IntegerLit :: Integer -> Expr vs 'Integer
     DoubleLit  :: Double  -> Expr vs 'Double
     Op         :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
     BoolIf     :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
-    Builtin    :: Builtin a b -> Expr vs (a :-> b)
+    Builtin    :: Builtin a b -> Expr vs (a ':-> b)
 
 deriving instance Show (Expr vs a)
 
@@ -115,6 +160,12 @@ data Bindings :: [(Symbol, ExprType Symbol)] -> Type where
 
 infixr 5 :?
 
+fromConst :: D.Const -> ExprTypeType
+fromConst = \case
+    D.Type -> Type
+    D.Kind -> Kind
+    D.Sort -> Sort
+
 fromDhall
     :: Sing a
     -> Bindings vs
@@ -128,6 +179,8 @@ fromDhall t bs e = do
 
 fromSomeDhall :: forall vs. Bindings vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
 fromSomeDhall bs = \case
+    D.Const (fromConst->FromSing t) -> Just $ SE (SETType (sAxioms t)) (ETypeLit (SETType t))
+    D.Bool         -> Just $ SE (SETType SType) (ETypeLit SBool)
     D.BoolLit    b -> Just $ SE SBool (BoolLit b)
     D.NaturalLit n -> Just $ SE SNatural (NaturalLit n)
     D.IntegerLit i -> Just $ SE SInteger (IntegerLit i)
@@ -143,6 +196,7 @@ fromSomeDhall bs = \case
       case t %~ u of
         Proved   Refl -> pure . SE t $ BoolIf b' x' y'
         Disproved _   -> empty
+    D.Natural          -> Just $ SE (SETType SType) (ETypeLit SNatural)
     D.NaturalIsZero    -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalIsZero   )
     D.NaturalEven      -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalEven     )
     D.NaturalOdd       -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalOdd      )
@@ -150,9 +204,13 @@ fromSomeDhall bs = \case
     D.NaturalShow      -> Just $ SE (SNatural :%-> SText   ) (Builtin NaturalShow     )
     D.NaturalPlus x y  -> SE SNatural <$> op NaturalPlus  sing x y
     D.NaturalTimes x y -> SE SNatural <$> op NaturalTimes sing x y
+    D.Integer          -> Just $ SE (SETType SType) (ETypeLit SInteger)
     D.IntegerShow      -> Just $ SE (SInteger :%-> SText  ) (Builtin IntegerShow    )
     D.IntegerToDouble  -> Just $ SE (SInteger :%-> SDouble) (Builtin IntegerToDouble)
+    D.Double           -> Just $ SE (SETType SType) (ETypeLit SDouble)
     D.DoubleShow       -> Just $ SE (SDouble  :%-> SText  ) (Builtin DoubleShow     )
+    D.Text             -> Just $ SE (SETType SType) (ETypeLit SText)
+    _ -> undefined
   where
     op :: Op a -> Sing a -> D.Expr () D.X -> D.Expr () D.X -> Maybe (Expr vs a)
     op o t x y = Op o <$> fromDhall t bs x <*> fromDhall t bs y
