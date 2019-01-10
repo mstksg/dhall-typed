@@ -22,24 +22,26 @@ module Dhall.Typed where
 -- module Dhall.Typed (
 --   ) where
 
-import           Control.Applicative hiding    (Const(..))
+import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
 import           Data.Kind
 import           Data.Maybe
 import           Data.Singletons
+import           Data.Singletons.Prelude.List              (Sing(..))
 import           Data.Singletons.Prelude.Maybe
+import           Data.Singletons.Prelude.Tuple
 import           Data.Singletons.Sigma
 import           Data.Singletons.TH
 import           Data.Type.Equality
 import           Data.Void
 import           Dhall.Typed.Prod
 import           GHC.Generics
-import           GHC.TypeLits                  (Symbol)
+import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
-import qualified Control.Applicative           as P
+import qualified Control.Applicative                       as P
 import qualified Dhall                         as D hiding (Type)
-import qualified Dhall.Core                    as D
-import qualified Dhall.TypeCheck               as D
+import qualified Dhall.Core                                as D
+import qualified Dhall.TypeCheck                           as D
 
 $(singletons [d|
   data ExprTypeType = Type
@@ -93,9 +95,11 @@ $(singletons [d|
       Nothing -> error "No dependent types"
       Just t  -> t
     ETType t -> axioms t
-  |])
 
-data N = Z | S N
+  data N = Z | S N
+    deriving (Eq, Ord, Show)
+
+  |])
 
 data IxN :: [(k, v)] -> N -> k -> v -> Type where
     IZ :: IxN ('(a, b) ': as) 'Z a b
@@ -103,6 +107,10 @@ data IxN :: [(k, v)] -> N -> k -> v -> Type where
     IS :: IxN             as   n a b -> IxN (c       ': as)     n  a b     -- should really do a /= c
 
 deriving instance Show (IxN as n a b)
+
+fromNatural :: Natural -> N
+fromNatural 0 = Z
+fromNatural n = S (fromNatural (n - 1))
 
 -- | Symbolic operators
 data Op :: ExprType t -> Type where
@@ -136,6 +144,7 @@ data ExprFst :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type
 data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
     ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETType (TypeType t))
     Var        :: IxN vs n a b -> Expr vs b
+    App        :: Expr vs (a ':-> b) -> Expr vs a -> Expr vs b
     Lam        :: Sing v -> Expr ( v ': vs) a -> Expr vs a
     BoolLit    :: Bool    -> Expr vs 'Bool
     NaturalLit :: Natural -> Expr vs 'Natural
@@ -154,12 +163,6 @@ data SomeExpr :: [(Symbol, ExprType Symbol)] -> Type where
 
 deriving instance Show (SomeExpr vs)
 
-data Bindings :: [(Symbol, ExprType Symbol)] -> Type where
-    BØ   :: Bindings '[]
-    (:?) :: Expr vs a -> Bindings ( '(s, a) ': vs)
-
-infixr 5 :?
-
 fromConst :: D.Const -> ExprTypeType
 fromConst = \case
     D.Type -> Type
@@ -168,52 +171,87 @@ fromConst = \case
 
 fromDhall
     :: Sing a
-    -> Bindings vs
+    -> Sing vs
     -> D.Expr () D.X
     -> Maybe (Expr vs a)
-fromDhall t bs e = do
-    SE t' e' <- fromSomeDhall bs e
+fromDhall t vs e = do
+    SE t' e' <- fromSomeDhall vs e
     case t %~ t' of
       Proved    Refl -> pure e'
       Disproved _    -> empty
 
-fromSomeDhall :: forall vs. Bindings vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
-fromSomeDhall bs = \case
-    D.Const (fromConst->FromSing t) -> Just $ SE (SETType (sAxioms t)) (ETypeLit (SETType t))
-    D.Bool         -> Just $ SE (SETType SType) (ETypeLit SBool)
-    D.BoolLit    b -> Just $ SE SBool (BoolLit b)
-    D.NaturalLit n -> Just $ SE SNatural (NaturalLit n)
-    D.IntegerLit i -> Just $ SE SInteger (IntegerLit i)
-    D.DoubleLit  f -> Just $ SE SDouble  (DoubleLit f)
-    D.BoolAnd x y  -> SE SBool <$> op BoolOr sing x y
-    D.BoolOr x y   -> SE SBool <$> op BoolOr sing x y
-    D.BoolEQ x y   -> SE SBool <$> op BoolEQ sing x y
-    D.BoolNE x y   -> SE SBool <$> op BoolNE sing x y
+matchIxN
+    :: forall k (s :: Symbol) (n :: N) (vs :: [(Symbol, k)]) r. ()
+    => Sing s
+    -> Sing n
+    -> Sing vs
+    -> (forall (v :: k). IxN vs n s v -> Sing v -> Maybe r)
+    -> Maybe r
+matchIxN t = go
+  where
+    go  :: forall (m :: N) (us :: [(Symbol, k)]). ()
+        => Sing m
+        -> Sing us
+        -> (forall v. IxN us m s v -> Sing v -> Maybe r)
+        -> Maybe r
+    go m = \case
+      SNil -> const Nothing
+      STuple2 x r `SCons` vs -> \f -> case t %~ x of
+        Proved Refl -> case m of
+          SZ   -> f IZ r
+          SS n -> go n vs (f . IO)
+        Disproved _ -> go m vs (f . IS)
+
+fromSomeDhall :: forall vs. Sing vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
+fromSomeDhall vs = \case
+    D.Const c      -> withSomeSing (fromConst c) $ Just . typeLit . SETType
+    D.Var (D.V (FromSing x) (fromNatural.fromIntegral->FromSing n)) ->
+                      matchIxN x n vs $ \i r -> Just $ SE r (Var i)
+    D.Lam (FromSing x) tx y -> do
+      SE _ (ETypeLit tx') <- fromSomeDhall vs tx
+      let v = STuple2 x tx'
+      SE ty y' <- fromSomeDhall (v `SCons` vs) y
+      pure $ SE ty (Lam v y')
+    D.App f x -> do
+      SE (a :%-> b) f' <- fromSomeDhall vs f
+      x'               <- fromDhall a vs x
+      pure $ SE b (App f' x')
+    D.Bool         -> Just $ typeLit SBool
+    D.BoolLit b    -> Just $ SE SBool (BoolLit b)
+    D.BoolAnd x y  -> SE SBool <$> op BoolOr SBool x y
+    D.BoolOr x y   -> SE SBool <$> op BoolOr SBool x y
+    D.BoolEQ x y   -> SE SBool <$> op BoolEQ SBool x y
+    D.BoolNE x y   -> SE SBool <$> op BoolNE SBool x y
     D.BoolIf b x y -> do
-      SE SBool b' <- fromSomeDhall bs b
-      SE t     x' <- fromSomeDhall bs x
-      SE u     y' <- fromSomeDhall bs y
-      case t %~ u of
-        Proved   Refl -> pure . SE t $ BoolIf b' x' y'
-        Disproved _   -> empty
-    D.Natural          -> Just $ SE (SETType SType) (ETypeLit SNatural)
-    D.NaturalIsZero    -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalIsZero   )
-    D.NaturalEven      -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalEven     )
-    D.NaturalOdd       -> Just $ SE (SNatural :%-> SBool   ) (Builtin NaturalOdd      )
-    D.NaturalToInteger -> Just $ SE (SNatural :%-> SInteger) (Builtin NaturalToInteger)
-    D.NaturalShow      -> Just $ SE (SNatural :%-> SText   ) (Builtin NaturalShow     )
-    D.NaturalPlus x y  -> SE SNatural <$> op NaturalPlus  sing x y
-    D.NaturalTimes x y -> SE SNatural <$> op NaturalTimes sing x y
-    D.Integer          -> Just $ SE (SETType SType) (ETypeLit SInteger)
-    D.IntegerShow      -> Just $ SE (SInteger :%-> SText  ) (Builtin IntegerShow    )
-    D.IntegerToDouble  -> Just $ SE (SInteger :%-> SDouble) (Builtin IntegerToDouble)
-    D.Double           -> Just $ SE (SETType SType) (ETypeLit SDouble)
-    D.DoubleShow       -> Just $ SE (SDouble  :%-> SText  ) (Builtin DoubleShow     )
-    D.Text             -> Just $ SE (SETType SType) (ETypeLit SText)
+      b'          <- fromDhall SBool vs b
+      SE t     x' <- fromSomeDhall   vs x
+      y'          <- fromDhall t     vs y
+      pure $ SE t (BoolIf b' x' y')
+    D.Natural          -> Just $ typeLit SNatural
+    D.NaturalLit n     -> Just $ SE SNatural (NaturalLit n)
+    D.NaturalIsZero    -> Just $ builtin SNatural SBool    NaturalIsZero
+    D.NaturalEven      -> Just $ builtin SNatural SBool    NaturalEven
+    D.NaturalOdd       -> Just $ builtin SNatural SBool    NaturalOdd
+    D.NaturalToInteger -> Just $ builtin SNatural SInteger NaturalToInteger
+    D.NaturalShow      -> Just $ builtin SNatural SText    NaturalShow
+    D.NaturalPlus x y  -> SE SNatural <$> op NaturalPlus   SNatural x y
+    D.NaturalTimes x y -> SE SNatural <$> op NaturalTimes  SNatural x y
+    D.Integer          -> Just $ typeLit SInteger
+    D.IntegerLit i     -> Just $ SE SInteger (IntegerLit i)
+    D.IntegerShow      -> Just $ builtin SInteger SText    IntegerShow
+    D.IntegerToDouble  -> Just $ builtin SInteger SDouble  IntegerToDouble
+    D.Double           -> Just $ typeLit SDouble
+    D.DoubleLit f      -> Just $ SE SDouble  (DoubleLit f)
+    D.DoubleShow       -> Just $ builtin SDouble  SText    DoubleShow
+    D.Text             -> Just $ typeLit SText
     _ -> undefined
   where
+    typeLit :: Sing t -> SomeExpr vs
+    typeLit t = SE (SETType (sTypeType t)) (ETypeLit t)
     op :: Op a -> Sing a -> D.Expr () D.X -> D.Expr () D.X -> Maybe (Expr vs a)
-    op o t x y = Op o <$> fromDhall t bs x <*> fromDhall t bs y
+    op o t x y = Op o <$> fromDhall t vs x <*> fromDhall t vs y
+    builtin :: Sing a -> Sing b -> Builtin a b -> SomeExpr vs
+    builtin a b bi = SE (a :%-> b) (Builtin bi)
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
