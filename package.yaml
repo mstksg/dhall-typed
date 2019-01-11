@@ -35,6 +35,7 @@ library:
   - singletons
   - text
   - decidable
+  - containers
 
 # executables:
 #   dhall-typed-exe:

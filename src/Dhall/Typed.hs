@@ -25,9 +25,12 @@ module Dhall.Typed where
 import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
 import           Data.Foldable
+import           Data.Functor
 import           Data.Kind
+import           Data.List
 import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
+import           Data.Sequence                             (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Prelude.List              (Sing(..))
 import           Data.Singletons.Prelude.Maybe
@@ -35,6 +38,7 @@ import           Data.Singletons.Prelude.Tuple
 import           Data.Singletons.Sigma
 import           Data.Singletons.TH hiding                 (Sum)
 import           Data.Text                                 (Text)
+import           Data.Traversable
 import           Data.Type.Equality
 import           Data.Type.Universe
 import           Data.Void
@@ -45,6 +49,7 @@ import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
 import qualified Control.Applicative                       as P
 import qualified Data.List.NonEmpty                        as NE
+import qualified Data.Sequence                             as Seq
 import qualified Dhall                         as D hiding (Type)
 import qualified Dhall.Core                                as D
 import qualified Dhall.Map                                 as M
@@ -61,7 +66,7 @@ $(singletons [d|
                   | Integer
                   | Double
                   | Text
-                  | List (ExprType t)
+                  | List (ExprType t)       -- we should be able to disallow passing in ETT
                   | Optional (ExprType t)
                   | Record [(t, ExprType t)]
                   | Union  [(t, ExprType t)]
@@ -103,6 +108,13 @@ $(singletons [d|
       Just t  -> t
     ETT t      -> axioms t
 
+  insert :: Ord a => a -> b -> [(a, b)] -> [(a, b)]
+  insert k v [] = [(k, v)]
+  insert k v kvs0@((k', v') : kvs) = case compare k k' of
+    LT -> (k, v) : kvs0
+    EQ -> error "insert equal"
+    GT -> (k', v') : insert k v kvs
+
   data N = Z | S N
     deriving (Eq, Ord, Show)
 
@@ -129,6 +141,7 @@ data Op :: ExprType t -> Type where
     NaturalTimes :: Op 'Natural
     TextAppend   :: Op 'Text
     ListAppend   :: Op ('List a)
+    CombineTypes :: Op ('ETT  a)
 
 deriving instance Show (Op a)
 
@@ -172,6 +185,7 @@ data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
     IntegerLit :: Integer -> Expr vs 'Integer
     DoubleLit  :: Double  -> Expr vs 'Double
     TextLit    :: [(Text, Expr vs 'Text)] -> Text -> Expr vs 'Text
+    ListLit    :: D.Seq (Expr vs a) -> Expr vs ('List a)
     Op         :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
     BoolIf     :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
     Builtin    :: Builtin a b -> Expr vs (a ':-> b)
@@ -297,6 +311,27 @@ fromFields vs = \case
       SE t x' <- fromSomeDhall vs x
       fromFields vs lxs $ \us fs -> f (STuple2 l' t `SCons` us) (Fld x' :< fs)
 
+insertUnion
+    :: forall (t :: Symbol) (vs :: [(Symbol, ExprType Symbol)]) (bs :: [(Symbol, ExprType Symbol)]) (a :: ExprType Symbol) r. ()
+    => Sing t
+    -> Sing a
+    -> Expr vs a
+    -> Sing bs
+    -> (forall (as :: [(Symbol, ExprType Symbol)]). Sing as -> Sum (Fld vs) as -> Maybe r)
+    -> Maybe r
+insertUnion t a x = go
+  where
+    go  :: forall (cs :: [(Symbol, ExprType Symbol)]). ()
+        => Sing cs
+        -> (forall (as :: [(Symbol, ExprType Symbol)]). Sing as -> Sum (Fld vs) as -> Maybe r)
+        -> Maybe r
+    go = \case
+      SNil -> \f -> f (STuple2 t a `SCons` SNil) (Sum IZ (Fld x))
+      cs0@(ub@(STuple2 u _) `SCons` cs) -> \f -> case sCompare t u of
+        SLT -> f (STuple2 t a `SCons` cs0) (Sum IZ (Fld x))
+        SEQ -> Nothing
+        SGT -> go cs $ \cs' (Sum i y) -> f (ub `SCons` cs') (Sum (IS i) y)
+
 fromSomeDhall :: forall vs. Sing vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
 fromSomeDhall vs = \case
     D.Const c       -> withSomeSing (fromConst c) $ Just . typeLit . SETT
@@ -305,8 +340,9 @@ fromSomeDhall vs = \case
                        matchIxN x' n' vs                           $ \i r ->
                          Just $ SE r (Var i)
     D.Lam (FromSing x) tx y -> do
-      SE _ (ETypeLit tx') <- fromSomeDhall vs tx        -- this can't be right, since we have things like App List Natural
-      let v = STuple2 x tx'
+      SE (SETT _) tx' <- fromSomeDhall vs tx
+      FromSing tx''   <- pure $ dhallTypeExpr tx'
+      let v = STuple2 x tx''
       SE ty y' <- fromSomeDhall (v `SCons` vs) y
       pure $ SE ty (Lam v y')
     D.App f x -> do
@@ -348,15 +384,44 @@ fromSomeDhall vs = \case
       pure $ SE SText (TextLit ts' t0)
     D.TextAppend x y   -> op TextAppend SText x y
     D.List             -> Just $ builtin (SETT SType) (SETT SType) ListBI
+    D.ListLit mt xs    -> case mt of
+      Nothing -> do
+        y :<| ys <- pure xs
+        SE t y'  <- fromSomeDhall vs y
+        ys'      <- traverse (fromDhall t vs) ys
+        pure $ SE (SList t) $ ListLit (y' :<| ys')
+      Just t  -> do
+        FromSing t' <- dhallTypeExpr <$> fromDhall (SETT SType) vs t
+        xs'         <- traverse (fromDhall t' vs) xs
+        pure $ SE (SList t') $ ListLit xs'
     D.ListAppend x y   -> do
       SE t@(SList _) x' <- fromSomeDhall vs x
       y'                <- fromDhall t   vs y
       pure $ SE t (Op ListAppend x' y')
     D.Optional         -> Just $ builtin (SETT SType) (SETT SType) OptionalBI
-    -- D.Record ts        -> do
-    --   ts <-
+    D.Record ts        -> do
+      FromSing ts' <- flip (traverse . traverse) (M.toList ts) $ \y -> do
+        SE (SETT _) y' <- fromSomeDhall vs y
+        pure $ dhallTypeExpr y'
+      pure $ typeLit (SRecord ts')
     D.RecordLit fs -> fromFields vs (M.toList fs) $ \t xs ->
       Just . SE (SRecord t) $ RecordLit xs
+    D.Union ts        -> do
+      FromSing ts' <- flip (traverse . traverse) (M.toList ts) $ \y -> do
+        SE (SETT _) y' <- fromSomeDhall vs y
+        pure $ dhallTypeExpr y'
+      pure $ typeLit (SUnion ts')
+    D.UnionLit k v ts -> withSomeSing k $ \k' -> do
+      FromSing ts' <- flip (traverse . traverse) (M.toList ts) $ \y -> do
+        SE (SETT _) y' <- fromSomeDhall vs y
+        pure $ dhallTypeExpr y'
+      SE t v' <- fromSomeDhall vs v
+      insertUnion k' t v' ts' $ \ts'' s ->
+        Just $ SE (SUnion ts'') (UnionLit s)
+    D.CombineTypes x y -> do
+      SE t@(SETT _) x' <- fromSomeDhall vs x
+      y'               <- fromDhall t   vs y
+      pure $ SE t (Op CombineTypes x' y')
     D.Field x (FromSing s) -> do
       SE (SRecord fs) x' <- fromSomeDhall vs x
       lookupSymbol s fs $ \i t -> Just . SE t $ Field x' i
@@ -364,6 +429,7 @@ fromSomeDhall vs = \case
       SE (SRecord fs) x' <- fromSomeDhall vs x
       projectSymbols ss fs $ \i p ->
         Just . SE (SRecord (prodSing (projectProd p))) $ Project x' i
+    D.Note _ x -> fromSomeDhall vs x
     _ -> undefined
   where
     typeLit :: Sing t -> SomeExpr vs
@@ -372,6 +438,9 @@ fromSomeDhall vs = \case
     op o t x y = SE t <$> (Op o <$> fromDhall t vs x <*> fromDhall t vs y)
     builtin :: Sing a -> Sing b -> Builtin a b -> SomeExpr vs
     builtin a b bi = SE (a :%-> b) (Builtin bi)
+
+dhallTypeExpr :: Expr vs ('ETT t) -> ExprType Text
+dhallTypeExpr = undefined
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
