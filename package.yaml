@@ -34,6 +34,7 @@ library:
   - dhall
   - singletons
   - text
+  - decidable
 
 # executables:
 #   dhall-typed-exe:

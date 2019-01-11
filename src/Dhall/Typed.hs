@@ -24,6 +24,7 @@ module Dhall.Typed where
 
 import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
+import           Data.Foldable
 import           Data.Kind
 import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
@@ -32,11 +33,13 @@ import           Data.Singletons.Prelude.List              (Sing(..))
 import           Data.Singletons.Prelude.Maybe
 import           Data.Singletons.Prelude.Tuple
 import           Data.Singletons.Sigma
-import           Data.Singletons.TH
+import           Data.Singletons.TH hiding                 (Sum)
 import           Data.Text                                 (Text)
 import           Data.Type.Equality
+import           Data.Type.Universe
 import           Data.Void
 import           Dhall.Typed.Prod
+import           Dhall.Typed.Sum
 import           GHC.Generics
 import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
@@ -44,6 +47,7 @@ import qualified Control.Applicative                       as P
 import qualified Data.List.NonEmpty                        as NE
 import qualified Dhall                         as D hiding (Type)
 import qualified Dhall.Core                                as D
+import qualified Dhall.Map                                 as M
 import qualified Dhall.TypeCheck                           as D
 
 $(singletons [d|
@@ -62,7 +66,7 @@ $(singletons [d|
                   | Record [(t, ExprType t)]
                   | Union  [(t, ExprType t)]
                   | ExprType t :-> ExprType t
-                  | ETType ExprTypeType
+                  | ETT ExprTypeType
     deriving (Eq, Ord, Show)
 
   rulePairs :: ExprTypeType -> ExprTypeType -> Maybe ExprTypeType
@@ -97,7 +101,7 @@ $(singletons [d|
     a :-> b    -> case typeType a `rulePairs` typeType b of
       Nothing -> error "No dependent types"
       Just t  -> t
-    ETType t -> axioms t
+    ETT t      -> axioms t
 
   data N = Z | S N
     deriving (Eq, Ord, Show)
@@ -105,9 +109,9 @@ $(singletons [d|
   |])
 
 data IxN :: [(k, v)] -> N -> k -> v -> Type where
-    IZ :: IxN ('(a, b) ': as) 'Z a b
-    IO :: IxN             as   n a b -> IxN ('(a, c) ': as) ('S n) a b
-    IS :: IxN             as   n a b -> IxN (c       ': as)     n  a b     -- should really do a /= c
+    IZN :: IxN ('(a, b) ': as) 'Z a b
+    ION :: IxN             as   n a b -> IxN ('(a, c) ': as) ('S n) a b
+    ISN :: IxN             as   n a b -> IxN (c       ': as)     n  a b     -- should really do a /= c
 
 deriving instance Show (IxN as n a b)
 
@@ -138,6 +142,8 @@ data Builtin :: ExprType t -> ExprType t -> Type where
     IntegerToDouble  :: Builtin 'Integer 'Double
     DoubleShow       :: Builtin 'Double  'Text
     Some             :: Builtin a        ('Optional a)
+    ListBI           :: Builtin ('ETT 'Type) ('ETT 'Type)
+    OptionalBI       :: Builtin ('ETT 'Type) ('ETT 'Type)
 
 deriving instance Show (Builtin a b)
 
@@ -147,11 +153,16 @@ data Lets :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
 
 deriving instance Show (Lets vs a)
 
+data Fld :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type where
+    Fld :: Expr vs a -> Fld vs '(l, a)
+
+deriving instance Show (Fld vs a)
+
 data ExprFst :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type where
     EF :: Expr vs a -> ExprFst vs '(t, a)
 
 data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
-    ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETType (TypeType t))
+    ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETT (TypeType t))
     Var        :: IxN vs n a b -> Expr vs b
     Lam        :: Sing v -> Expr (v ': vs) a -> Expr vs a
     App        :: Expr vs (a ':-> b) -> Expr vs a -> Expr vs b
@@ -164,6 +175,10 @@ data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
     Op         :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
     BoolIf     :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
     Builtin    :: Builtin a b -> Expr vs (a ':-> b)
+    RecordLit  :: Prod (Fld vs) as   -> Expr vs ('Record as)
+    UnionLit   :: Sum  (Fld vs) as   -> Expr vs ('Union  as)
+    Field      :: Expr vs ('Record as) -> Index as '(s, a) -> Expr vs a
+    Project    :: Expr vs ('Record as) -> Prod (Index as) bs -> Expr vs ('Record bs)
 
 deriving instance Show (Expr vs a)
 
@@ -203,15 +218,56 @@ matchIxN t = go
     go  :: forall (m :: N) (us :: [(Symbol, k)]). ()
         => Sing m
         -> Sing us
-        -> (forall v. IxN us m s v -> Sing v -> Maybe r)
+        -> (forall (v :: k). IxN us m s v -> Sing v -> Maybe r)
         -> Maybe r
     go m = \case
       SNil -> const Nothing
       STuple2 x r `SCons` vs -> \f -> case t %~ x of
         Proved Refl -> case m of
-          SZ   -> f IZ r
-          SS n -> go n vs (f . IO)
-        Disproved _ -> go m vs (f . IS)
+          SZ   -> f IZN r
+          SS n -> go n vs (f . ION)
+        Disproved _ -> go m vs (f . ISN)
+
+lookupSymbol
+    :: forall k (s :: Symbol) (vs :: [(Symbol, k)]) r. ()
+    => Sing s
+    -> Sing vs
+    -> (forall (v :: k). Index vs '(s, v) -> Sing v -> Maybe r)
+    -> Maybe r
+lookupSymbol t = go
+  where
+    go  :: forall (us :: [(Symbol, k)]). ()
+        => Sing us
+        -> (forall (v :: k). Index us '(s, v) -> Sing v -> Maybe r)
+        -> Maybe r
+    go = \case
+      SNil -> const Nothing
+      STuple2 x r `SCons` vs -> \f -> case t %~ x of
+        Proved Refl -> f IZ r
+        Disproved _ -> go vs (f . IS)
+
+data Projected :: ((Symbol, k) -> Type) -> [(Symbol, k)] -> [Symbol] -> [k] -> Type where
+    PrØ   :: Projected f '[] '[] '[]
+    (:<?) :: f '(a, b) -> Projected f abs as bs -> Projected f ( '(a, b) ': abs ) (a ': as) (b ': bs)
+
+projectProd :: Projected f abs as bs -> Prod f abs
+projectProd = \case
+    PrØ      -> Ø
+    x :<? xs -> x :< projectProd xs
+
+projectSymbols
+    :: forall k (as :: [Symbol]) (bs :: [(Symbol, k)]) r. ()
+    => Sing as
+    -> Sing bs
+    -> (forall (cs :: [(Symbol, k)]) (rs :: [k]). Prod (Index bs) cs -> Projected Sing cs as rs -> Maybe r)
+    -> Maybe r
+projectSymbols = \case
+    SNil -> \_ f -> f Ø PrØ
+    t0@(t `SCons` ts) -> \case
+      SNil -> const Nothing
+      xr@(STuple2 x _) `SCons` xs -> \f -> case t %~ x of
+        Proved Refl -> projectSymbols ts xs $ \ixs prs -> f (IZ :< mapProd IS ixs) (xr :<? prs)
+        Disproved _ -> projectSymbols t0 xs $ \ixs prs  -> f (mapProd IS ixs) prs
 
 fromLets
     :: Sing vs
@@ -229,15 +285,27 @@ fromLets vs (D.Binding (FromSing b) _ x :| bs) y f = do
       Just bs' -> fromLets (v `SCons` vs) bs' y $ \ty l ->  -- is this right? what about unknown types depending on x?
         f ty (LS v x' l)
 
+fromFields
+    :: forall (vs :: [(Symbol, ExprType Symbol)]) r. ()
+    => Sing vs
+    -> [(Text, D.Expr () D.X)]
+    -> (forall (as :: [(Symbol, ExprType Symbol)]). Sing as -> Prod (Fld vs) as -> Maybe r)
+    -> Maybe r
+fromFields vs = \case
+    []        -> \f -> f SNil Ø
+    (l,x):lxs -> \f -> withSomeSing l $ \l' -> do
+      SE t x' <- fromSomeDhall vs x
+      fromFields vs lxs $ \us fs -> f (STuple2 l' t `SCons` us) (Fld x' :< fs)
+
 fromSomeDhall :: forall vs. Sing vs -> D.Expr () D.X -> Maybe (SomeExpr vs)
 fromSomeDhall vs = \case
-    D.Const c       -> withSomeSing (fromConst c) $ Just . typeLit . SETType
+    D.Const c       -> withSomeSing (fromConst c) $ Just . typeLit . SETT
     D.Var (D.V x n) -> withSomeSing x                              $ \x' ->
                        withSomeSing (fromNatural (fromIntegral n)) $ \n' ->
                        matchIxN x' n' vs                           $ \i r ->
                          Just $ SE r (Var i)
     D.Lam (FromSing x) tx y -> do
-      SE _ (ETypeLit tx') <- fromSomeDhall vs tx        -- is this right? can it be anything else? maybe something not normalized?
+      SE _ (ETypeLit tx') <- fromSomeDhall vs tx        -- this can't be right, since we have things like App List Natural
       let v = STuple2 x tx'
       SE ty y' <- fromSomeDhall (v `SCons` vs) y
       pure $ SE ty (Lam v y')
@@ -249,10 +317,10 @@ fromSomeDhall vs = \case
     D.Annot x _ -> fromSomeDhall vs x
     D.Bool         -> Just $ typeLit SBool
     D.BoolLit b    -> Just $ SE SBool (BoolLit b)
-    D.BoolAnd x y  -> SE SBool <$> op BoolOr SBool x y
-    D.BoolOr x y   -> SE SBool <$> op BoolOr SBool x y
-    D.BoolEQ x y   -> SE SBool <$> op BoolEQ SBool x y
-    D.BoolNE x y   -> SE SBool <$> op BoolNE SBool x y
+    D.BoolAnd x y  -> op BoolOr SBool x y
+    D.BoolOr x y   -> op BoolOr SBool x y
+    D.BoolEQ x y   -> op BoolEQ SBool x y
+    D.BoolNE x y   -> op BoolNE SBool x y
     D.BoolIf b x y -> do
       b'          <- fromDhall SBool vs b
       SE t     x' <- fromSomeDhall   vs x
@@ -265,8 +333,8 @@ fromSomeDhall vs = \case
     D.NaturalOdd       -> Just $ builtin SNatural SBool    NaturalOdd
     D.NaturalToInteger -> Just $ builtin SNatural SInteger NaturalToInteger
     D.NaturalShow      -> Just $ builtin SNatural SText    NaturalShow
-    D.NaturalPlus x y  -> SE SNatural <$> op NaturalPlus   SNatural x y
-    D.NaturalTimes x y -> SE SNatural <$> op NaturalTimes  SNatural x y
+    D.NaturalPlus x y  -> op NaturalPlus   SNatural x y
+    D.NaturalTimes x y -> op NaturalTimes  SNatural x y
     D.Integer          -> Just $ typeLit SInteger
     D.IntegerLit i     -> Just $ SE SInteger (IntegerLit i)
     D.IntegerShow      -> Just $ builtin SInteger SText    IntegerShow
@@ -278,12 +346,30 @@ fromSomeDhall vs = \case
     D.TextLit (D.Chunks ts t0) -> do
       ts' <- (traverse . traverse) (fromDhall SText vs) ts
       pure $ SE SText (TextLit ts' t0)
+    D.TextAppend x y   -> op TextAppend SText x y
+    D.List             -> Just $ builtin (SETT SType) (SETT SType) ListBI
+    D.ListAppend x y   -> do
+      SE t@(SList _) x' <- fromSomeDhall vs x
+      y'                <- fromDhall t   vs y
+      pure $ SE t (Op ListAppend x' y')
+    D.Optional         -> Just $ builtin (SETT SType) (SETT SType) OptionalBI
+    -- D.Record ts        -> do
+    --   ts <-
+    D.RecordLit fs -> fromFields vs (M.toList fs) $ \t xs ->
+      Just . SE (SRecord t) $ RecordLit xs
+    D.Field x (FromSing s) -> do
+      SE (SRecord fs) x' <- fromSomeDhall vs x
+      lookupSymbol s fs $ \i t -> Just . SE t $ Field x' i
+    D.Project x (toList->FromSing ss) -> do
+      SE (SRecord fs) x' <- fromSomeDhall vs x
+      projectSymbols ss fs $ \i p ->
+        Just . SE (SRecord (prodSing (projectProd p))) $ Project x' i
     _ -> undefined
   where
     typeLit :: Sing t -> SomeExpr vs
-    typeLit t = SE (SETType (sTypeType t)) (ETypeLit t)
-    op :: Op a -> Sing a -> D.Expr () D.X -> D.Expr () D.X -> Maybe (Expr vs a)
-    op o t x y = Op o <$> fromDhall t vs x <*> fromDhall t vs y
+    typeLit t = SE (SETT (sTypeType t)) (ETypeLit t)
+    op :: Op a -> Sing a -> D.Expr () D.X -> D.Expr () D.X -> Maybe (SomeExpr vs)
+    op o t x y = SE t <$> (Op o <$> fromDhall t vs x <*> fromDhall t vs y)
     builtin :: Sing a -> Sing b -> Builtin a b -> SomeExpr vs
     builtin a b bi = SE (a :%-> b) (Builtin bi)
 
