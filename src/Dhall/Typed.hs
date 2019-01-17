@@ -175,24 +175,25 @@ data ExprFst :: [(Symbol, ExprType Symbol)] -> (Symbol, ExprType Symbol) -> Type
     EF :: Expr vs a -> ExprFst vs '(t, a)
 
 data Expr :: [(Symbol, ExprType Symbol)] -> ExprType Symbol -> Type where
-    ETypeLit   :: Sing (t :: ExprType Symbol) -> Expr vs ('ETT (TypeType t))
-    Var        :: IxN vs n a b -> Expr vs b
-    Lam        :: Sing v -> Expr (v ': vs) a -> Expr vs a
-    App        :: Expr vs (a ':-> b) -> Expr vs a -> Expr vs b
-    Let        :: Lets vs a -> Expr vs a
-    BoolLit    :: Bool    -> Expr vs 'Bool
-    NaturalLit :: Natural -> Expr vs 'Natural
-    IntegerLit :: Integer -> Expr vs 'Integer
-    DoubleLit  :: Double  -> Expr vs 'Double
-    TextLit    :: [(Text, Expr vs 'Text)] -> Text -> Expr vs 'Text
-    ListLit    :: D.Seq (Expr vs a) -> Expr vs ('List a)
-    Op         :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
-    BoolIf     :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
-    Builtin    :: Builtin a b -> Expr vs (a ':-> b)
-    RecordLit  :: Prod (Fld vs) as   -> Expr vs ('Record as)
-    UnionLit   :: Sum  (Fld vs) as   -> Expr vs ('Union  as)
-    Field      :: Expr vs ('Record as) -> Index as '(s, a) -> Expr vs a
-    Project    :: Expr vs ('Record as) -> Prod (Index as) bs -> Expr vs ('Record bs)
+    ETypeLit    :: Sing (t :: ExprType Symbol) -> Expr vs ('ETT (TypeType t))
+    Var         :: IxN vs n a b -> Expr vs b
+    Lam         :: Sing v -> Expr (v ': vs) a -> Expr vs a
+    App         :: Expr vs (a ':-> b) -> Expr vs a -> Expr vs b
+    Let         :: Lets vs a -> Expr vs a
+    BoolLit     :: Bool    -> Expr vs 'Bool
+    NaturalLit  :: Natural -> Expr vs 'Natural
+    IntegerLit  :: Integer -> Expr vs 'Integer
+    DoubleLit   :: Double  -> Expr vs 'Double
+    TextLit     :: [(Text, Expr vs 'Text)] -> Text -> Expr vs 'Text
+    ListLit     :: D.Seq (Expr vs a) -> Expr vs ('List a)
+    OptionalLit :: Maybe (Expr vs a) -> Expr vs ('Optional a)
+    Op          :: Op a    -> Expr vs a -> Expr vs a -> Expr vs a
+    BoolIf      :: Expr vs 'Bool -> Expr vs a -> Expr vs a -> Expr vs a
+    Builtin     :: Builtin a b -> Expr vs (a ':-> b)
+    RecordLit   :: Prod (Fld vs) as   -> Expr vs ('Record as)
+    UnionLit    :: Sum  (Fld vs) as   -> Expr vs ('Union  as)
+    Field       :: Expr vs ('Record as) -> Index as '(s, a) -> Expr vs a
+    Project     :: Expr vs ('Record as) -> Prod (Index as) bs -> Expr vs ('Record bs)
 
 deriving instance Show (Expr vs a)
 
@@ -399,6 +400,10 @@ fromSomeDhall vs = \case
       y'                <- fromDhall t   vs y
       pure $ SE t (Op ListAppend x' y')
     D.Optional         -> Just $ builtin (SETT SType) (SETT SType) OptionalBI
+    D.OptionalLit t x  -> do
+      FromSing t' <- dhallTypeExpr <$> fromDhall (SETT SType) vs t
+      x'          <- traverse (fromDhall t' vs) x
+      pure $ SE (SOptional t') $ OptionalLit x'
     D.Record ts        -> do
       FromSing ts' <- flip (traverse . traverse) (M.toList ts) $ \y -> do
         SE (SETT _) y' <- fromSomeDhall vs y
@@ -439,6 +444,11 @@ fromSomeDhall vs = \case
     builtin :: Sing a -> Sing b -> Builtin a b -> SomeExpr vs
     builtin a b bi = SE (a :%-> b) (Builtin bi)
 
+-- | This might not even be possible.  We might need a 'Bindings' thing to
+-- fill in holes.
+--
+-- Or, at least, we can return a "function to reveal an ExprType", so
+-- basically a delayed type.
 dhallTypeExpr :: Expr vs ('ETT t) -> ExprType Text
 dhallTypeExpr = undefined
 
