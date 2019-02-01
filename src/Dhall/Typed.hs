@@ -115,10 +115,30 @@ parseBuilder t x f = f (+ 1) 0
 --
 -- Rep MyFun -> (forall r. TyFun MyFun r) -> Natural
 
-data FooWrapper
+-- wouldn't it be nice if we could define a type family where
+--
+-- Forall "a" (Embed "a" -> [Embed "a"])
+--
+-- evaluates to (forall a. (a -> [a]))
+--
+
+data Embed :: Symbol -> Type
+
+type family UnEmbed a c t where
+  UnEmbed a c (Embed c) = a
+  UnEmbed a c (Embed d) = (Embed d)
+  UnEmbed a c (f b d e) = f (UnEmbed a c b) (UnEmbed a c d) (UnEmbed a c e)
+  UnEmbed a c (f b d) = f (UnEmbed a c b) (UnEmbed a c d)
+  UnEmbed a c (f b) = f (UnEmbed a c b)
+
+-- okay, that works, but now we need to allow the program to break down
+-- a type.  hm, maybe Typeable?
+--
+-- or maybe DType ...
 
 
-data Forall = FA (forall a. DType a -> DType a)
+
+data Forall c e = Forall (forall a. DType a -> UnEmbed a c e)
 
 -- problem: cannot test for equality?
 data DType :: Type -> Type where
@@ -137,28 +157,30 @@ data DType :: Type -> Type where
     TText     :: DType Text
     TList     :: DType a -> DType (Seq a)
     TOptional :: DType a -> DType (Maybe a)
-    -- TVar      :: Int -> DType a
+    TV        :: DType (Embed c)
+    TFA      :: forall c e. DType e -> DType (Forall c e)
+
+-- new big deal: All function types in dhall are pi types??
+
 
 infixr 3 :->
 -- (DType a -> b) ->
 
--- identType :: DType (a :~> (a -> a))
--- identType = TPi
+data DTerm :: Type where
+    DTerm :: DType a -> a -> DTerm
 
+ident :: DTerm
+ident = DTerm (TFA @"a" (TV @"a" :-> TV @"a")) $
+          Forall (\_ -> id)
 
+konst :: DTerm
+konst = DTerm (TFA @"a" (TFA @"b" (TV @"a" :-> TV @"b" :-> TV @"a"))) $
+          Forall $ \_ -> Forall $ \_ -> const
 
+natBuild :: DTerm
+natBuild = DTerm ((TFA @"a" ((TV @"a" :-> TV @"a") :-> TV @"a" :-> TV @"a")) :-> TNatural) $ \case
+    Forall f -> f TNatural (+1) 0
 
--- > data Type :: * -> * where
--- >   VTy :: (Type a -> Type b) -> Type (V a b)
-
--- > data Term :: * -> * where
--- >   TAbs :: (Type a -> Term b) -> Term (V a b)
--- >   TApp :: Term (V a b) -> Type a -> Term b
-
--- TApp :: (Type a -> Term b) -> Type a -> Term b
-
-
--- new big deal: All function types in dhall are pi types??
 
 (~#)
     :: DType a
@@ -218,46 +240,39 @@ data SomeDType :: Type where
 -- listType :: DType (a :~> Seq a)
 -- listType = TPi TList
 
-data IxN :: [(k, v)] -> N -> k -> v -> Type where
-    IZN :: IxN ('(a, b) ': as) 'Z a b
-    ION :: IxN             as   n a b -> IxN ('(a, c) ': as) ('S n) a b
-    ISN :: Refuted (a :~: c)
-        -> IxN             as   n a b -> IxN ('(c, d) ': as)     n  a b
+-- data IxN :: [(k, v)] -> N -> k -> v -> Type where
+--     IZN :: IxN ('(a, b) ': as) 'Z a b
+--     ION :: IxN             as   n a b -> IxN ('(a, c) ': as) ('S n) a b
+--     ISN :: Refuted (a :~: c)
+--         -> IxN             as   n a b -> IxN ('(c, d) ': as)     n  a b
 
-data DTerm :: [(Symbol, Type)] -> Type -> Type where
-    TVar  :: IxN vs n s a -> DTerm vs a
-    TTerm :: a -> DTerm vs a
+-- data Env :: [(Symbol, Type)] -> Type where
+--     EØ   :: Env '[]
+--     (:<?) :: (Sing s, DType a) -> Env vs -> Env ( '(s, a) ': vs)
 
-data SomeDTerm :: [(Symbol, Type)] -> Type where
-    SDT :: DType a -> DTerm vs a -> SomeDTerm vs
+-- infixr 5 :<?
 
-data Env :: [(Symbol, Type)] -> Type where
-    EØ   :: Env '[]
-    (:<?) :: (Sing s, DType a) -> Env vs -> Env ( '(s, a) ': vs)
-
-infixr 5 :<?
-
-matchIxN
-    :: forall (s :: Symbol) (n :: N) (vs :: [(Symbol, Type)]) r. ()
-    => Sing s
-    -> Sing n
-    -> Env vs
-    -> (forall a. IxN vs n s a -> DType a -> Maybe r)
-    -> Maybe r
-matchIxN t = go
-  where
-    go  :: forall (m :: N) (us :: [(Symbol, Type)]). ()
-        => Sing m
-        -> Env us
-        -> (forall a. IxN us m s a -> DType a -> Maybe r)
-        -> Maybe r
-    go m = \case
-      EØ -> const Nothing
-      (x, r) :<? vs -> \f -> case t %~ x of
-        Proved Refl -> case m of
-          SZ   -> f IZN r
-          SS n -> go n vs (f . ION)
-        Disproved v -> go m vs (f . ISN v)
+-- matchIxN
+--     :: forall (s :: Symbol) (n :: N) (vs :: [(Symbol, Type)]) r. ()
+--     => Sing s
+--     -> Sing n
+--     -> Env vs
+--     -> (forall a. IxN vs n s a -> DType a -> Maybe r)
+--     -> Maybe r
+-- matchIxN t = go
+--   where
+--     go  :: forall (m :: N) (us :: [(Symbol, Type)]). ()
+--         => Sing m
+--         -> Env us
+--         -> (forall a. IxN us m s a -> DType a -> Maybe r)
+--         -> Maybe r
+--     go m = \case
+--       EØ -> const Nothing
+--       (x, r) :<? vs -> \f -> case t %~ x of
+--         Proved Refl -> case m of
+--           SZ   -> f IZN r
+--           SS n -> go n vs (f . ION)
+--         Disproved v -> go m vs (f . ISN v)
 
 -- substitute
 --     :: DTerm vs a
@@ -340,7 +355,7 @@ fromFunction a b = \case
     D.NaturalBuild -> case a of
       TPi -> case b of
         TNatural -> Just $ \(Pi f x) -> case f x of
-          
+
     --   TPi f -> case f (SomeDType TNatural) of
     --     SomeDType ((TNatural :-> TNatural) :-> TNatural :-> TNatural) -> _
 
