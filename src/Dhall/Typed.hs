@@ -62,14 +62,14 @@ import qualified Dhall.Core                                as D
 import qualified Dhall.Map                                 as M
 import qualified Dhall.TypeCheck                           as D
 
--- $(singletons [d|
---   data N = Z | S N
---     deriving (Eq, Ord, Show)
---   |])
+$(singletons [d|
+  data N = Z | S N
+    deriving (Eq, Ord, Show)
+  |])
 
--- fromNatural :: Natural -> N
--- fromNatural 0 = Z
--- fromNatural n = S (fromNatural (n - 1))
+fromNatural :: Natural -> N
+fromNatural 0 = Z
+fromNatural n = S (fromNatural (n - 1))
 
 -- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
 -- is a good reason why we need to have an expression language instead of
@@ -99,22 +99,22 @@ import qualified Dhall.TypeCheck                           as D
 -- evaluates to (forall a. (a -> [a]))
 --
 
-data Embed :: Symbol -> Type
+data Embed :: N -> Type
 
-type family UnEmbed a c t where
-  UnEmbed a c (Embed c) = a
-  UnEmbed a c (Embed d) = (Embed d)
-  UnEmbed a c (f b d e) = f (UnEmbed a c b) (UnEmbed a c d) (UnEmbed a c e)
-  UnEmbed a c (f b d) = f (UnEmbed a c b) (UnEmbed a c d)
-  UnEmbed a c (f b) = f (UnEmbed a c b)
+type family UnEmbed a t where
+  UnEmbed a (Embed 'Z)     = a
+  UnEmbed a (Embed ('S n)) = (Embed n)
+  UnEmbed a (f b c d) = f (UnEmbed a b) (UnEmbed a c) (UnEmbed a d)
+  UnEmbed a (f b c) = f (UnEmbed a b) (UnEmbed a c)
+  UnEmbed a (f b) = f (UnEmbed a b)
 
 -- this works! now to debruijinize
 
-data Forall c e = Forall (forall a. DType a -> UnEmbed a c e)
+data Forall e = Forall (forall a. DType a -> UnEmbed a e)
 
 data DType :: Type -> Type where
-    TV        :: SSymbol c -> DType (Embed c)
-    (:.)      :: SSymbol c -> DType e -> DType (Forall c e)
+    TV        :: SN n -> DType (Embed n)
+    FA        :: DType e -> DType (Forall e)
     (:->)     :: DType a -> DType b -> DType (a -> b)
     TType     :: DType SomeDType  -- todo: kind?
     TBool     :: DType Bool
@@ -128,12 +128,9 @@ data DType :: Type -> Type where
 -- new big deal: All function types in dhall are pi types??
 
 infixr 3 :->
-infixr 2 :.
+-- infixr 2 :.
 
-fa :: KnownSymbol c => SSymbol c
-fa = sing
-
-tv :: KnownSymbol c => DType (Embed c)
+tv :: SingI i => DType (Embed i)
 tv = TV sing
 
 data SomeDType :: Type where
@@ -143,15 +140,15 @@ data DTerm :: Type where
     DTerm :: DType a -> a -> DTerm
 
 ident :: DTerm
-ident = DTerm (sing @"a" :. tv @"a" :-> tv @"a") $
+ident = DTerm (FA (tv @'Z :-> tv @'Z)) $
           Forall (\_ -> id)
 
 konst :: DTerm
-konst = DTerm (sing @"a" :. sing @"b" :. tv @"a" :-> tv @"b" :-> tv @"a") $
+konst = DTerm (FA $ FA $ tv @('S 'Z) :-> tv @'Z :-> tv @('S 'Z)) $
           Forall $ \_ -> Forall $ \_ -> const
 
 natBuild :: DTerm
-natBuild = DTerm ((sing @"a" :. (tv @"a" :-> tv @"a") :-> tv @"a" :-> tv @"a") :-> TNatural) $ \case
+natBuild = DTerm ((FA ((tv @'Z :-> tv @'Z) :-> tv @'Z :-> tv @'Z)) :-> TNatural) $ \case
     Forall f -> f TNatural (+1) 0
 
 
@@ -165,10 +162,9 @@ natBuild = DTerm ((sing @"a" :. (tv @"a" :-> tv @"a") :-> tv @"a" :-> tv @"a") :
       | Proved Refl <- s %~ t
       -> Just Refl
     _ -> Nothing
-  s :. a -> \case
-    t :. b
-      | Proved Refl <- s %~ t
-      , Just Refl   <- a ~# b
+  FA a -> \case
+    FA b
+      | Just Refl <- a ~# b
       -> Just Refl
     _ -> Nothing
   a :-> b -> \case
@@ -209,7 +205,7 @@ fromDhall
     -> Maybe a
 fromDhall = \case
     TV _ -> const Nothing
-    _ :. _ -> undefined
+    FA _ -> undefined
     TType -> \case
       D.Natural      -> SomeDType <$> Just TNatural
       D.Integer      -> SomeDType <$> Just TInteger
@@ -220,9 +216,6 @@ fromDhall = \case
       D.App D.Optional t -> fromDhall TType t <&> \case
         SomeDType q -> SomeDType (TOptional q)
       _              -> Nothing
-    -- TPi -> undefined
-    -- TPi _ -> undefined
-    -- TPi       :: (DType a -> DType b) -> DType (a :~> b)
     a :-> b -> fromFunction a b
     TBool -> \case
       D.BoolLit b -> Just b
