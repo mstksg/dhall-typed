@@ -23,7 +23,7 @@ ghc-options:
 - -Wall
 - -Wcompat
 - -Wredundant-constraints
-- -Werror=incomplete-patterns
+# - -Werror=incomplete-patterns
 
 dependencies:
 - base >= 4.7 && < 5

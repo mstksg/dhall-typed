@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns           #-}
 {-# LANGUAGE EmptyCase              #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -32,6 +33,7 @@ import           Data.List
 import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
 import           Data.Sequence                             (Seq(..))
+import           Data.Sequence                             (Seq)
 import           Data.Singletons
 import           Data.Singletons.Prelude.List              (Sing(..))
 import           Data.Singletons.Prelude.Maybe
@@ -48,9 +50,11 @@ import           Dhall.Typed.Sum
 import           GHC.Generics
 import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
+import           Text.Printf
 import qualified Control.Applicative                       as P
 import qualified Data.List.NonEmpty                        as NE
 import qualified Data.Sequence                             as Seq
+import qualified Data.Text                                 as T
 import qualified Dhall                         as D hiding (Type)
 import qualified Dhall.Core                                as D
 import qualified Dhall.Map                                 as M
@@ -65,28 +69,154 @@ fromNatural :: Natural -> N
 fromNatural 0 = Z
 fromNatural n = S (fromNatural (n - 1))
 
+-- data a :~> b = Pi (DType a) b
+-- data a :~> b = Pi (DType a) b
+data a :~> b = Pi (DType a -> b) (DType a)
+infixr 0 :~>
 
--- data DSort
+-- How to parse a value of type:
+-- forall r. (f r -> r) -> r
 
--- data DKind :: Type -> Type where
---     KType :: DKind
+-- this does matter, because Natural/build is:
+-- (forall r. (r -> r) -> (r -> r)) -> Natural
 
--- data DKind
+foo :: forall r. DType r -> DType ((r -> r) -> r -> r)
+foo t = (t :-> t) :-> t :-> t
 
--- data Forall a b
+data (a .:. b) c = Rank2 (DType a -> DType b) (DType c)
+
+foo2 :: (b .:. ((b -> b) -> (b -> b))) Natural
+foo2 = (\t -> (t :-> t) :-> t :-> t) `Rank2` TNatural
+
+parseBuilder
+    :: (b .:. ((b -> b) -> (b -> b))) Natural
+    -> D.Expr () D.X
+    -> (forall r. (r -> r) -> (r -> r)) -> Natural
+parseBuilder t x f = f (+ 1) 0
+
+-- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
+-- is a good reason why we need to have an expression language instead of
+-- just first classing things.
+
+-- So apparently, we need to somehow link:
+--
+-- (r .:. ((r -> r) -> (r -> r))) Natural
+--
+-- with
+--
+-- (forall r. (r -> r) -> (r -> r)) -> Natural
+--
+-- Problem is that user can instnatiate with specific r, so we need it to
+-- be rank-n as well.  So maybe
+--
+-- (forall r. DType r -> DType ((r -> r) -> (r -> r))) -> Natural
+-- ^-------------------------------------------------^
+-- \- that's exactly what foo is.
+--
+-- Rep MyFun -> (forall r. TyFun MyFun r) -> Natural
+
+data FooWrapper
+
+
+data Forall = FA (forall a. DType a -> DType a)
 
 -- problem: cannot test for equality?
 data DType :: Type -> Type where
-    TPi       :: Lam (DType a) (DType b) -> DType (DType a, b)
-    TFunction :: DType a -> DType b -> DType (Lam a b)
-    TType     :: DType (DType a)
+    -- TPi       :: Lam (DType a) (DType b) -> DType (DType a, b)
+    -- TFunction :: DType a -> DType b -> DType (Lam a b)
+    -- TPi       :: (DType a -> DType b) -> DType (a :~> b)
+    -- TPi       :: (SomeDType -> SomeDType) -> DType Void
+    TPi       :: DType (a :~> b)
+    -- Foralled  :: DType (forall a. DType a)
+    (:->)     :: DType a -> DType b -> DType (a -> b)
+    TType     :: DType SomeDType  -- todo: kind?
     TBool     :: DType Bool
     TNatural  :: DType Natural
     TInteger  :: DType Integer
     TDouble   :: DType Double
     TText     :: DType Text
-    TList     :: DType a -> DType [a]
+    TList     :: DType a -> DType (Seq a)
     TOptional :: DType a -> DType (Maybe a)
+    -- TVar      :: Int -> DType a
+
+infixr 3 :->
+-- (DType a -> b) ->
+
+-- identType :: DType (a :~> (a -> a))
+-- identType = TPi
+
+
+
+
+-- > data Type :: * -> * where
+-- >   VTy :: (Type a -> Type b) -> Type (V a b)
+
+-- > data Term :: * -> * where
+-- >   TAbs :: (Type a -> Term b) -> Term (V a b)
+-- >   TApp :: Term (V a b) -> Type a -> Term b
+
+-- TApp :: (Type a -> Term b) -> Type a -> Term b
+
+
+-- new big deal: All function types in dhall are pi types??
+
+(~#)
+    :: DType a
+    -> DType b
+    -> Maybe (a :~: b)
+(~#) = \case
+  TPi -> undefined
+  --   TPi _  -> undefined
+  --   _      -> undefined
+  a :-> b -> \case
+    c :-> d
+      | Just Refl <- a ~# c
+      , Just Refl <- b ~# d -> Just Refl
+    _ -> Nothing
+  TType -> \case
+    TType -> Just Refl
+    _     -> Nothing
+  TBool -> \case
+    TBool -> Just Refl
+    _     -> Nothing
+  TNatural -> \case
+    TNatural -> Just Refl
+    _        -> Nothing
+  TInteger -> \case
+    TInteger -> Just Refl
+    _        -> Nothing
+  TDouble -> \case
+    TDouble -> Just Refl
+    _       -> Nothing
+  TText -> \case
+    TText -> Just Refl
+    _     -> Nothing
+  TList a -> \case
+    TList b
+      | Just Refl <- a ~# b -> Just Refl
+    _       -> Nothing
+  TOptional a -> \case
+    TOptional b
+      | Just Refl <- a ~# b -> Just Refl
+    _       -> Nothing
+
+data SomeDType :: Type where
+    SomeDType :: DType a -> SomeDType
+
+-- identType :: DType (a :~> (a -> a))
+-- identType = TPi $ \a -> TFunction a a
+
+-- constType :: DType (a :~> b :~> (a -> b -> a))
+-- constType = TPi $ \a -> TPi $ \b -> TFunction a (TFunction b a)
+
+-- lengthType :: DType (a :~> (Seq a -> Natural))
+-- lengthType = TPi $ \a -> TFunction (TList a) TNatural
+
+-- lengthVal :: a :~> (Seq a -> Natural)
+-- lengthVal = Pi _ _
+
+-- listType :: DType (a :~> Seq a)
+-- listType = TPi TList
 
 data IxN :: [(k, v)] -> N -> k -> v -> Type where
     IZN :: IxN ('(a, b) ': as) 'Z a b
@@ -100,17 +230,6 @@ data DTerm :: [(Symbol, Type)] -> Type -> Type where
 
 data SomeDTerm :: [(Symbol, Type)] -> Type where
     SDT :: DType a -> DTerm vs a -> SomeDTerm vs
-
-data Lam :: Type -> Type -> Type where
-    Lam :: Env ( '(s, a) ': vs )
-        -> DTerm ( '(s, a) ': vs ) b
-        -> Lam a b
-
--- data Forall :: Type -> Type -> Type where
---     Forall
---         :: Env ( '(s, DType a) ': vs )
---         -> DTerm ( '(s, DType a) ': vs ) (DType b)
---         -> Forall a b
 
 data Env :: [(Symbol, Type)] -> Type where
     EØ   :: Env '[]
@@ -140,43 +259,202 @@ matchIxN t = go
           SS n -> go n vs (f . ION)
         Disproved v -> go m vs (f . ISN v)
 
-substitute
-    :: DTerm vs a
-    -> DTerm ( '(t, a) ': vs ) b
-    -> DTerm vs b
-substitute x = \case
-    TVar v -> case v of
-      IZN     -> x
-      ION   i -> TVar i
-      ISN _ i -> TVar i
-    TTerm e -> TTerm e
+-- substitute
+--     :: DTerm vs a
+--     -> DTerm ( '(t, a) ': vs ) b
+--     -> DTerm vs b
+-- substitute x = \case
+--     TVar v -> case v of
+--       IZN     -> x
+--       ION   i -> TVar i
+--       ISN _ i -> TVar i
+--     TTerm e -> TTerm e
 
-fromSomeDhall
-    :: forall vs. ()
-    => Env vs
+data DhallResult a = DRVal a
+                   | DRVar D.Var
+
+fromDhall
+    :: DType a
     -> D.Expr () D.X
-    -> Maybe (SomeDTerm vs)
-fromSomeDhall vs = \case
-    D.Var (D.V x n) -> withSomeSing x $ \x' ->
-                       withSomeSing (fromNatural (fromIntegral n)) $ \n' ->
-                       matchIxN x' n' vs $ \i r ->
-                         Just $ SDT r (TVar i)
-    D.Lam x tx y -> withSomeSing x $ \x' -> do
-      SDT TType tx' <- fromSomeDhall vs tx
-      case tx' of
-        TTerm e -> do
-          SDT ty    y'  <- fromSomeDhall ((x', e) :<? vs) y
-          pure . SDT (TFunction e ty) . TTerm $
-            Lam ((x', e) :<? vs) y'
-        TVar (v :: IxN vs n s (DType a)) -> undefined
-          -- SDT _
-        -- undefined
-            -- SDT _
-            --     (TTerm (Lam _ _))
-            -- SDT (TPi (Lam ((x', TType) :<? vs) (TVar IZN)))
-            --     _
-        -- TVar v -> pure $ SDT (TPi (Lam _ _)) _
-    _ -> undefined
+    -> Maybe a
+fromDhall = \case
+    TType -> \case
+      D.Natural      -> SomeDType <$> Just TNatural
+      D.Integer      -> SomeDType <$> Just TInteger
+      D.Double       -> SomeDType <$> Just TDouble
+      D.Text         -> SomeDType <$> Just TText
+      D.App D.List t -> fromDhall TType t <&> \case
+        SomeDType q -> SomeDType (TList q)
+      D.App D.Optional t -> fromDhall TType t <&> \case
+        SomeDType q -> SomeDType (TOptional q)
+      _              -> Nothing
+    TPi -> undefined
+    -- TPi _ -> undefined
+    -- TPi       :: (DType a -> DType b) -> DType (a :~> b)
+    a :-> b -> fromFunction a b
+    TBool -> \case
+      D.BoolLit b -> Just b
+      _           -> Nothing
+    TNatural -> \case
+      D.NaturalLit n -> Just n
+      _              -> Nothing
+    TInteger -> \case
+      D.IntegerLit n -> Just n
+      _              -> Nothing
+    TDouble  -> \case
+      D.DoubleLit n  -> Just n
+      _              -> Nothing
+    TText -> \case
+      D.TextLit (D.Chunks [] t) -> Just t
+      _              -> Nothing
+    TList t  -> \case
+      D.ListLit _ xs -> traverse (fromDhall t) xs
+      _              -> Nothing
+    TOptional t -> \case
+      D.OptionalLit _ x -> traverse (fromDhall t) x
+      D.Some x          -> Just <$> fromDhall t x
+      D.App D.None _    -> Just Nothing         -- is this necessary?
+      _                 -> Nothing
+
+-- fromPi :: (DType a -> DType b) -> D.Expr () D.X -> Maybe (a :~> b)
+-- fromPi f = \case
+--     D.ListLength -> case f
+-- --     -- | > ListLength                               ~  List/length
+-- --     | ListLength
+
+fromFunction :: DType a -> DType b -> D.Expr () D.X -> Maybe (a -> b)
+fromFunction a b = \case
+    D.NaturalFold
+      | (TNatural, TType :-> (c :-> d) :-> e :-> f) <- (a, b)
+      , Just Refl <- c ~# d
+      , Just Refl <- d ~# e
+      , Just Refl <- e ~# f
+      -> Just $ \n _ -> foldNatural n
+    -- NaturalBuild is a problem: it's Rank-2
+    -- D.NaturalBuild
+    --   | (TType :-> (c :-> d) :-> e :-> f, TNatural) <- (a, b)
+    --   , Just Refl <- c ~# d
+    --   , Just Refl <- d ~# e
+    --   , Just Refl <- e ~# f
+    --   -> Just $ \f -> f (SomeDType TNatural) (+ 1) 0
+    D.NaturalBuild -> case a of
+      TPi -> case b of
+        TNatural -> Just $ \(Pi f x) -> case f x of
+          
+    --   TPi f -> case f (SomeDType TNatural) of
+    --     SomeDType ((TNatural :-> TNatural) :-> TNatural :-> TNatural) -> _
+
+    D.NaturalIsZero
+      | (TNatural, TBool   ) <- (a, b) -> Just (== 0)
+    D.NaturalEven
+      | (TNatural, TBool   ) <- (a, b) -> Just $ (== 0) . (`mod` 2)
+    D.NaturalOdd
+      | (TNatural, TBool   ) <- (a, b) -> Just $ (/= 0) . (`mod` 2)
+    D.NaturalToInteger
+      | (TNatural, TInteger) <- (a, b) -> Just fromIntegral
+    D.NaturalShow
+      | (TNatural, TText   ) <- (a, b) -> Just (T.pack . show)
+    D.IntegerShow
+      | (TInteger, TText   ) <- (a, b) -> Just (T.pack . printf "%+d")
+    D.IntegerToDouble
+      | (TInteger, TDouble ) <- (a, b) -> Just fromIntegral
+    D.DoubleShow
+      | (TDouble , TText   ) <- (a, b) -> Just (T.pack . show)
+    D.ListLength
+      | (TType   , TList _ :-> TNatural)
+                             <- (a, b) -> Just $ \_ -> fromIntegral . length
+    D.ListHead
+      | (TType   , TList c :-> TOptional d) <- (a, b)
+      , Just Refl <- c ~# d
+      -> Just $ \_ -> fmap NE.head . NE.nonEmpty . toList
+    D.ListLast
+      | (TType   , TList c :-> TOptional d) <- (a, b)
+      , Just Refl <- c ~# d
+      -> Just $ \_ -> fmap NE.last . NE.nonEmpty . toList
+    -- D.ListIndexed
+    D.ListReverse
+      | (TType   , TList c :-> TList d) <- (a, b)
+      , Just Refl <- c ~# d
+      -> Just $ \_ -> Seq.reverse
+    _ -> Nothing
+
+--     -- | > Lam x     A b                            ~  λ(x : A) -> b
+--     | Lam Text (Expr s a) (Expr s a)
+--     -- | > NaturalBuild                             ~  Natural/build
+--     | NaturalBuild
+--     -- | > ListBuild                                ~  List/build
+--     | ListBuild
+--     -- | > ListFold                                 ~  List/fold
+--     | ListFold
+--     -- | > ListIndexed                              ~  List/indexed
+--     | ListIndexed
+--     -- | > OptionalFold                             ~  Optional/fold
+--     | OptionalFold
+--     -- | > OptionalBuild                            ~  Optional/build
+--     | OptionalBuild
+
+
+
+foldNatural
+    :: Natural
+    -> (a -> a)
+    -> a
+    -> a
+foldNatural n f = go n
+  where
+    go !i !x
+      | i <= 0    = x
+      | otherwise = let !y = f x in go (i - 1) y
+
+buildNatural
+    :: (forall a. (a -> a) -> a -> a)
+    -> Natural
+buildNatural f = f (+1) 0
+
+    -- TType     :: DType (DType a)
+    -- TBool     :: DType Bool
+    -- TNatural  :: DType Natural
+    -- TInteger  :: DType Integer
+    -- TDouble   :: DType Double
+    -- TText     :: DType Text
+    -- TList     :: DType a -> DType [a]
+    -- TOptional :: DType a -> DType (Maybe a)
+
+-- data SomeDT :: Type where
+--     SomeDT :: DType a -> SomeDT
+
+-- dhallType :: Env vs -> D.Expr () D.X -> Maybe SomeDT
+-- dhallType = \case
+--     D.Var (D.V x n) -> undefined
+
+-- fromSomeDhall
+--     :: forall vs. ()
+--     => Env vs
+--     -> D.Expr () D.X
+--     -> Maybe (SomeDTerm vs)
+-- fromSomeDhall vs = \case
+--     D.Var (D.V x n) -> withSomeSing x $ \x' ->
+--                        withSomeSing (fromNatural (fromIntegral n)) $ \n' ->
+--                        matchIxN x' n' vs $ \i r ->
+--                          Just $ SDT r (TVar i)
+--     D.Lam x tx y -> withSomeSing x $ \x' -> do
+--       SDT TType tx' <- fromSomeDhall vs tx
+--       _
+--       -- case tx' of
+--       --   TTerm e -> pure . SDT (TFunction e ty)
+--       --     SDT ty    y'  <- fromSomeDhall ((x', e) :<? vs) y
+--           -- pure . SDT (TFunction e ty) . TTerm $ _
+--           -- TTerm $
+--           --   Lam ((x', e) :<? vs) y'
+--     --     TVar (v :: IxN vs n s (DType a)) -> undefined
+--           -- SDT _
+--         -- undefined
+--             -- SDT _
+--             --     (TTerm (Lam _ _))
+--             -- SDT (TPi (Lam ((x', TType) :<? vs) (TVar IZN)))
+--             --     _
+--         -- TVar v -> pure $ SDT (TPi (Lam _ _)) _
+--     _ -> undefined
 
 -- -- fromSomeDhall = \case
 -- --     -- D.Var _ -> Left "No free variables"
