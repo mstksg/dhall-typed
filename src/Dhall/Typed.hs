@@ -11,6 +11,7 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeApplications       #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
@@ -40,6 +41,7 @@ import           Data.Singletons.Prelude.Maybe
 import           Data.Singletons.Prelude.Tuple
 import           Data.Singletons.Sigma
 import           Data.Singletons.TH hiding                 (Sum)
+import           Data.Singletons.TypeLits
 import           Data.Text                                 (Text)
 import           Data.Traversable
 import           Data.Type.Equality
@@ -60,39 +62,14 @@ import qualified Dhall.Core                                as D
 import qualified Dhall.Map                                 as M
 import qualified Dhall.TypeCheck                           as D
 
-$(singletons [d|
-  data N = Z | S N
-    deriving (Eq, Ord, Show)
-  |])
+-- $(singletons [d|
+--   data N = Z | S N
+--     deriving (Eq, Ord, Show)
+--   |])
 
-fromNatural :: Natural -> N
-fromNatural 0 = Z
-fromNatural n = S (fromNatural (n - 1))
-
--- data a :~> b = Pi (DType a) b
--- data a :~> b = Pi (DType a) b
-data a :~> b = Pi (DType a -> b) (DType a)
-infixr 0 :~>
-
--- How to parse a value of type:
--- forall r. (f r -> r) -> r
-
--- this does matter, because Natural/build is:
--- (forall r. (r -> r) -> (r -> r)) -> Natural
-
-foo :: forall r. DType r -> DType ((r -> r) -> r -> r)
-foo t = (t :-> t) :-> t :-> t
-
-data (a .:. b) c = Rank2 (DType a -> DType b) (DType c)
-
-foo2 :: (b .:. ((b -> b) -> (b -> b))) Natural
-foo2 = (\t -> (t :-> t) :-> t :-> t) `Rank2` TNatural
-
-parseBuilder
-    :: (b .:. ((b -> b) -> (b -> b))) Natural
-    -> D.Expr () D.X
-    -> (forall r. (r -> r) -> (r -> r)) -> Natural
-parseBuilder t x f = f (+ 1) 0
+-- fromNatural :: Natural -> N
+-- fromNatural 0 = Z
+-- fromNatural n = S (fromNatural (n - 1))
 
 -- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
 -- is a good reason why we need to have an expression language instead of
@@ -131,23 +108,13 @@ type family UnEmbed a c t where
   UnEmbed a c (f b d) = f (UnEmbed a c b) (UnEmbed a c d)
   UnEmbed a c (f b) = f (UnEmbed a c b)
 
--- okay, that works, but now we need to allow the program to break down
--- a type.  hm, maybe Typeable?
---
--- or maybe DType ...
-
-
+-- this works! now to debruijinize
 
 data Forall c e = Forall (forall a. DType a -> UnEmbed a c e)
 
--- problem: cannot test for equality?
 data DType :: Type -> Type where
-    -- TPi       :: Lam (DType a) (DType b) -> DType (DType a, b)
-    -- TFunction :: DType a -> DType b -> DType (Lam a b)
-    -- TPi       :: (DType a -> DType b) -> DType (a :~> b)
-    -- TPi       :: (SomeDType -> SomeDType) -> DType Void
-    TPi       :: DType (a :~> b)
-    -- Foralled  :: DType (forall a. DType a)
+    TV        :: SSymbol c -> DType (Embed c)
+    (:.)      :: SSymbol c -> DType e -> DType (Forall c e)
     (:->)     :: DType a -> DType b -> DType (a -> b)
     TType     :: DType SomeDType  -- todo: kind?
     TBool     :: DType Bool
@@ -157,28 +124,34 @@ data DType :: Type -> Type where
     TText     :: DType Text
     TList     :: DType a -> DType (Seq a)
     TOptional :: DType a -> DType (Maybe a)
-    TV        :: DType (Embed c)
-    TFA      :: forall c e. DType e -> DType (Forall c e)
 
 -- new big deal: All function types in dhall are pi types??
 
-
 infixr 3 :->
--- (DType a -> b) ->
+infixr 2 :.
+
+fa :: KnownSymbol c => SSymbol c
+fa = sing
+
+tv :: KnownSymbol c => DType (Embed c)
+tv = TV sing
+
+data SomeDType :: Type where
+    SomeDType :: DType a -> SomeDType
 
 data DTerm :: Type where
     DTerm :: DType a -> a -> DTerm
 
 ident :: DTerm
-ident = DTerm (TFA @"a" (TV @"a" :-> TV @"a")) $
+ident = DTerm (sing @"a" :. tv @"a" :-> tv @"a") $
           Forall (\_ -> id)
 
 konst :: DTerm
-konst = DTerm (TFA @"a" (TFA @"b" (TV @"a" :-> TV @"b" :-> TV @"a"))) $
+konst = DTerm (sing @"a" :. sing @"b" :. tv @"a" :-> tv @"b" :-> tv @"a") $
           Forall $ \_ -> Forall $ \_ -> const
 
 natBuild :: DTerm
-natBuild = DTerm ((TFA @"a" ((TV @"a" :-> TV @"a") :-> TV @"a" :-> TV @"a")) :-> TNatural) $ \case
+natBuild = DTerm ((sing @"a" :. (tv @"a" :-> tv @"a") :-> tv @"a" :-> tv @"a") :-> TNatural) $ \case
     Forall f -> f TNatural (+1) 0
 
 
@@ -187,9 +160,17 @@ natBuild = DTerm ((TFA @"a" ((TV @"a" :-> TV @"a") :-> TV @"a" :-> TV @"a")) :->
     -> DType b
     -> Maybe (a :~: b)
 (~#) = \case
-  TPi -> undefined
-  --   TPi _  -> undefined
-  --   _      -> undefined
+  TV s -> \case
+    TV t
+      | Proved Refl <- s %~ t
+      -> Just Refl
+    _ -> Nothing
+  s :. a -> \case
+    t :. b
+      | Proved Refl <- s %~ t
+      , Just Refl   <- a ~# b
+      -> Just Refl
+    _ -> Nothing
   a :-> b -> \case
     c :-> d
       | Just Refl <- a ~# c
@@ -222,77 +203,13 @@ natBuild = DTerm ((TFA @"a" ((TV @"a" :-> TV @"a") :-> TV @"a" :-> TV @"a")) :->
       | Just Refl <- a ~# b -> Just Refl
     _       -> Nothing
 
-data SomeDType :: Type where
-    SomeDType :: DType a -> SomeDType
-
--- identType :: DType (a :~> (a -> a))
--- identType = TPi $ \a -> TFunction a a
-
--- constType :: DType (a :~> b :~> (a -> b -> a))
--- constType = TPi $ \a -> TPi $ \b -> TFunction a (TFunction b a)
-
--- lengthType :: DType (a :~> (Seq a -> Natural))
--- lengthType = TPi $ \a -> TFunction (TList a) TNatural
-
--- lengthVal :: a :~> (Seq a -> Natural)
--- lengthVal = Pi _ _
-
--- listType :: DType (a :~> Seq a)
--- listType = TPi TList
-
--- data IxN :: [(k, v)] -> N -> k -> v -> Type where
---     IZN :: IxN ('(a, b) ': as) 'Z a b
---     ION :: IxN             as   n a b -> IxN ('(a, c) ': as) ('S n) a b
---     ISN :: Refuted (a :~: c)
---         -> IxN             as   n a b -> IxN ('(c, d) ': as)     n  a b
-
--- data Env :: [(Symbol, Type)] -> Type where
---     EØ   :: Env '[]
---     (:<?) :: (Sing s, DType a) -> Env vs -> Env ( '(s, a) ': vs)
-
--- infixr 5 :<?
-
--- matchIxN
---     :: forall (s :: Symbol) (n :: N) (vs :: [(Symbol, Type)]) r. ()
---     => Sing s
---     -> Sing n
---     -> Env vs
---     -> (forall a. IxN vs n s a -> DType a -> Maybe r)
---     -> Maybe r
--- matchIxN t = go
---   where
---     go  :: forall (m :: N) (us :: [(Symbol, Type)]). ()
---         => Sing m
---         -> Env us
---         -> (forall a. IxN us m s a -> DType a -> Maybe r)
---         -> Maybe r
---     go m = \case
---       EØ -> const Nothing
---       (x, r) :<? vs -> \f -> case t %~ x of
---         Proved Refl -> case m of
---           SZ   -> f IZN r
---           SS n -> go n vs (f . ION)
---         Disproved v -> go m vs (f . ISN v)
-
--- substitute
---     :: DTerm vs a
---     -> DTerm ( '(t, a) ': vs ) b
---     -> DTerm vs b
--- substitute x = \case
---     TVar v -> case v of
---       IZN     -> x
---       ION   i -> TVar i
---       ISN _ i -> TVar i
---     TTerm e -> TTerm e
-
-data DhallResult a = DRVal a
-                   | DRVar D.Var
-
 fromDhall
     :: DType a
     -> D.Expr () D.X
     -> Maybe a
 fromDhall = \case
+    TV _ -> const Nothing
+    _ :. _ -> undefined
     TType -> \case
       D.Natural      -> SomeDType <$> Just TNatural
       D.Integer      -> SomeDType <$> Just TInteger
@@ -303,7 +220,7 @@ fromDhall = \case
       D.App D.Optional t -> fromDhall TType t <&> \case
         SomeDType q -> SomeDType (TOptional q)
       _              -> Nothing
-    TPi -> undefined
+    -- TPi -> undefined
     -- TPi _ -> undefined
     -- TPi       :: (DType a -> DType b) -> DType (a :~> b)
     a :-> b -> fromFunction a b
@@ -352,9 +269,9 @@ fromFunction a b = \case
     --   , Just Refl <- d ~# e
     --   , Just Refl <- e ~# f
     --   -> Just $ \f -> f (SomeDType TNatural) (+ 1) 0
-    D.NaturalBuild -> case a of
-      TPi -> case b of
-        TNatural -> Just $ \(Pi f x) -> case f x of
+    -- D.NaturalBuild -> case a of
+    --   TPi -> case b of
+    --     TNatural -> Just $ \(Pi f x) -> case f x of
 
     --   TPi f -> case f (SomeDType TNatural) of
     --     SomeDType ((TNatural :-> TNatural) :-> TNatural :-> TNatural) -> _
