@@ -33,6 +33,7 @@ import           Data.Kind
 import           Data.List
 import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
+import           Data.Profunctor
 import           Data.Sequence                             (Seq(..))
 import           Data.Sequence                             (Seq)
 import           Data.Singletons
@@ -101,16 +102,29 @@ fromNatural n = S (fromNatural (n - 1))
 
 data Embed :: N -> Type
 
-type family UnEmbed a t where
-  UnEmbed a (Embed 'Z)     = a
-  UnEmbed a (Embed ('S n)) = (Embed n)
-  UnEmbed a (f b c d) = f (UnEmbed a b) (UnEmbed a c) (UnEmbed a d)
-  UnEmbed a (f b c) = f (UnEmbed a b) (UnEmbed a c)
-  UnEmbed a (f b) = f (UnEmbed a b)
+reEmbed :: Embed a -> b
+reEmbed = \case {}
 
--- this works! now to debruijinize
+type family CompN n m a b c where
+    CompN 'Z     'Z     a b c = b
+    CompN 'Z     ('S m) a b c = c
+    CompN ('S n) 'Z     a b c = a
+    CompN ('S n) ('S m) a b c = CompN n m a b c
 
-data Forall e = Forall (forall a. DType a -> UnEmbed a e)
+type family UnEmbed a n t where
+    UnEmbed a 'Z     (Embed 'Z)     = a
+    UnEmbed a 'Z     (Embed ('S m)) = Embed m
+    UnEmbed a ('S n) (Embed 'Z)     = Embed 'Z
+    UnEmbed a ('S n) (Embed ('S m)) = CompN n m (Embed ('S m)) a (Embed m)
+    UnEmbed a n      (Forall e)     = Forall (UnEmbed a ('S n) e)
+    -- UnEmbed a n      (f b c)        = f (UnEmbed a n b) (UnEmbed a n c)
+    -- UnEmbed a n      (f b)          = f (UnEmbed a n b)
+    UnEmbed a n      (b -> c)       = UnEmbed a n b -> UnEmbed a n c
+    UnEmbed a n      (Seq b)        = Seq (UnEmbed a n b)
+    UnEmbed a n      (Maybe b)      = Maybe (UnEmbed a n b)
+    UnEmbed a n      b              = b
+
+data Forall e = Forall { runForall :: forall r. DType r -> UnEmbed r 'Z e }
 
 data DType :: Type -> Type where
     TV        :: SN n -> DType (Embed n)
@@ -125,6 +139,30 @@ data DType :: Type -> Type where
     TList     :: DType a -> DType (Seq a)
     TOptional :: DType a -> DType (Maybe a)
 
+compN :: SN n -> SN m -> f a -> f b -> f c -> f (CompN n m a b c)
+compN SZ     SZ     _ y _ = y
+compN SZ     (SS _) _ _ z = z
+compN (SS _) SZ     x _ _ = x
+compN (SS n) (SS m) x y z = compN n m x y z
+
+unEmbed :: DType a -> SN n -> DType t -> DType (UnEmbed a n t)
+unEmbed x n = \case
+    TV m -> case (n, m) of
+      (SZ   , SZ   ) -> x
+      (SZ   , SS m') -> TV m'
+      (SS _ , SZ   ) -> TV SZ
+      (SS n', SS m') -> compN n' m' (TV m) x (TV m')
+    FA y        -> FA (unEmbed x (SS n) y)
+    y :-> z     -> unEmbed x n y :-> unEmbed x n z
+    TType       -> TType
+    TBool       -> TBool
+    TNatural    -> TNatural
+    TInteger    -> TInteger
+    TDouble     -> TDouble
+    TText       -> TText
+    TList y     -> TList (unEmbed x n y)
+    TOptional y -> TOptional (unEmbed x n y)
+
 -- new big deal: All function types in dhall are pi types??
 
 infixr 3 :->
@@ -133,6 +171,13 @@ infixr 3 :->
 tv :: SingI i => DType (Embed i)
 tv = TV sing
 
+tv0 :: DType (Embed 'Z)
+tv0 = tv
+tv1 :: DType (Embed ('S 'Z))
+tv1 = tv
+tv2 :: DType (Embed ('S ('S 'Z)))
+tv2 = tv
+
 data SomeDType :: Type where
     SomeDType :: DType a -> SomeDType
 
@@ -140,17 +185,74 @@ data DTerm :: Type where
     DTerm :: DType a -> a -> DTerm
 
 ident :: DTerm
-ident = DTerm (FA (tv @'Z :-> tv @'Z)) $
+ident = DTerm (FA (tv0 :-> tv0)) $
           Forall (\_ -> id)
 
 konst :: DTerm
-konst = DTerm (FA $ FA $ tv @('S 'Z) :-> tv @'Z :-> tv @('S 'Z)) $
+konst = DTerm (FA $ FA $ tv1 :-> tv0 :-> tv1) $
           Forall $ \_ -> Forall $ \_ -> const
 
 natBuild :: DTerm
-natBuild = DTerm ((FA ((tv @'Z :-> tv @'Z) :-> tv @'Z :-> tv @'Z)) :-> TNatural) $ \case
-    Forall f -> f TNatural (+1) 0
+natBuild = DTerm ((FA ((tv0 :-> tv0) :-> tv0 :-> tv0)) :-> TNatural) $ \f ->
+    runForall f TNatural (+1) 0
 
+noEmbed :: DType a -> DType r -> UnEmbed a 'Z r -> r
+noEmbed t0 = \case
+    TV SZ       -> error "Internal error: Cannot be unembedded."  -- todo: fix
+    TV (SS _)   -> reEmbed
+    FA _        -> error "Unimplemented."
+    t :-> u     -> dimap (liftEmbed t0 t) (noEmbed t0 u)
+    TType       -> id
+    TBool       -> id
+    TNatural    -> id
+    TInteger    -> id
+    TDouble     -> id
+    TText       -> id
+    TList t     -> fmap (noEmbed t0 t)
+    TOptional t -> fmap (noEmbed t0 t)
+
+liftEmbed :: DType a -> DType r -> r -> UnEmbed a 'Z r
+liftEmbed t0 = \case
+    TV _        -> reEmbed
+    FA _        -> error "Unimplemented."
+    t :-> u     -> dimap (noEmbed t0 t) (liftEmbed t0 u)
+    TType       -> id
+    TBool       -> id
+    TNatural    -> id
+    TInteger    -> id
+    TDouble     -> id
+    TText       -> id
+    TList t     -> fmap (liftEmbed t0 t)
+    TOptional t -> fmap (liftEmbed t0 t)
+
+-- noEmbed = \case
+--     TType -> id
+
+foo :: Forall (Forall ((Embed ('S 'Z) -> Embed 'Z) -> Embed 'Z -> Embed 'Z) -> Maybe (Embed 'Z))
+foo = Forall $ \case
+    t -> \f -> runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
+
+optBuild :: DTerm
+optBuild = DTerm (FA ((FA ((tv1 :-> tv0) :-> tv0 :-> tv0)) :-> TOptional tv0)) $
+    Forall $ \t f -> runForall f (TOptional t) _ Nothing
+    -- let t' = unEmbed (TOptional t) SZ t
+    -- in  runForall f (TOptional t') _ Nothing
+    -- runForall f (TOptional t) _ Nothing
+
+    -- let t' = unEmbed
+                         -- runForall f (TOptional t) _ Nothing
+    -- Forall $ \t f -> runForall f (TOptional t) _ Nothing
+--     -- case t of
+--     --   TNatural -> runForall f (TOptional t) Just Nothing
+--     --   TBool    -> runForall f (TOptional t) Just Nothing
+--     -- runForall f (TOptional t) Just Nothing
+
+    -- Forall $ \_ f -> f _ _
+
+    -- • Found hole:
+    --     _ :: DType a
+    --       -> (Forall (Embed 'Z -> a) -> a -> a)
+    --       -> Maybe a
 
 (~#)
     :: DType a
@@ -206,6 +308,7 @@ fromDhall
 fromDhall = \case
     TV _ -> const Nothing
     FA _ -> undefined
+    a :-> b -> fromFunction a b
     TType -> \case
       D.Natural      -> SomeDType <$> Just TNatural
       D.Integer      -> SomeDType <$> Just TInteger
@@ -216,7 +319,6 @@ fromDhall = \case
       D.App D.Optional t -> fromDhall TType t <&> \case
         SomeDType q -> SomeDType (TOptional q)
       _              -> Nothing
-    a :-> b -> fromFunction a b
     TBool -> \case
       D.BoolLit b -> Just b
       _           -> Nothing
@@ -255,20 +357,9 @@ fromFunction a b = \case
       , Just Refl <- d ~# e
       , Just Refl <- e ~# f
       -> Just $ \n _ -> foldNatural n
-    -- NaturalBuild is a problem: it's Rank-2
-    -- D.NaturalBuild
-    --   | (TType :-> (c :-> d) :-> e :-> f, TNatural) <- (a, b)
-    --   , Just Refl <- c ~# d
-    --   , Just Refl <- d ~# e
-    --   , Just Refl <- e ~# f
-    --   -> Just $ \f -> f (SomeDType TNatural) (+ 1) 0
-    -- D.NaturalBuild -> case a of
-    --   TPi -> case b of
-    --     TNatural -> Just $ \(Pi f x) -> case f x of
-
-    --   TPi f -> case f (SomeDType TNatural) of
-    --     SomeDType ((TNatural :-> TNatural) :-> TNatural :-> TNatural) -> _
-
+    D.NaturalBuild
+      | (FA ((TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ), TNatural) <- (a, b)
+      -> Just $ \(Forall f) -> f TNatural (+1) 0
     D.NaturalIsZero
       | (TNatural, TBool   ) <- (a, b) -> Just (== 0)
     D.NaturalEven
@@ -285,6 +376,11 @@ fromFunction a b = \case
       | (TInteger, TDouble ) <- (a, b) -> Just fromIntegral
     D.DoubleShow
       | (TDouble , TText   ) <- (a, b) -> Just (T.pack . show)
+    -- D.ListBuild
+    --   | (TType   , FA _ :-> TList c) <- (a, b)
+    --   -> Just _
+--     -- | > ListBuild                                ~  List/build
+--     | ListBuild
     D.ListLength
       | (TType   , TList _ :-> TNatural)
                              <- (a, b) -> Just $ \_ -> fromIntegral . length
@@ -305,10 +401,6 @@ fromFunction a b = \case
 
 --     -- | > Lam x     A b                            ~  λ(x : A) -> b
 --     | Lam Text (Expr s a) (Expr s a)
---     -- | > NaturalBuild                             ~  Natural/build
---     | NaturalBuild
---     -- | > ListBuild                                ~  List/build
---     | ListBuild
 --     -- | > ListFold                                 ~  List/fold
 --     | ListFold
 --     -- | > ListIndexed                              ~  List/indexed

@@ -36,6 +36,7 @@ library:
   - text
   - decidable
   - containers
+  - profunctors
 
 # executables:
 #   dhall-typed-exe:
