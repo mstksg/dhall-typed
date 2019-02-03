@@ -196,7 +196,7 @@ natBuild :: DTerm
 natBuild = DTerm ((FA ((tv0 :-> tv0) :-> tv0 :-> tv0)) :-> TNatural) $ \f ->
     runForall f TNatural (+1) 0
 
-noEmbed :: DType a -> DType r -> UnEmbed a 'Z r -> r
+noEmbed :: p a -> DType r -> UnEmbed a 'Z r -> r
 noEmbed t0 = \case
     TV SZ       -> error "Internal error: Cannot be unembedded."  -- todo: fix
     TV (SS _)   -> reEmbed
@@ -211,7 +211,7 @@ noEmbed t0 = \case
     TList t     -> fmap (noEmbed t0 t)
     TOptional t -> fmap (noEmbed t0 t)
 
-liftEmbed :: DType a -> DType r -> r -> UnEmbed a 'Z r
+liftEmbed :: p a -> DType r -> r -> UnEmbed a 'Z r
 liftEmbed t0 = \case
     TV _        -> reEmbed
     FA _        -> error "Unimplemented."
@@ -225,34 +225,13 @@ liftEmbed t0 = \case
     TList t     -> fmap (liftEmbed t0 t)
     TOptional t -> fmap (liftEmbed t0 t)
 
--- noEmbed = \case
---     TType -> id
-
 foo :: Forall (Forall ((Embed ('S 'Z) -> Embed 'Z) -> Embed 'Z -> Embed 'Z) -> Maybe (Embed 'Z))
 foo = Forall $ \case
     t -> \f -> runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
 
 optBuild :: DTerm
-optBuild = DTerm (FA ((FA ((tv1 :-> tv0) :-> tv0 :-> tv0)) :-> TOptional tv0)) $
-    Forall $ \t f -> runForall f (TOptional t) _ Nothing
-    -- let t' = unEmbed (TOptional t) SZ t
-    -- in  runForall f (TOptional t') _ Nothing
-    -- runForall f (TOptional t) _ Nothing
-
-    -- let t' = unEmbed
-                         -- runForall f (TOptional t) _ Nothing
-    -- Forall $ \t f -> runForall f (TOptional t) _ Nothing
---     -- case t of
---     --   TNatural -> runForall f (TOptional t) Just Nothing
---     --   TBool    -> runForall f (TOptional t) Just Nothing
---     -- runForall f (TOptional t) Just Nothing
-
-    -- Forall $ \_ f -> f _ _
-
-    -- • Found hole:
-    --     _ :: DType a
-    --       -> (Forall (Embed 'Z -> a) -> a -> a)
-    --       -> Maybe a
+optBuild = DTerm (FA (FA ((tv1 :-> tv0) :-> tv0 :-> tv0) :-> TOptional tv0)) $
+    Forall $ \t f -> runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
 
 (~#)
     :: DType a
@@ -307,7 +286,7 @@ fromDhall
     -> Maybe a
 fromDhall = \case
     TV _ -> const Nothing
-    FA _ -> undefined
+    FA _ -> undefined     -- use pifun, and if no work, de-embed and function instead. or either
     a :-> b -> fromFunction a b
     TType -> \case
       D.Natural      -> SomeDType <$> Just TNatural
@@ -343,11 +322,36 @@ fromDhall = \case
       D.App D.None _    -> Just Nothing         -- is this necessary?
       _                 -> Nothing
 
--- fromPi :: (DType a -> DType b) -> D.Expr () D.X -> Maybe (a :~> b)
--- fromPi f = \case
---     D.ListLength -> case f
--- --     -- | > ListLength                               ~  List/length
--- --     | ListLength
+    -- -- FA        :: DType e -> DType (Forall e)
+
+fromPiFun :: DType a -> DType b -> D.Expr () D.X -> Maybe (Forall (a -> b))
+fromPiFun a b = \case
+    D.ListBuild
+      | ( FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)
+        , TList (TV SZ)
+        ) <- (a, b)
+      -> Just $ Forall $ \t f ->
+          runForall f (TList t) ((Seq.<|) . noEmbed (TList t) t) Seq.empty
+    D.ListFold
+      | ( TList (TV SZ)
+        , FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)
+        ) <- (a, b)
+      -> Just $ Forall $ \t xs -> Forall $ \u cons nil ->
+           foldr (cons . liftEmbed u t) nil xs
+    D.OptionalBuild
+      | ( FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ)
+        , TOptional (TV SZ)
+        ) <- (a, b)
+      -> Just $ Forall $ \t f ->
+          runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
+    D.OptionalFold
+      | ( TOptional (TV SZ)
+        , FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ)
+        ) <- (a, b)
+      -> Just $ Forall $ \t m -> Forall $ \u j n ->
+           maybe n (j . liftEmbed u t) m
+    _ -> Nothing
+
 
 fromFunction :: DType a -> DType b -> D.Expr () D.X -> Maybe (a -> b)
 fromFunction a b = \case
@@ -376,11 +380,6 @@ fromFunction a b = \case
       | (TInteger, TDouble ) <- (a, b) -> Just fromIntegral
     D.DoubleShow
       | (TDouble , TText   ) <- (a, b) -> Just (T.pack . show)
-    -- D.ListBuild
-    --   | (TType   , FA _ :-> TList c) <- (a, b)
-    --   -> Just _
---     -- | > ListBuild                                ~  List/build
---     | ListBuild
     D.ListLength
       | (TType   , TList _ :-> TNatural)
                              <- (a, b) -> Just $ \_ -> fromIntegral . length
@@ -407,8 +406,6 @@ fromFunction a b = \case
 --     | ListIndexed
 --     -- | > OptionalFold                             ~  Optional/fold
 --     | OptionalFold
---     -- | > OptionalBuild                            ~  Optional/build
---     | OptionalBuild
 
 
 
