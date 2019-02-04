@@ -146,6 +146,8 @@ data DType :: Type -> Type where
     TList     :: DType a -> DType (Seq a)
     TOptional :: DType a -> DType (Maybe a)
 
+deriving instance Show (DType a)
+
 compN :: SN n -> SN m -> f a -> f b -> f c -> f (CompN n m a b c)
 compN SZ     SZ     _ y _ = y
 compN SZ     (SS _) _ _ z = z
@@ -187,6 +189,8 @@ tv2 = tv
 
 data SomeDType :: Type where
     SomeDType :: DType a -> SomeDType
+
+deriving instance Show (SomeDType)
 
 data DTerm :: Type where
     DTerm :: DType a -> a -> DTerm
@@ -287,6 +291,27 @@ optBuild = DTerm (FA (FA ((tv1 :-> tv0) :-> tv0 :-> tv0) :-> TOptional tv0)) $
       | Just Refl <- a ~# b -> Just Refl
     _       -> Nothing
 
+dhallType
+    :: forall s. ()
+    => D.Context DTerm
+    -> D.Expr s D.X
+    -> Maybe SomeDType
+dhallType ctx = either (const Nothing) (fromDhall ctx TType)
+              . D.typeWith ctxTypes
+  where
+    ctxTypes :: D.Context (D.Expr s D.X)
+    ctxTypes = flip fmap ctx $ \(DTerm t _) -> toDhallType t
+
+fromSomeDhall
+    :: forall s. ()
+    => D.Context DTerm
+    -> D.Expr s D.X
+    -> Maybe DTerm
+fromSomeDhall ctx x = do
+    SomeDType t <- dhallType ctx x
+    y           <- fromDhall ctx t x
+    pure $ DTerm t y
+
 fromDhall
     :: forall a s. ()
     => D.Context DTerm
@@ -304,7 +329,7 @@ fromDhall ctx a = \case
       SomeDType d <- fromDhall ctx TType t
       Refl        <- b ~# d
       yType       <- either (const Nothing) Just $
-                        D.typeWith (D.insert v t ctx') y
+                        D.typeWith (D.insert v t ctxTypes) y
       SomeDType e <- fromDhall ctx TType yType
       Refl        <- c ~# e
       pure $ \x -> fromMaybe (errorWithoutStackTrace "fromDhall: typecheck failure") $
@@ -317,10 +342,8 @@ fromDhall ctx a = \case
           SomeDType v <- fromDhall ctx TType x
           pure $ SomeDType (u :-> v)
     D.App f x -> do
-      xType       <- either (const Nothing) Just $
-                        D.typeWith ctx' x
-      SomeDType t <- fromDhall ctx TType xType
-      x'          <- fromDhall ctx t     x
+      SomeDType t <- dhallType ctx x
+      x'          <- fromDhall ctx t x
       case t of
         TType -> undefined -- TODO: handle Forall case when u is TType
         _     -> ($ x') <$> fromDhall ctx (t :-> a) f
@@ -447,8 +470,8 @@ fromDhall ctx a = \case
     D.ImportAlt x _ -> fromDhall ctx a x    -- should we check lhs too?
     _               -> Nothing
   where
-    ctx' :: D.Context (D.Expr s D.X)
-    ctx' = fmap undefined ctx
+    ctxTypes :: D.Context (D.Expr s D.X)
+    ctxTypes = flip fmap ctx $ \(DTerm t _) -> toDhallType t
 
 fromLet
     :: D.Context DTerm
@@ -458,19 +481,13 @@ fromLet
     -> Maybe a
 fromLet ctx a []                     x = fromDhall ctx a x
 fromLet ctx a (D.Binding v t y : bs) x = do
-    SomeDType t' <- (fromDhall ctx TType =<< t) <|> do
-      yType <- either (const Nothing) Just $
-                 D.typeWith ctx' y
-      fromDhall ctx TType yType
+    SomeDType t' <- (fromDhall ctx TType =<< t) <|> dhallType ctx y
     y'           <- fromDhall ctx t' y
     fromLet (D.insert v (DTerm t' y') ctx) a bs x
-  where
-    ctx' :: D.Context (D.Expr s D.X)
-    ctx' = fmap undefined ctx
 
 toDhallType
     :: DType a
-    -> D.Expr () D.X
+    -> D.Expr s D.X
 toDhallType = \case
     TV n        -> D.Var (D.V "_" (fromIntegral (toNatural (fromSing n))))
     FA t        -> D.Pi "_" (D.Const D.Type) (toDhallType t)
@@ -484,23 +501,33 @@ toDhallType = \case
     TList t     -> D.List `D.App` toDhallType t
     TOptional t -> D.Optional `D.App` toDhallType t
 
-toDhall
-    :: DType a
-    -> a
-    -> D.Expr () D.X
-toDhall = \case
-    TV _        -> reEmbed
-    FA _        -> undefined
-    _ :-> _     -> undefined        -- this is a problem.
-    TType       -> \(SomeDType t) -> toDhallType t
-    TBool       -> D.BoolLit
-    TNatural    -> D.NaturalLit
-    TInteger    -> D.IntegerLit
-    TDouble     -> D.DoubleLit
-    TText       -> D.TextLit . D.Chunks []
-    TList t     -> D.ListLit (Just (toDhallType t)) . fmap (toDhall t)
-    TOptional t -> maybe (D.None `D.App` toDhallType t) (D.Some . toDhall t)
+-- toDhall
+--     :: DType a
+--     -> a
+--     -> D.Expr () D.X
+-- toDhall = \case
+--     TV _        -> reEmbed
+--     FA _        -> undefined
+--     _ :-> _     -> undefined        -- this is a problem.
+--     TType       -> \(SomeDType t) -> toDhallType t
+--     TBool       -> D.BoolLit
+--     TNatural    -> D.NaturalLit
+--     TInteger    -> D.IntegerLit
+--     TDouble     -> D.DoubleLit
+--     TText       -> D.TextLit . D.Chunks []
+--     TList t     -> D.ListLit (Just (toDhallType t)) . fmap (toDhall t)
+--     TOptional t -> maybe (D.None `D.App` toDhallType t) (D.Some . toDhall t)
 
+foldNatural
+    :: Natural
+    -> (a -> a)
+    -> a
+    -> a
+foldNatural n f = go n
+  where
+    go !i !x
+      | i <= 0    = x
+      | otherwise = let !y = f x in go (i - 1) y
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -642,13 +669,3 @@ toDhall = \case
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
-foldNatural
-    :: Natural
-    -> (a -> a)
-    -> a
-    -> a
-foldNatural n f = go n
-  where
-    go !i !x
-      | i <= 0    = x
-      | otherwise = let !y = f x in go (i - 1) y
