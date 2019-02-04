@@ -309,16 +309,26 @@ fromDhall ctx a = \case
       Refl        <- c ~# e
       pure $ \x -> fromMaybe (errorWithoutStackTrace "fromDhall: typecheck failure") $
         fromDhall (D.insert v (DTerm b x) ctx) c y
---     -- | > Pi "_" A B                               ~        A  -> B
---     --   > Pi x   A B                               ~  ∀(x : A) -> B
---     | Pi  Text (Expr s a) (Expr s a)
---     -- | > App f a                                  ~  f a
---     | App (Expr s a) (Expr s a)
---     -- | > Let [Binding x Nothing  r] e             ~  let x     = r in e
---     --   > Let [Binding x (Just t) r] e             ~  let x : t = r in e
---     | Let (NonEmpty (Binding s a)) (Expr s a)
---     -- | > Annot x t                                ~  x : t
---     | Annot (Expr s a) (Expr s a)
+    D.Pi _ t x | TType <- a -> do
+      SomeDType u <- fromDhall ctx TType t
+      case u of
+        TType -> undefined -- TODO: handle Forall case when u is TType
+        _     -> do
+          SomeDType v <- fromDhall ctx TType x
+          pure $ SomeDType (u :-> v)
+    D.App f x -> do
+      xType       <- either (const Nothing) Just $
+                        D.typeWith ctx' x
+      SomeDType t <- fromDhall ctx TType xType
+      x'          <- fromDhall ctx t     x
+      case t of
+        TType -> undefined -- TODO: handle Forall case when u is TType
+        _     -> ($ x') <$> fromDhall ctx (t :-> a) f
+    D.Let xs x -> fromLet ctx a (toList xs) x
+    D.Annot x t -> (<|> fromDhall ctx a x) $ do
+       SomeDType b <- fromDhall ctx TType t     -- we don't need to check, but why not?
+       Refl        <- a ~# b
+       fromDhall ctx b x
     D.Bool        | TType <- a -> Just (SomeDType TBool)
     D.BoolLit b   | TBool <- a -> Just b
     D.BoolAnd x y | TBool <- a ->
@@ -366,7 +376,10 @@ fromDhall ctx a = \case
     D.TextAppend x y | TText    <- a ->
       (<>) <$> fromDhall ctx TText x <*> fromDhall ctx TText y
     D.List           | FA TType <- a -> Just $ Forall (SomeDType . TList)
-    D.ListLit _ xs   | TList b  <- a -> traverse (fromDhall ctx b) xs
+    D.ListLit t xs   | TList b  <- a -> (<|> traverse (fromDhall ctx b) xs) $ do
+      SomeDType c <- fromDhall ctx TType =<< t  -- we don't need to check, but why not?
+      Refl        <- b ~# c
+      traverse (fromDhall ctx c) xs
     D.ListAppend x y | TList _  <- a ->
       (<>) <$> fromDhall ctx a x <*> fromDhall ctx a y
     D.ListBuild
@@ -392,7 +405,10 @@ fromDhall ctx a = \case
 --     -- | > ListIndexed                              ~  List/indexed
 --     | ListIndexed
     D.Optional         | FA TType    <- a -> Just $ Forall (SomeDType . TOptional)
-    D.OptionalLit _ xs | TOptional b <- a -> traverse (fromDhall ctx b) xs
+    D.OptionalLit t xs | TOptional b <- a -> (<|> traverse (fromDhall ctx b) xs) $ do
+      SomeDType c <- fromDhall ctx TType t  -- we don't need to check, but why not?
+      Refl        <- b ~# c
+      traverse (fromDhall ctx c) xs
     D.Some x | TOptional b <- a -> Just <$> fromDhall ctx b x
     D.None
       | FA (TOptional (TV SZ)) <- a
@@ -427,10 +443,27 @@ fromDhall ctx a = \case
 --     | Field (Expr s a) Text
 --     -- | > Project e xs                             ~  e.{ xs }
 --     | Project (Expr s a) (Set Text)
-    D.Note _ x -> fromDhall ctx a x
---     -- | > ImportAlt                                ~  e1 ? e2
---     | ImportAlt (Expr s a) (Expr s a)
-    _ -> Nothing
+    D.Note      _ x -> fromDhall ctx a x
+    D.ImportAlt x _ -> fromDhall ctx a x    -- should we check lhs too?
+    _               -> Nothing
+  where
+    ctx' :: D.Context (D.Expr s D.X)
+    ctx' = fmap undefined ctx
+
+fromLet
+    :: D.Context DTerm
+    -> DType a
+    -> [D.Binding s D.X]
+    -> D.Expr s D.X
+    -> Maybe a
+fromLet ctx a []                     x = fromDhall ctx a x
+fromLet ctx a (D.Binding v t y : bs) x = do
+    SomeDType t' <- (fromDhall ctx TType =<< t) <|> do
+      yType <- either (const Nothing) Just $
+                 D.typeWith ctx' y
+      fromDhall ctx TType yType
+    y'           <- fromDhall ctx t' y
+    fromLet (D.insert v (DTerm t' y') ctx) a bs x
   where
     ctx' :: D.Context (D.Expr s D.X)
     ctx' = fmap undefined ctx
