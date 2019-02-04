@@ -288,9 +288,10 @@ optBuild = DTerm (FA (FA ((tv1 :-> tv0) :-> tv0 :-> tv0) :-> TOptional tv0)) $
     _       -> Nothing
 
 fromDhall
-    :: D.Context DTerm
+    :: forall a s. ()
+    => D.Context DTerm
     -> DType a
-    -> D.Expr () D.X
+    -> D.Expr s D.X
     -> Maybe a
 fromDhall ctx a = \case
     D.Const _ -> Nothing
@@ -303,7 +304,7 @@ fromDhall ctx a = \case
       SomeDType d <- fromDhall ctx TType t
       Refl        <- b ~# d
       yType       <- either (const Nothing) Just $
-                        D.typeWith (D.insert v t D.empty) y
+                        D.typeWith (D.insert v t ctx') y
       SomeDType e <- fromDhall ctx TType yType
       Refl        <- c ~# e
       pure $ \x -> fromMaybe (errorWithoutStackTrace "fromDhall: typecheck failure") $
@@ -318,16 +319,16 @@ fromDhall ctx a = \case
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
 --     -- | > Annot x t                                ~  x : t
 --     | Annot (Expr s a) (Expr s a)
-    D.Bool      | TType <- a -> Just (SomeDType TBool)
-    D.BoolLit b | TBool <- a -> Just b
-    D.BoolAnd x y
-      | TBool <- a -> (&&) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
-    D.BoolOr  x y
-      | TBool <- a -> (||) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
-    D.BoolEQ  x y
-      | TBool <- a -> (==) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
-    D.BoolNE  x y
-      | TBool <- a -> (/=) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
+    D.Bool        | TType <- a -> Just (SomeDType TBool)
+    D.BoolLit b   | TBool <- a -> Just b
+    D.BoolAnd x y | TBool <- a ->
+      (&&) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
+    D.BoolOr  x y | TBool <- a ->
+      (||) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
+    D.BoolEQ  x y | TBool <- a ->
+      (==) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
+    D.BoolNE  x y | TBool <- a ->
+      (/=) <$> fromDhall ctx TBool x <*> fromDhall ctx TBool y
     D.BoolIf  b x y -> do
       b'    <- fromDhall ctx TBool b
       case b' of
@@ -335,78 +336,75 @@ fromDhall ctx a = \case
         False -> fromDhall ctx a y
     D.Natural      | TType    <- a -> Just (SomeDType TNatural)
     D.NaturalLit n | TNatural <- a -> Just n
---     -- | > NaturalFold                              ~  Natural/fold
---     | NaturalFold
---     -- | > NaturalBuild                             ~  Natural/build
---     | NaturalBuild
---     -- | > NaturalIsZero                            ~  Natural/isZero
---     | NaturalIsZero
---     -- | > NaturalEven                              ~  Natural/even
---     | NaturalEven
---     -- | > NaturalOdd                               ~  Natural/odd
---     | NaturalOdd
---     -- | > NaturalToInteger                         ~  Natural/toInteger
---     | NaturalToInteger
---     -- | > NaturalShow                              ~  Natural/show
---     | NaturalShow
---     -- | > NaturalPlus x y                          ~  x + y
---     | NaturalPlus (Expr s a) (Expr s a)
---     -- | > NaturalTimes x y                         ~  x * y
---     | NaturalTimes (Expr s a) (Expr s a)
---     -- | > Integer                                  ~  Integer
---     | Integer
---     -- | > IntegerLit n                             ~  ±n
---     | IntegerLit Integer
---     -- | > IntegerShow                              ~  Integer/show
---     | IntegerShow
---     -- | > IntegerToDouble                          ~  Integer/toDouble
---     | IntegerToDouble
---     -- | > Double                                   ~  Double
---     | Double
---     -- | > DoubleLit n                              ~  n
---     | DoubleLit Double
---     -- | > DoubleShow                               ~  Double/show
---     | DoubleShow
---     -- | > Text                                     ~  Text
---     | Text
---     -- | > TextLit (Chunks [(t1, e1), (t2, e2)] t3) ~  "t1${e1}t2${e2}t3"
---     | TextLit (Chunks s a)
---     -- | > TextAppend x y                           ~  x ++ y
---     | TextAppend (Expr s a) (Expr s a)
---     -- | > List                                     ~  List
---     | List
---     -- | > ListLit (Just t ) [x, y, z]              ~  [x, y, z] : List t
---     --   > ListLit  Nothing  [x, y, z]              ~  [x, y, z]
---     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
---     -- | > ListAppend x y                           ~  x # y
---     | ListAppend (Expr s a) (Expr s a)
---     -- | > ListBuild                                ~  List/build
---     | ListBuild
---     -- | > ListFold                                 ~  List/fold
---     | ListFold
---     -- | > ListLength                               ~  List/length
---     | ListLength
---     -- | > ListHead                                 ~  List/head
---     | ListHead
---     -- | > ListLast                                 ~  List/last
---     | ListLast
+    D.NaturalFold
+      | TNatural :-> FA ((TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ) <- a
+      -> Just $ \n -> Forall $ \_ f x -> foldNatural n f x
+    D.NaturalBuild
+      | FA ((TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ) :-> TNatural <- a
+      -> Just $ \(Forall f) -> f TNatural (+1) 0
+    D.NaturalIsZero    | TNatural :-> TBool    <- a -> Just (== 0)
+    D.NaturalEven      | TNatural :-> TBool    <- a -> Just even
+    D.NaturalOdd       | TNatural :-> TBool    <- a -> Just odd
+    D.NaturalToInteger | TNatural :-> TInteger <- a -> Just fromIntegral
+    D.NaturalShow      | TNatural :-> TText    <- a -> Just (T.pack . show)
+    D.NaturalPlus x y  | TNatural              <- a ->
+      (+) <$> fromDhall ctx TNatural x <*> fromDhall ctx TNatural y
+    D.NaturalTimes x y | TNatural              <- a ->
+      (*) <$> fromDhall ctx TNatural x <*> fromDhall ctx TNatural y
+    D.Integer         | TType                <- a -> Just (SomeDType TInteger)
+    D.IntegerLit n    | TInteger             <- a -> Just n
+    D.IntegerShow     | TInteger :-> TText   <- a -> Just (T.pack . printf "%+d")
+    D.IntegerToDouble | TInteger :-> TDouble <- a -> Just fromIntegral
+    D.Double          | TType                <- a -> Just (SomeDType TDouble)
+    D.DoubleLit n     | TDouble              <- a -> Just n
+    D.DoubleShow      | TDouble  :-> TText   <- a -> Just (T.pack . show)
+    D.Text            | TType                <- a -> Just (SomeDType TText)
+    D.TextLit (D.Chunks xs x) -> do
+      TText <- Just a
+      xs' <- for xs $ \(t, y) -> (t <>) <$> fromDhall ctx TText y
+      pure $ fold xs' <> x
+    D.TextAppend x y | TText    <- a ->
+      (<>) <$> fromDhall ctx TText x <*> fromDhall ctx TText y
+    D.List           | FA TType <- a -> Just $ Forall (SomeDType . TList)
+    D.ListLit _ xs   | TList b  <- a -> traverse (fromDhall ctx b) xs
+    D.ListAppend x y | TList _  <- a ->
+      (<>) <$> fromDhall ctx a x <*> fromDhall ctx a y
+    D.ListBuild
+      | FA (FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ) :-> TList (TV SZ)) <- a
+      -> Just $ Forall $ \t f ->
+          runForall f (TList t) ((Seq.<|) . noEmbed (TList t) t) Seq.empty
+    D.ListFold
+      | FA (TList (TV SZ) :-> FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)) <- a
+      -> Just $ Forall $ \t xs -> Forall $ \u cons nil ->
+           foldr (cons . liftEmbed u t) nil xs
+    D.ListLength
+      | FA (TList (TV SZ) :-> TNatural) <- a
+      -> Just $ Forall $ \_ -> fromIntegral . length
+    D.ListHead
+      | FA (TList (TV SZ) :-> TOptional (TV SZ)) <- a
+      -> Just $ Forall $ \_ -> \case Empty -> Nothing; x :<| _ -> Just x
+    D.ListLast
+      | FA (TList (TV SZ) :-> TOptional (TV SZ)) <- a
+      -> Just $ Forall $ \_ -> \case Empty -> Nothing; _ :|> x -> Just x
+    D.ListReverse
+      | FA (TList (TV SZ) :-> TList (TV SZ)) <- a
+      -> Just $ Forall $ \_ -> Seq.reverse
 --     -- | > ListIndexed                              ~  List/indexed
 --     | ListIndexed
---     -- | > ListReverse                              ~  List/reverse
---     | ListReverse
---     -- | > Optional                                 ~  Optional
---     | Optional
---     -- | > OptionalLit t (Just e)                   ~  [e] : Optional t
---     --   > OptionalLit t Nothing                    ~  []  : Optional t
---     | OptionalLit (Expr s a) (Maybe (Expr s a))
---     -- | > Some e                                   ~  Some e
---     | Some (Expr s a)
---     -- | > None                                     ~  None
---     | None
---     -- | > OptionalFold                             ~  Optional/fold
---     | OptionalFold
---     -- | > OptionalBuild                            ~  Optional/build
---     | OptionalBuild
+    D.Optional         | FA TType    <- a -> Just $ Forall (SomeDType . TOptional)
+    D.OptionalLit _ xs | TOptional b <- a -> traverse (fromDhall ctx b) xs
+    D.Some x | TOptional b <- a -> Just <$> fromDhall ctx b x
+    D.None
+      | FA (TOptional (TV SZ)) <- a
+      -> Just $ Forall $ \_ -> Nothing
+    D.OptionalFold
+      | FA (TOptional (TV SZ) :-> FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ)) <- a
+      -> Just $ Forall $ \t m -> Forall $ \u j n ->
+           maybe n (j . liftEmbed u t) m
+    D.OptionalBuild
+      | FA (FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ) :-> TOptional (TV SZ)) <- a
+      -> Just $ Forall $ \t f ->
+          runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
 --     -- | > Record       [(k1, t1), (k2, t2)]        ~  { k1 : t1, k2 : t1 }
 --     | Record    (Map Text (Expr s a))
 --     -- | > RecordLit    [(k1, v1), (k2, v2)]        ~  { k1 = v1, k2 = v2 }
@@ -424,147 +422,18 @@ fromDhall ctx a = \case
 --     -- | > Merge x y (Just t )                      ~  merge x y : t
 --     --   > Merge x y  Nothing                       ~  merge x y
 --     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
---     -- | > Constructors e                           ~  constructors e
---     | Constructors (Expr s a)
+    D.Constructors t -> fromDhall ctx a t
 --     -- | > Field e x                                ~  e.x
 --     | Field (Expr s a) Text
 --     -- | > Project e xs                             ~  e.{ xs }
 --     | Project (Expr s a) (Set Text)
---     -- | > Note s x                                 ~  e
---     | Note s (Expr s a)
+    D.Note _ x -> fromDhall ctx a x
 --     -- | > ImportAlt                                ~  e1 ? e2
 --     | ImportAlt (Expr s a) (Expr s a)
     _ -> Nothing
-
-
-
--- fromDhall ctx = \case
---     TV _ -> const Nothing
---     FA e -> fromPi e
---     a :-> b -> fromFunction a b
---     TType -> \case
---       D.Natural      -> SomeDType <$> Just TNatural
---       D.Integer      -> SomeDType <$> Just TInteger
---       D.Double       -> SomeDType <$> Just TDouble
---       D.Text         -> SomeDType <$> Just TText
---       D.App D.List t -> fromDhall ctx TType t <&> \case
---         SomeDType q -> SomeDType (TList q)
---       D.App D.Optional t -> fromDhall ctx TType t <&> \case
---         SomeDType q -> SomeDType (TOptional q)
---       _              -> Nothing
---     TBool -> \case
---       D.BoolLit b -> Just b
---       _           -> Nothing
---     TNatural -> \case
---       D.NaturalLit n -> Just n
---       _              -> Nothing
---     TInteger -> \case
---       D.IntegerLit n -> Just n
---       _              -> Nothing
---     TDouble  -> \case
---       D.DoubleLit n  -> Just n
---       _              -> Nothing
---     TText -> \case
---       D.TextLit (D.Chunks [] t) -> Just t
---       _              -> Nothing
---     TList t  -> \case
---       D.ListLit _ xs -> traverse (fromDhall ctx t) xs
---       _              -> Nothing
---     TOptional t -> \case
---       D.OptionalLit _ x -> traverse (fromDhall ctx t) x
---       D.Some x          -> Just <$> fromDhall ctx t x
---       D.App D.None _    -> Just Nothing         -- is this necessary?
---       _                 -> Nothing
-
-fromPi :: DType e -> D.Expr () D.X -> Maybe (Forall e)
-fromPi a = \case
-    D.Lam _ _ _ -> undefined
-    D.None
-      | TOptional (TV SZ) <- a
-      -> Just $ Forall $ \_ -> Nothing
-    x
-      | t :-> u <- a -> fromPiFun t u x
-      | otherwise    -> Nothing
-
-
-fromPiFun :: DType a -> DType b -> D.Expr () D.X -> Maybe (Forall (a -> b))
-fromPiFun a b = \case
-    D.ListBuild
-      | ( FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)
-        , TList (TV SZ)
-        ) <- (a, b)
-      -> Just $ Forall $ \t f ->
-          runForall f (TList t) ((Seq.<|) . noEmbed (TList t) t) Seq.empty
-    D.ListFold
-      | ( TList (TV SZ)
-        , FA ((TV (SS SZ) :-> TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)
-        ) <- (a, b)
-      -> Just $ Forall $ \t xs -> Forall $ \u cons nil ->
-           foldr (cons . liftEmbed u t) nil xs
-    D.ListLength
-      | ( TList (TV SZ), TNatural ) <- (a, b)
-      -> Just $ Forall $ \_ -> fromIntegral . length
-    D.ListHead
-      | ( TList (TV SZ), TOptional (TV SZ) ) <- (a, b)
-      -> Just $ Forall $ \_ -> \case Empty -> Nothing; x :<| _ -> Just x
-    D.ListLast
-      | ( TList (TV SZ), TOptional (TV SZ) ) <- (a, b)
-      -> Just $ Forall $ \_ -> \case Empty -> Nothing; _ :|> x -> Just x
-    D.ListReverse
-      | ( TList (TV SZ), TList (TV SZ) ) <- (a, b)
-      -> Just $ Forall $ \_ -> Seq.reverse
-    D.OptionalBuild
-      | ( FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ)
-        , TOptional (TV SZ)
-        ) <- (a, b)
-      -> Just $ Forall $ \t f ->
-          runForall f (TOptional t) (Just . noEmbed (TOptional t) t) Nothing
-    D.OptionalFold
-      | ( TOptional (TV SZ)
-        , FA ((TV (SS SZ) :-> TV SZ) :-> TV SZ :-> TV SZ)
-        ) <- (a, b)
-      -> Just $ Forall $ \t m -> Forall $ \u j n ->
-           maybe n (j . liftEmbed u t) m
-    _ -> Nothing
-
-
-fromFunction :: DType a -> DType b -> D.Expr () D.X -> Maybe (a -> b)
-fromFunction a b = \case
-    -- D.Lam v t y -> Just $ \a ->
-    -- D.subst (D.Var v 0) y
-    D.NaturalFold
-      | (TNatural, FA ((TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ)) <- (a, b)
-      -> Just $ \n -> Forall $ \_ f x -> foldNatural n f x
-    D.NaturalBuild
-      | (FA ((TV SZ :-> TV SZ) :-> TV SZ :-> TV SZ), TNatural) <- (a, b)
-      -> Just $ \(Forall f) -> f TNatural (+1) 0
-    D.NaturalIsZero
-      | (TNatural, TBool   ) <- (a, b) -> Just (== 0)
-    D.NaturalEven
-      | (TNatural, TBool   ) <- (a, b) -> Just $ (== 0) . (`mod` 2)
-    D.NaturalOdd
-      | (TNatural, TBool   ) <- (a, b) -> Just $ (/= 0) . (`mod` 2)
-    D.NaturalToInteger
-      | (TNatural, TInteger) <- (a, b) -> Just fromIntegral
-    D.NaturalShow
-      | (TNatural, TText   ) <- (a, b) -> Just (T.pack . show)
-    D.IntegerShow
-      | (TInteger, TText   ) <- (a, b) -> Just (T.pack . printf "%+d")
-    D.IntegerToDouble
-      | (TInteger, TDouble ) <- (a, b) -> Just fromIntegral
-    D.DoubleShow
-      | (TDouble , TText   ) <- (a, b) -> Just (T.pack . show)
-    _ -> Nothing
-
--- substVal
---     :: DType a
---     -> DType b
---     -> D.Var
---     -> a
---     -> D.Expr () D.X
---     -> b
--- substVal a b v x = \case
-
+  where
+    ctx' :: D.Context (D.Expr s D.X)
+    ctx' = fmap undefined ctx
 
 toDhallType
     :: DType a
