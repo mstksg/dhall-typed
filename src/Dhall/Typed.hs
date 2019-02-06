@@ -49,6 +49,7 @@ import           Data.Traversable
 import           Data.Type.Equality
 import           Data.Type.Universe
 import           Data.Void
+import           Debug.Trace
 import           Dhall.Typed.Prod
 import           Dhall.Typed.Sum
 import           GHC.Generics
@@ -292,7 +293,7 @@ optBuild = DTerm (FA (FA ((tv1 :-> tv0) :-> tv0 :-> tv0) :-> TOptional tv0)) $
     _       -> Nothing
 
 dhallType
-    :: forall s. ()
+    :: forall s. Show s
     => D.Context DTerm
     -> D.Expr s D.X
     -> Maybe SomeDType
@@ -303,7 +304,7 @@ dhallType ctx = either (const Nothing) (fromDhall ctx TType)
     ctxTypes = flip fmap ctx $ \(DTerm t _) -> toDhallType t
 
 fromSomeDhall
-    :: forall s. ()
+    :: forall s. Show s
     => D.Context DTerm
     -> D.Expr s D.X
     -> Maybe DTerm
@@ -313,13 +314,14 @@ fromSomeDhall ctx x = do
     pure $ DTerm t y
 
 fromDhall
-    :: forall a s. ()
+    :: forall a s. Show s
     => D.Context DTerm
     -> DType a
     -> D.Expr s D.X
     -> Maybe a
 fromDhall ctx a = \case
-    D.Const _ -> Nothing
+    D.Const D.Type
+      | TType <- a -> Just (SomeDType TType)  -- should expect TKind
     D.Var (D.V v i) -> do
       DTerm b x <- D.lookup v i ctx
       Refl      <- a ~# b
@@ -334,18 +336,37 @@ fromDhall ctx a = \case
       Refl        <- c ~# e
       pure $ \x -> fromMaybe (errorWithoutStackTrace "fromDhall: typecheck failure") $
         fromDhall (D.insert v (DTerm b x) ctx) c y
-    D.Pi _ t x | TType <- a -> do
+    D.Pi l t x | TType <- a -> do
+      -- TODO: what happens if t is Type -> Type, or Sort?
       SomeDType u <- fromDhall ctx TType t
       case u of
-        TType -> undefined -- TODO: handle Forall case when u is TType
+        TType -> fromDhall (D.insert l (DTerm TType (SomeDType (TV SZ))) ctx)
+                      TType x <&> \(SomeDType q) -> SomeDType (FA q)
         _     -> do
           SomeDType v <- fromDhall ctx TType x
           pure $ SomeDType (u :-> v)
-    D.App f x -> do
-      SomeDType t <- dhallType ctx x
-      x'          <- fromDhall ctx t x
+    D.App f x -> traceShow (D.toList ctxTypes) . traceShow f . traceShow x $ do
+      DTerm t x' <- fromSomeDhall ctx x
       case t of
-        TType -> undefined -- TODO: handle Forall case when u is TType
+      --   TType -> do
+      --     SomeDType y <- Just x'
+      --     Just $ _ y
+          -- Forall g    <- fromDhll ctx TType f
+          -- SomeDType (FA e) <- dhallType ctx TType f
+          -- _ e y
+          -- _ $ f y
+          -- -- DTerm 
+          -- SomeDType (FA e) <- dhallType ctx f
+          -- Forall g         <- fromDhall ctx (FA e) f
+          -- Just $ g y
+
+-- fromSomeDhall
+--     :: forall s. ()
+--     => D.Context DTerm
+--     -> D.Expr s D.X
+--     -> Maybe DTerm
+        -- _ f x'
+        -- undefined -- TODO: handle Forall case when u is TType
         _     -> ($ x') <$> fromDhall ctx (t :-> a) f
     D.Let xs x -> fromLet ctx a (toList xs) x
     D.Annot x t -> (<|> fromDhall ctx a x) $ do
@@ -474,7 +495,8 @@ fromDhall ctx a = \case
     ctxTypes = flip fmap ctx $ \(DTerm t _) -> toDhallType t
 
 fromLet
-    :: D.Context DTerm
+    :: Show s
+    => D.Context DTerm
     -> DType a
     -> [D.Binding s D.X]
     -> D.Expr s D.X
@@ -488,10 +510,16 @@ fromLet ctx a (D.Binding v t y : bs) x = do
 toDhallType
     :: DType a
     -> D.Expr s D.X
-toDhallType = \case
-    TV n        -> D.Var (D.V "_" (fromIntegral (toNatural (fromSing n))))
-    FA t        -> D.Pi "_" (D.Const D.Type) (toDhallType t)
-    a :-> b     -> D.Pi "_" (toDhallType a) (toDhallType b)
+toDhallType = toDhallType_ 0
+
+toDhallType_
+    :: Integer
+    -> DType a
+    -> D.Expr s D.X
+toDhallType_ n = \case
+    TV i        -> D.Var (D.V "_" (fromIntegral (toNatural (fromSing i)) + n))
+    FA t        -> D.Pi "_" (D.Const D.Type  ) (toDhallType_ n t)
+    a :-> b     -> D.Pi "_" (toDhallType_ n a) (toDhallType_ (n + 1) b)   -- add 1 to b
     TType       -> D.Const D.Type
     TBool       -> D.Bool
     TNatural    -> D.Natural
