@@ -181,13 +181,17 @@ type family UnEmbed k a n (t :: k) :: k where
     -- UnEmbed a n      (Forall vs k e)   = Forall vs k (UnEmbed a ('S n) e)
     -- UnEmbed a n      (Forall '[] k e) = TL.TypeError ('TL.Text "hey")
     -- UnEmbed a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed a ('S n) e)
+    -- UnEmbed Type a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed k a ('S n) e)
     UnEmbed Type a n      (b -> c)       = UnEmbed Type a n b -> UnEmbed Type a n c
     UnEmbed Type a n      (Seq b)        = Seq (UnEmbed Type a n b)
     UnEmbed Type a n      (Maybe b)      = Maybe (UnEmbed Type a n b)
     UnEmbed Type a n      b              = b
 
--- data Forall vs v a = Forall { runForall :: forall r. DType vs v r -> UnEmbed r 'Z a }
+data Forall :: [SomeDKind] -> DKind k -> Type -> Type where
+    Forall :: { runForall :: forall r. DType vs v r -> UnEmbed Type r 'Z a }
+           -> Forall vs v a
 
+-- what about TV TZ :$ TBool ?
 data DType :: forall k. [SomeDKind] -> DKind k -> k -> Type where
     TV        :: VIx n vs k -> DType vs k (Embed n k)
     Pi        :: DType ('SDK v ': vs) k a -> DType vs (v ':~> k) ('FA a)
@@ -195,6 +199,8 @@ data DType :: forall k. [SomeDKind] -> DKind k -> k -> Type where
               => DType vs (v ':~> k) ('FA a)
               -> DType vs v b
               -> DType vs k (UnEmbed k' b 'Z a)
+    Poly      :: DType vs (v ':~> 'KType) ('FA a)
+              -> DType vs 'KType          (Forall vs v a)
     -- Poly      :: DType vs (v ':~> 'KType) ('FA a) -> DType vs 'KType (Forall vs v a)
     -- (:$)      :: DType ('SDK v ': vs) k      a -> DType vs v b -> DType vs k (UnEmbed b 'Z a)
     -- Poly      :: DType ('SDK v ': vs) 'KType a -> DType vs 'KType (Forall vs v a)
@@ -264,7 +270,8 @@ data DTerm :: [SomeDKind] -> Type where
 --           Forall $ \_ -> id
 
 -- konst :: DTerm '[]
--- konst = DTerm (Poly $ Poly $ TV (VIS VIZ) :-> TV VIZ :-> TV (VIS VIZ)) $ _
+-- konst = DTerm (Poly $ Pi $ Poly $ Pi $ TV (VIS VIZ) :-> TV VIZ :-> TV (VIS VIZ)) $
+--     Forall $ \_ -> Forall $ \_ -> _
 
 --       -- Forall $ \_ -> Forall _
 -- -- -- -- (FA $ FA $ TV (SS SZ) :-> TV SZ :-> TV (SS SZ)) $
