@@ -147,14 +147,15 @@ data instance Sing (i :: Index as a) where
     SIZ :: Sing 'IZ
     SIS :: Sing i -> Sing ('IS i)
 
-data instance Sing (a :: DType us k) where
-    STVar     :: Sing i -> Sing ('TVar i)
-    (:%$)     :: Sing f -> Sing x -> Sing (f ':$ x)
-    (:%->)    :: Sing x -> Sing y -> Sing (x ':-> y)
-    SBool     :: Sing 'Bool
-    SNatural  :: Sing 'Natural
-    SList     :: Sing 'List
-    SOptional :: Sing 'Optional
+data SDType us k :: DType us k -> Type where
+    STVar     :: Sing (i :: Index us a) -> SDType us a ('TVar i)
+    SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)    -- ???
+    (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
+    (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
+    SBool     :: SDType us 'Type 'Bool
+    SNatural  :: SDType us 'Type 'Natural
+    SList     :: SDType us ('Type ':~> 'Type) 'List
+    SOptional :: SDType us ('Type ':~> 'Type) 'Optional
 
 infixr 0 :%->
 infixl 9 :%$
@@ -168,8 +169,11 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     App           :: DTerm vs (a ':-> b)
                   -> DTerm vs a
                   -> DTerm vs b
+    TLam          :: SDType '[k] 'Type b
+                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
+                  -> DTerm vs ('Pi (u :: SDKind k) b)
     TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
-                  -> Sing (a :: DType '[] k)
+                  -> SDType '[] k a
                   -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
     BoolLit       :: Bool
                   -> DTerm vs 'Bool
@@ -184,7 +188,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs 'Natural
                   -> DTerm vs 'Natural
     NaturalIsZero :: DTerm vs ('Natural ':-> 'Natural)
-    ListLit       :: Sing a
+    ListLit       :: SDType '[] 'Type a
                   -> Seq (DTerm vs a)
                   -> DTerm vs ('List ':$ a)
     ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
@@ -192,7 +196,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
-    OptionalLit   :: Sing a
+    OptionalLit   :: SDType '[] 'Type a
                   -> Maybe (DTerm vs a)
                   -> DTerm vs ('Optional ':$ a)
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
