@@ -81,31 +81,42 @@ toNatural Z     = 0
 toNatural (S n) = 1 + toNatural n
 
 data DKind :: Type where
-    Type :: DKind
+    Type  :: DKind
     (:~>) :: DKind -> DKind -> DKind
 
-data DType k where
+data DType :: DKind -> Type where
     TApp    :: DType (a ':~> b) -> DType a -> DType b
     (:->)   :: DType 'Type -> DType 'Type -> DType 'Type
     Bool    :: DType 'Type
     Natural :: DType 'Type
     List    :: DType ('Type ':~> 'Type)
 
-data SomeDType :: Type where
-    SDT :: DType k -> SomeDType
+data instance Sing (a :: DType k) where
+    STApp    :: Sing f -> Sing x -> Sing (f '`TApp` x)
+    (:%->)   :: Sing x -> Sing y -> Sing (x ':-> y)
+    SBool    :: Sing 'Bool
+    SNatural :: Sing 'Natural
+    SList    :: Sing 'List
 
-data instance Sing (a :: SomeDType) where
-    STApp    :: Sing f -> Sing x -> Sing ('SDT (f '`TApp` x))
-    SBool    :: Sing ('SDT 'Bool)
-    SNatural :: Sing ('SDT 'Natural)
-    SList    :: Sing ('SDT 'List)
-
-data DTerm :: SomeDType -> Type where
-    BoolLit       :: Bool -> DTerm ('SDT 'Bool)
-    NaturalLit    :: Natural -> DTerm ('SDT 'Natural)
-    NaturalPlus   :: DTerm ('SDT 'Natural) -> DTerm ('SDT 'Natural) -> DTerm ('SDT 'Natural)
-    NaturalIsZero :: DTerm ('SDT ('Natural ':-> 'Natural))
-    ListLit       :: Sing ('SDT a) -> Seq (DTerm ('SDT a)) -> DTerm ('SDT ('List '`TApp` a))
+data DTerm :: [DType 'Type] -> DType 'Type -> Type where
+    Var           :: Index vs a
+                  -> DTerm vs a
+    Lam           :: DTerm (a ': vs) b
+                  -> DTerm vs (a ':-> b)
+    App           :: DTerm vs (a ':-> b)
+                  -> DTerm vs a
+                  -> DTerm vs b
+    BoolLit       :: Bool
+                  -> DTerm vs 'Bool
+    NaturalLit    :: Natural
+                  -> DTerm vs 'Natural
+    NaturalPlus   :: DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+    NaturalIsZero :: DTerm vs ('Natural ':-> 'Natural)
+    ListLit       :: Sing a
+                  -> Seq (DTerm vs a)
+                  -> DTerm vs ('List '`TApp` a)
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
