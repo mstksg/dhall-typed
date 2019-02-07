@@ -80,6 +80,174 @@ toNatural :: N -> Natural
 toNatural Z     = 0
 toNatural (S n) = 1 + toNatural n
 
+data DKind :: Type where
+    Type :: DKind
+    (:~>) :: DKind -> DKind -> DKind
+
+data DType k where
+    TApp    :: DType (a ':~> b) -> DType a -> DType b
+    (:->)   :: DType 'Type -> DType 'Type -> DType 'Type
+    Bool    :: DType 'Type
+    Natural :: DType 'Type
+    List    :: DType ('Type ':~> 'Type)
+
+data SomeDType :: Type where
+    SDT :: DType k -> SomeDType
+
+data instance Sing (a :: SomeDType) where
+    STApp    :: Sing f -> Sing x -> Sing ('SDT (f '`TApp` x))
+    SBool    :: Sing ('SDT 'Bool)
+    SNatural :: Sing ('SDT 'Natural)
+    SList    :: Sing ('SDT 'List)
+
+data DTerm :: SomeDType -> Type where
+    BoolLit       :: Bool -> DTerm ('SDT 'Bool)
+    NaturalLit    :: Natural -> DTerm ('SDT 'Natural)
+    NaturalPlus   :: DTerm ('SDT 'Natural) -> DTerm ('SDT 'Natural) -> DTerm ('SDT 'Natural)
+    NaturalIsZero :: DTerm ('SDT ('Natural ':-> 'Natural))
+    ListLit       :: Sing ('SDT a) -> Seq (DTerm ('SDT a)) -> DTerm ('SDT ('List '`TApp` a))
+
+-- -- | Syntax tree for expressions
+-- data Expr s a
+--     -- | > Const c                                  ~  c
+--     = Const Const
+--     -- | > Var (V x 0)                              ~  x
+--     --   > Var (V x n)                              ~  x@n
+--     | Var Var
+--     -- | > Lam x     A b                            ~  λ(x : A) -> b
+--     | Lam Text (Expr s a) (Expr s a)
+--     -- | > Pi "_" A B                               ~        A  -> B
+--     --   > Pi x   A B                               ~  ∀(x : A) -> B
+--     | Pi  Text (Expr s a) (Expr s a)
+--     -- | > App f a                                  ~  f a
+--     | App (Expr s a) (Expr s a)
+--     -- | > Let [Binding x Nothing  r] e             ~  let x     = r in e
+--     --   > Let [Binding x (Just t) r] e             ~  let x : t = r in e
+--     | Let (NonEmpty (Binding s a)) (Expr s a)
+--     -- | > Annot x t                                ~  x : t
+--     | Annot (Expr s a) (Expr s a)
+--     -- | > Bool                                     ~  Bool
+--     | Bool
+--     -- | > BoolLit b                                ~  b
+--     | BoolLit Bool
+--     -- | > BoolAnd x y                              ~  x && y
+--     | BoolAnd (Expr s a) (Expr s a)
+--     -- | > BoolOr  x y                              ~  x || y
+--     | BoolOr  (Expr s a) (Expr s a)
+--     -- | > BoolEQ  x y                              ~  x == y
+--     | BoolEQ  (Expr s a) (Expr s a)
+--     -- | > BoolNE  x y                              ~  x != y
+--     | BoolNE  (Expr s a) (Expr s a)
+--     -- | > BoolIf x y z                             ~  if x then y else z
+--     | BoolIf (Expr s a) (Expr s a) (Expr s a)
+--     -- | > Natural                                  ~  Natural
+--     | Natural
+--     -- | > NaturalLit n                             ~  n
+--     | NaturalLit Natural
+--     -- | > NaturalFold                              ~  Natural/fold
+--     | NaturalFold
+--     -- | > NaturalBuild                             ~  Natural/build
+--     | NaturalBuild
+--     -- | > NaturalIsZero                            ~  Natural/isZero
+--     | NaturalIsZero
+--     -- | > NaturalEven                              ~  Natural/even
+--     | NaturalEven
+--     -- | > NaturalOdd                               ~  Natural/odd
+--     | NaturalOdd
+--     -- | > NaturalToInteger                         ~  Natural/toInteger
+--     | NaturalToInteger
+--     -- | > NaturalShow                              ~  Natural/show
+--     | NaturalShow
+--     -- | > NaturalPlus x y                          ~  x + y
+--     | NaturalPlus (Expr s a) (Expr s a)
+--     -- | > NaturalTimes x y                         ~  x * y
+--     | NaturalTimes (Expr s a) (Expr s a)
+--     -- | > Integer                                  ~  Integer
+--     | Integer
+--     -- | > IntegerLit n                             ~  ±n
+--     | IntegerLit Integer
+--     -- | > IntegerShow                              ~  Integer/show
+--     | IntegerShow
+--     -- | > IntegerToDouble                          ~  Integer/toDouble
+--     | IntegerToDouble
+--     -- | > Double                                   ~  Double
+--     | Double
+--     -- | > DoubleLit n                              ~  n
+--     | DoubleLit Double
+--     -- | > DoubleShow                               ~  Double/show
+--     | DoubleShow
+--     -- | > Text                                     ~  Text
+--     | Text
+--     -- | > TextLit (Chunks [(t1, e1), (t2, e2)] t3) ~  "t1${e1}t2${e2}t3"
+--     | TextLit (Chunks s a)
+--     -- | > TextAppend x y                           ~  x ++ y
+--     | TextAppend (Expr s a) (Expr s a)
+--     -- | > List                                     ~  List
+--     | List
+--     -- | > ListLit (Just t ) [x, y, z]              ~  [x, y, z] : List t
+--     --   > ListLit  Nothing  [x, y, z]              ~  [x, y, z]
+--     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
+--     -- | > ListAppend x y                           ~  x # y
+--     | ListAppend (Expr s a) (Expr s a)
+--     -- | > ListBuild                                ~  List/build
+--     | ListBuild
+--     -- | > ListFold                                 ~  List/fold
+--     | ListFold
+--     -- | > ListLength                               ~  List/length
+--     | ListLength
+--     -- | > ListHead                                 ~  List/head
+--     | ListHead
+--     -- | > ListLast                                 ~  List/last
+--     | ListLast
+--     -- | > ListIndexed                              ~  List/indexed
+--     | ListIndexed
+--     -- | > ListReverse                              ~  List/reverse
+--     | ListReverse
+--     -- | > Optional                                 ~  Optional
+--     | Optional
+--     -- | > OptionalLit t (Just e)                   ~  [e] : Optional t
+--     --   > OptionalLit t Nothing                    ~  []  : Optional t
+--     | OptionalLit (Expr s a) (Maybe (Expr s a))
+--     -- | > Some e                                   ~  Some e
+--     | Some (Expr s a)
+--     -- | > None                                     ~  None
+--     | None
+--     -- | > OptionalFold                             ~  Optional/fold
+--     | OptionalFold
+--     -- | > OptionalBuild                            ~  Optional/build
+--     | OptionalBuild
+--     -- | > Record       [(k1, t1), (k2, t2)]        ~  { k1 : t1, k2 : t1 }
+--     | Record    (Map Text (Expr s a))
+--     -- | > RecordLit    [(k1, v1), (k2, v2)]        ~  { k1 = v1, k2 = v2 }
+--     | RecordLit (Map Text (Expr s a))
+--     -- | > Union        [(k1, t1), (k2, t2)]        ~  < k1 : t1 | k2 : t2 >
+--     | Union     (Map Text (Expr s a))
+--     -- | > UnionLit k v [(k1, t1), (k2, t2)]        ~  < k = v | k1 : t1 | k2 : t2 >
+--     | UnionLit Text (Expr s a) (Map Text (Expr s a))
+--     -- | > Combine x y                              ~  x ∧ y
+--     | Combine (Expr s a) (Expr s a)
+--     -- | > CombineTypes x y                         ~  x ⩓ y
+--     | CombineTypes (Expr s a) (Expr s a)
+--     -- | > Prefer x y                               ~  x ⫽ y
+--     | Prefer (Expr s a) (Expr s a)
+--     -- | > Merge x y (Just t )                      ~  merge x y : t
+--     --   > Merge x y  Nothing                       ~  merge x y
+--     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
+--     -- | > Constructors e                           ~  constructors e
+--     | Constructors (Expr s a)
+--     -- | > Field e x                                ~  e.x
+--     | Field (Expr s a) Text
+--     -- | > Project e xs                             ~  e.{ xs }
+--     | Project (Expr s a) (Set Text)
+--     -- | > Note s x                                 ~  e
+--     | Note s (Expr s a)
+--     -- | > ImportAlt                                ~  e1 ? e2
+--     | ImportAlt (Expr s a) (Expr s a)
+--     -- | > Embed import                             ~  import
+--     | Embed a
+--     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
+
+
 -- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
 -- is a good reason why we need to have an expression language instead of
 -- just first classing things.
@@ -134,15 +302,15 @@ toNatural (S n) = 1 + toNatural n
 
 -- data Forall k e = Forall { runForall :: forall r. DType k r -> UnEmbed r 'Z e }
 
-data DKind :: Type -> Type where
-    KType     :: DKind Type
-    (:~>)     :: DKind a -> DKind b -> DKind (a :~> b)
+-- data DKind :: Type -> Type where
+--     KType     :: DKind Type
+--     (:~>)     :: DKind a -> DKind b -> DKind (a :~> b)
 
--- data FA = FA
-data a :~> b = FA b
+-- -- data FA = FA
+-- data a :~> b = FA b
 
-data SomeDKind :: Type where
-    SDK :: DKind k -> SomeDKind
+-- data SomeDKind :: Type where
+--     SDK :: DKind k -> SomeDKind
 
 -- data FA :: (Type -> Type) -> Type -> Type -> Type where
 --     FAType :: f b -> FA f a b
@@ -151,73 +319,73 @@ data SomeDKind :: Type where
 
 -- type family ($$) (a :: j -> k)
 
-data VIx :: N -> [SomeDKind] -> DKind k -> Type where
-    VIZ :: VIx 'Z ('SDK k ': vs) k
-    VIS :: VIx n vs k -> VIx ('S n) (v ': vs) k
+-- data VIx :: N -> [SomeDKind] -> DKind k -> Type where
+--     VIZ :: VIx 'Z ('SDK k ': vs) k
+--     VIS :: VIx n vs k -> VIx ('S n) (v ': vs) k
 
-deriving instance Show (VIx n ks k)
+-- deriving instance Show (VIx n ks k)
 
-data family Embed :: N -> DKind k -> k
+-- data family Embed :: N -> DKind k -> k
 
 -- data Forall k e = Forall { runForall :: forall r. DType k r -> UnEmbed r 'Z e }
 
-data SomeDType :: [SomeDKind] -> DKind k -> Type where
-    SDT :: DType vs k a -> SomeDType vs k
+-- data SomeDType :: [SomeDKind] -> DKind k -> Type where
+--     SDT :: DType vs k a -> SomeDType vs k
 
 -- data FA vs v k = FA { runForall :: SomeDType vs v -> SomeDType vs k }
 
-type family CompN n m a b c where
-    CompN 'Z     'Z     a b c = b
-    CompN 'Z     ('S m) a b c = c
-    CompN ('S n) 'Z     a b c = a
-    CompN ('S n) ('S m) a b c = CompN n m a b c
+-- type family CompN n m a b c where
+--     CompN 'Z     'Z     a b c = b
+--     CompN 'Z     ('S m) a b c = c
+--     CompN ('S n) 'Z     a b c = a
+--     CompN ('S n) ('S m) a b c = CompN n m a b c
 
-type family UnEmbed k a n (t :: k) :: k where
-    UnEmbed k         a 'Z     (Embed 'Z     v) = a
-    UnEmbed k         a 'Z     (Embed ('S m) v) = Embed m v
-    UnEmbed k         a ('S n) (Embed 'Z     v) = Embed 'Z v
-    UnEmbed k         a ('S n) (Embed ('S m) v) = CompN n m (Embed ('S m) v) a (Embed m v)
-    UnEmbed (l :~> u) a n      ('FA e)          = 'FA (UnEmbed u a n e)
-    -- UnEmbed a n      (Forall vs k e)   = Forall vs k (UnEmbed a ('S n) e)
-    -- UnEmbed a n      (Forall '[] k e) = TL.TypeError ('TL.Text "hey")
-    -- UnEmbed a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed a ('S n) e)
-    -- UnEmbed Type a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed k a ('S n) e)
-    UnEmbed Type a n      (b -> c)       = UnEmbed Type a n b -> UnEmbed Type a n c
-    UnEmbed Type a n      (Seq b)        = Seq (UnEmbed Type a n b)
-    UnEmbed Type a n      (Maybe b)      = Maybe (UnEmbed Type a n b)
-    UnEmbed Type a n      b              = b
+-- type family UnEmbed k a n (t :: k) :: k where
+--     UnEmbed k         a 'Z     (Embed 'Z     v) = a
+--     UnEmbed k         a 'Z     (Embed ('S m) v) = Embed m v
+--     UnEmbed k         a ('S n) (Embed 'Z     v) = Embed 'Z v
+--     UnEmbed k         a ('S n) (Embed ('S m) v) = CompN n m (Embed ('S m) v) a (Embed m v)
+--     UnEmbed (l :~> u) a n      ('FA e)          = 'FA (UnEmbed u a n e)
+--     -- UnEmbed a n      (Forall vs k e)   = Forall vs k (UnEmbed a ('S n) e)
+--     -- UnEmbed a n      (Forall '[] k e) = TL.TypeError ('TL.Text "hey")
+--     -- UnEmbed a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed a ('S n) e)
+--     -- UnEmbed Type a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed k a ('S n) e)
+--     UnEmbed Type a n      (b -> c)       = UnEmbed Type a n b -> UnEmbed Type a n c
+--     UnEmbed Type a n      (Seq b)        = Seq (UnEmbed Type a n b)
+--     UnEmbed Type a n      (Maybe b)      = Maybe (UnEmbed Type a n b)
+--     UnEmbed Type a n      b              = b
 
-data Forall :: [SomeDKind] -> DKind k -> Type -> Type where
-    Forall :: { runForall :: forall r. DType vs v r -> UnEmbed Type r 'Z a }
-           -> Forall vs v a
+-- data Forall :: [SomeDKind] -> DKind k -> Type -> Type where
+--     Forall :: { runForall :: forall r. DType vs v r -> UnEmbed Type r 'Z a }
+--            -> Forall vs v a
 
--- what about TV TZ :$ TBool ?
-data DType :: forall k. [SomeDKind] -> DKind k -> k -> Type where
-    TV        :: VIx n vs k -> DType vs k (Embed n k)
-    Pi        :: DType ('SDK v ': vs) k a -> DType vs (v ':~> k) ('FA a)
-    (:$)      :: forall k' (k :: DKind k') vs v a b. ()
-              => DType vs (v ':~> k) ('FA a)
-              -> DType vs v b
-              -> DType vs k (UnEmbed k' b 'Z a)
-    Poly      :: DType vs (v ':~> 'KType) ('FA a)
-              -> DType vs 'KType          (Forall vs v a)
-    -- Poly      :: DType vs (v ':~> 'KType) ('FA a) -> DType vs 'KType (Forall vs v a)
-    -- (:$)      :: DType ('SDK v ': vs) k      a -> DType vs v b -> DType vs k (UnEmbed b 'Z a)
-    -- Poly      :: DType ('SDK v ': vs) 'KType a -> DType vs 'KType (Forall vs v a)
-    (:->)     :: DType vs 'KType a -> DType vs 'KType b  -> DType vs 'KType (a -> b)
-    TBool     :: DType vs 'KType Bool
-    TNatural  :: DType vs 'KType Natural
-    TInteger  :: DType vs 'KType Integer
-    TDouble   :: DType vs 'KType Double
-    TText     :: DType vs 'KType Text
-    -- TList     :: DType ('KType ':~> 'KType) Seq
-    -- TOptional :: DType ('KType ':~> 'KType) Maybe
-    TList     :: DType vs 'KType a -> DType vs 'KType (Seq a)
-    TOptional :: DType vs 'KType a -> DType vs 'KType (Maybe a)
+-- -- what about TV TZ :$ TBool ?
+-- data DType :: forall k. [SomeDKind] -> DKind k -> k -> Type where
+--     TV        :: VIx n vs k -> DType vs k (Embed n k)
+--     Pi        :: DType ('SDK v ': vs) k a -> DType vs (v ':~> k) ('FA a)
+--     (:$)      :: forall k' (k :: DKind k') vs v a b. ()
+--               => DType vs (v ':~> k) ('FA a)
+--               -> DType vs v b
+--               -> DType vs k (UnEmbed k' b 'Z a)
+--     Poly      :: DType vs (v ':~> 'KType) ('FA a)
+--               -> DType vs 'KType          (Forall vs v a)
+--     -- Poly      :: DType vs (v ':~> 'KType) ('FA a) -> DType vs 'KType (Forall vs v a)
+--     -- (:$)      :: DType ('SDK v ': vs) k      a -> DType vs v b -> DType vs k (UnEmbed b 'Z a)
+--     -- Poly      :: DType ('SDK v ': vs) 'KType a -> DType vs 'KType (Forall vs v a)
+--     (:->)     :: DType vs 'KType a -> DType vs 'KType b  -> DType vs 'KType (a -> b)
+--     TBool     :: DType vs 'KType Bool
+--     TNatural  :: DType vs 'KType Natural
+--     TInteger  :: DType vs 'KType Integer
+--     TDouble   :: DType vs 'KType Double
+--     TText     :: DType vs 'KType Text
+--     -- TList     :: DType ('KType ':~> 'KType) Seq
+--     -- TOptional :: DType ('KType ':~> 'KType) Maybe
+--     TList     :: DType vs 'KType a -> DType vs 'KType (Seq a)
+--     TOptional :: DType vs 'KType a -> DType vs 'KType (Maybe a)
 
-deriving instance Show (DType vs k a)
+-- deriving instance Show (DType vs k a)
 
-infixr 3 :->
+-- infixr 3 :->
 
 -- compN :: SN n -> SN m -> f a -> f b -> f c -> f (CompN n m a b c)
 -- compN SZ     SZ     _ y _ = y
@@ -262,8 +430,8 @@ infixr 3 :->
 
 -- deriving instance Show (SomeDType)
 
-data DTerm :: [SomeDKind] -> Type where
-    DTerm :: DType vs 'KType a -> a -> DTerm vs
+-- data DTerm :: [SomeDKind] -> Type where
+--     DTerm :: DType vs 'KType a -> a -> DTerm vs
 
 -- ident :: DTerm vs
 -- ident = DTerm (Poly (TV VIZ :-> TV VIZ)) $
