@@ -31,7 +31,7 @@ import           Control.Monad
 import           Data.Foldable
 import           Data.Functor
 import           Data.Kind
-import           Data.List
+import           Data.List hiding                          (delete)
 import           Data.List.NonEmpty                        (NonEmpty(..))
 import           Data.Maybe
 import           Data.Profunctor
@@ -107,6 +107,28 @@ data DType :: [DKind] -> DKind -> Type where
 infixr 0 :->
 infixl 9 :$
 
+type family MaybeVar a b where
+    MaybeVar a 'Nothing  = a
+    MaybeVar a ('Just i) = 'TVar i
+
+type family Sub as bs a b (d :: Delete as bs a) x (r :: DType as b) :: DType bs b where
+    Sub as bs a b                  d x ('TVar i)
+        = MaybeVar x (Del as bs a b d i)
+    Sub as bs a b                  d x ('Pi (u :: SDKind k) e)
+        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) x e)
+    Sub as bs a b                  d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
+        = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
+    Sub as bs a 'Type              d x (i ':-> j)
+        = Sub as bs a 'Type d x i ':-> Sub as bs a 'Type d x j
+    Sub as bs a 'Type              d x 'Bool
+        = 'Bool
+    Sub as bs a 'Type              d x 'Natural
+        = 'Natural
+    Sub as bs a ('Type ':~> 'Type) d x 'List
+        = 'List
+    Sub as bs a ('Type ':~> 'Type) d x 'Optional
+        = 'Optional
+
 data instance Sing (i :: Index as a) where
     SIZ :: Sing 'IZ
     SIS :: Sing i -> Sing ('IS i)
@@ -120,7 +142,6 @@ data instance Sing (a :: DType us k) where
     SList     :: Sing 'List
     SOptional :: Sing 'Optional
 
-
 data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
                   -> DTerm vs a
@@ -129,165 +150,119 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     App           :: DTerm vs (a ':-> b)
                   -> DTerm vs a
                   -> DTerm vs b
+    TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
+                  -> Sing (a :: DType '[] k)
+                  -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
     BoolLit       :: Bool
                   -> DTerm vs 'Bool
     NaturalLit    :: Natural
                   -> DTerm vs 'Natural
+    NaturalFold   :: DTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
+    NaturalBuild  :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
     NaturalPlus   :: DTerm vs 'Natural
                   -> DTerm vs 'Natural
                   -> DTerm vs 'Natural
+    NaturalTimes  :: DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+                  -> DTerm vs 'Natural
     NaturalIsZero :: DTerm vs ('Natural ':-> 'Natural)
-    NaturalFold   :: DTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
-    NaturalBuild  :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
     ListLit       :: Sing a
                   -> Seq (DTerm vs a)
                   -> DTerm vs ('List ':$ a)
+    ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
+    ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
     ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
     OptionalLit   :: Sing a
                   -> Maybe (DTerm vs a)
                   -> DTerm vs ('Optional ':$ a)
+    Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
+    None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
---     -- | > Const c                                  ~  c
 --     = Const Const
---     -- | > Var (V x 0)                              ~  x
---     --   > Var (V x n)                              ~  x@n
 --     | Var Var
---     -- | > Lam x     A b                            ~  λ(x : A) -> b
 --     | Lam Text (Expr s a) (Expr s a)
---     -- | > Pi "_" A B                               ~        A  -> B
---     --   > Pi x   A B                               ~  ∀(x : A) -> B
 --     | Pi  Text (Expr s a) (Expr s a)
---     -- | > App f a                                  ~  f a
 --     | App (Expr s a) (Expr s a)
---     -- | > Let [Binding x Nothing  r] e             ~  let x     = r in e
---     --   > Let [Binding x (Just t) r] e             ~  let x : t = r in e
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
---     -- | > Annot x t                                ~  x : t
 --     | Annot (Expr s a) (Expr s a)
---     -- | > Bool                                     ~  Bool
---     | Bool
---     -- | > BoolLit b                                ~  b
---     | BoolLit Bool
---     -- | > BoolAnd x y                              ~  x && y
 --     | BoolAnd (Expr s a) (Expr s a)
---     -- | > BoolOr  x y                              ~  x || y
 --     | BoolOr  (Expr s a) (Expr s a)
---     -- | > BoolEQ  x y                              ~  x == y
 --     | BoolEQ  (Expr s a) (Expr s a)
---     -- | > BoolNE  x y                              ~  x != y
 --     | BoolNE  (Expr s a) (Expr s a)
---     -- | > BoolIf x y z                             ~  if x then y else z
 --     | BoolIf (Expr s a) (Expr s a) (Expr s a)
---     -- | > Natural                                  ~  Natural
---     | Natural
---     -- | > NaturalLit n                             ~  n
---     | NaturalLit Natural
---     -- | > NaturalFold                              ~  Natural/fold
---     | NaturalFold
---     -- | > NaturalBuild                             ~  Natural/build
---     | NaturalBuild
---     -- | > NaturalIsZero                            ~  Natural/isZero
---     | NaturalIsZero
---     -- | > NaturalEven                              ~  Natural/even
 --     | NaturalEven
---     -- | > NaturalOdd                               ~  Natural/odd
 --     | NaturalOdd
---     -- | > NaturalToInteger                         ~  Natural/toInteger
 --     | NaturalToInteger
---     -- | > NaturalShow                              ~  Natural/show
 --     | NaturalShow
---     -- | > NaturalPlus x y                          ~  x + y
---     | NaturalPlus (Expr s a) (Expr s a)
---     -- | > NaturalTimes x y                         ~  x * y
---     | NaturalTimes (Expr s a) (Expr s a)
---     -- | > Integer                                  ~  Integer
 --     | Integer
---     -- | > IntegerLit n                             ~  ±n
 --     | IntegerLit Integer
---     -- | > IntegerShow                              ~  Integer/show
 --     | IntegerShow
---     -- | > IntegerToDouble                          ~  Integer/toDouble
 --     | IntegerToDouble
---     -- | > Double                                   ~  Double
 --     | Double
---     -- | > DoubleLit n                              ~  n
 --     | DoubleLit Double
---     -- | > DoubleShow                               ~  Double/show
 --     | DoubleShow
---     -- | > Text                                     ~  Text
 --     | Text
---     -- | > TextLit (Chunks [(t1, e1), (t2, e2)] t3) ~  "t1${e1}t2${e2}t3"
 --     | TextLit (Chunks s a)
---     -- | > TextAppend x y                           ~  x ++ y
 --     | TextAppend (Expr s a) (Expr s a)
---     -- | > List                                     ~  List
---     | List
---     -- | > ListLit (Just t ) [x, y, z]              ~  [x, y, z] : List t
---     --   > ListLit  Nothing  [x, y, z]              ~  [x, y, z]
---     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
---     -- | > ListAppend x y                           ~  x # y
 --     | ListAppend (Expr s a) (Expr s a)
---     -- | > ListBuild                                ~  List/build
---     | ListBuild
---     -- | > ListFold                                 ~  List/fold
---     | ListFold
---     -- | > ListLength                               ~  List/length
 --     | ListLength
---     -- | > ListHead                                 ~  List/head
---     | ListHead
---     -- | > ListLast                                 ~  List/last
---     | ListLast
---     -- | > ListIndexed                              ~  List/indexed
 --     | ListIndexed
---     -- | > ListReverse                              ~  List/reverse
---     | ListReverse
---     -- | > Optional                                 ~  Optional
---     | Optional
---     -- | > OptionalLit t (Just e)                   ~  [e] : Optional t
---     --   > OptionalLit t Nothing                    ~  []  : Optional t
---     | OptionalLit (Expr s a) (Maybe (Expr s a))
---     -- | > Some e                                   ~  Some e
---     | Some (Expr s a)
---     -- | > None                                     ~  None
---     | None
---     -- | > OptionalFold                             ~  Optional/fold
 --     | OptionalFold
---     -- | > OptionalBuild                            ~  Optional/build
 --     | OptionalBuild
---     -- | > Record       [(k1, t1), (k2, t2)]        ~  { k1 : t1, k2 : t1 }
 --     | Record    (Map Text (Expr s a))
---     -- | > RecordLit    [(k1, v1), (k2, v2)]        ~  { k1 = v1, k2 = v2 }
 --     | RecordLit (Map Text (Expr s a))
---     -- | > Union        [(k1, t1), (k2, t2)]        ~  < k1 : t1 | k2 : t2 >
 --     | Union     (Map Text (Expr s a))
---     -- | > UnionLit k v [(k1, t1), (k2, t2)]        ~  < k = v | k1 : t1 | k2 : t2 >
 --     | UnionLit Text (Expr s a) (Map Text (Expr s a))
---     -- | > Combine x y                              ~  x ∧ y
 --     | Combine (Expr s a) (Expr s a)
---     -- | > CombineTypes x y                         ~  x ⩓ y
 --     | CombineTypes (Expr s a) (Expr s a)
---     -- | > Prefer x y                               ~  x ⫽ y
 --     | Prefer (Expr s a) (Expr s a)
---     -- | > Merge x y (Just t )                      ~  merge x y : t
---     --   > Merge x y  Nothing                       ~  merge x y
 --     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
---     -- | > Constructors e                           ~  constructors e
 --     | Constructors (Expr s a)
---     -- | > Field e x                                ~  e.x
 --     | Field (Expr s a) Text
---     -- | > Project e xs                             ~  e.{ xs }
 --     | Project (Expr s a) (Set Text)
---     -- | > Note s x                                 ~  e
 --     | Note s (Expr s a)
---     -- | > ImportAlt                                ~  e1 ? e2
 --     | ImportAlt (Expr s a) (Expr s a)
---     -- | > Embed import                             ~  import
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
+
+
+data Delete :: [k] -> [k] -> k -> Type where
+    DZ :: Delete (a ': as) as a
+    DS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
+
+delete :: forall as bs a b. Delete as bs a -> Index as b -> Maybe (Index bs b)
+delete = \case
+    DZ -> \case
+      IZ   -> Nothing
+      IS i -> Just i
+    DS d -> \case
+      IZ   -> Just IZ
+      IS i -> IS <$> delete d i
+
+type family ISMaybe a where
+    ISMaybe 'Nothing = 'Nothing
+    ISMaybe ('Just i) = 'Just ('IS i)
+
+type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Index bs b) where
+    Del (a ': as) as        a a 'DZ     'IZ     = 'Nothing
+    Del (a ': as) (a ': bs) b a ('DS d) 'IZ     = 'Just 'IZ
+    Del (a ': as) as        a b 'DZ     ('IS i) = 'Just i
+    Del (a ': as) (a ': bs) b c ('DS d) ('IS i) = ISMaybe (Del as bs b c d i)
+
+
+-- sub :: Delete as bs b -> b -> Index as a -> Either (Index bs a) a
+-- sub = \case
+--     RZ -> \x -> \case
+--       IZ   -> Right x
+--       IS i -> Left (IS i)
+      -- Left i -> case i of
+      --   IZ   -> Right x
+        -- IS i -> Left  _
+
 
 
 -- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
@@ -825,6 +800,70 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     go !i !x
 --       | i <= 0    = x
 --       | otherwise = let !y = f x in go (i - 1) y
+
+-- -- | Syntax tree for expressions
+-- data Expr s a
+--     = Const Const
+--     | Var Var
+--     | Lam Text (Expr s a) (Expr s a)
+--     | Pi  Text (Expr s a) (Expr s a)
+--     | App (Expr s a) (Expr s a)
+--     | Let (NonEmpty (Binding s a)) (Expr s a)
+--     | Annot (Expr s a) (Expr s a)
+--     | Bool
+--     | BoolLit Bool
+--     | BoolAnd (Expr s a) (Expr s a)
+--     | BoolOr  (Expr s a) (Expr s a)
+--     | BoolEQ  (Expr s a) (Expr s a)
+--     | BoolNE  (Expr s a) (Expr s a)
+--     | BoolIf (Expr s a) (Expr s a) (Expr s a)
+--     | Natural
+--     | NaturalLit Natural
+--     | NaturalFold
+--     | NaturalBuild
+--     | NaturalIsZero
+--     | NaturalEven
+--     | NaturalOdd
+--     | NaturalToInteger
+--     | NaturalShow
+--     | NaturalPlus (Expr s a) (Expr s a)
+--     | NaturalTimes (Expr s a) (Expr s a)
+--     | Integer
+--     | IntegerLit Integer
+--     | IntegerShow
+--     | IntegerToDouble
+--     | Double
+--     | DoubleLit Double
+--     | DoubleShow
+--     | Text
+--     | TextLit (Chunks s a)
+--     | TextAppend (Expr s a) (Expr s a)
+--     | List
+--     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
+--     | ListAppend (Expr s a) (Expr s a)
+--     | ListBuild
+--     | ListFold
+--     | ListLength
+--     | ListIndexed
+--     | OptionalFold
+--     | OptionalBuild
+--     | Record    (Map Text (Expr s a))
+--     | RecordLit (Map Text (Expr s a))
+--     | Union     (Map Text (Expr s a))
+--     | UnionLit Text (Expr s a) (Map Text (Expr s a))
+--     | Combine (Expr s a) (Expr s a)
+--     | CombineTypes (Expr s a) (Expr s a)
+--     | Prefer (Expr s a) (Expr s a)
+--     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
+--     | Constructors (Expr s a)
+--     | Field (Expr s a) Text
+--     | Project (Expr s a) (Set Text)
+--     | Note s (Expr s a)
+--     | ImportAlt (Expr s a) (Expr s a)
+--     | Embed a
+--     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
+
+
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
