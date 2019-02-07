@@ -80,25 +80,48 @@ toNatural :: N -> Natural
 toNatural Z     = 0
 toNatural (S n) = 1 + toNatural n
 
-data DKind :: Type where
-    Type  :: DKind
-    (:~>) :: DKind -> DKind -> DKind
+data DKind = Type | DKind :~> DKind
+  deriving (Eq, Ord, Show)
 
-data DType :: DKind -> Type where
-    TApp    :: DType (a ':~> b) -> DType a -> DType b
-    (:->)   :: DType 'Type -> DType 'Type -> DType 'Type
-    Bool    :: DType 'Type
-    Natural :: DType 'Type
-    List    :: DType ('Type ':~> 'Type)
+data SDKind :: DKind -> Type where
+    SType  :: SDKind 'Type
+    (:%~>) :: SDKind a -> SDKind b -> SDKind (a ':~> b)
 
-data instance Sing (a :: DType k) where
-    STApp    :: Sing f -> Sing x -> Sing (f '`TApp` x)
-    (:%->)   :: Sing x -> Sing y -> Sing (x ':-> y)
-    SBool    :: Sing 'Bool
-    SNatural :: Sing 'Natural
-    SList    :: Sing 'List
+data DType :: [DKind] -> DKind -> Type where
+    TVar     :: Index us a
+             -> DType us a
+    Pi       :: SDKind a
+             -> DType (a ': us) b
+             -> DType us b
+    (:$)     :: DType us (a ':~> b)
+             -> DType us a
+             -> DType us b
+    (:->)    :: DType us 'Type
+             -> DType us 'Type
+             -> DType us 'Type
+    Bool     :: DType us 'Type
+    Natural  :: DType us 'Type
+    List     :: DType us ('Type ':~> 'Type)
+    Optional :: DType us ('Type ':~> 'Type)
 
-data DTerm :: [DType 'Type] -> DType 'Type -> Type where
+infixr 0 :->
+infixl 9 :$
+
+data instance Sing (i :: Index as a) where
+    SIZ :: Sing 'IZ
+    SIS :: Sing i -> Sing ('IS i)
+
+data instance Sing (a :: DType us k) where
+    STVar     :: Sing i -> Sing ('TVar i)
+    (:%$)     :: Sing f -> Sing x -> Sing (f ':$ x)
+    (:%->)    :: Sing x -> Sing y -> Sing (x ':-> y)
+    SBool     :: Sing 'Bool
+    SNatural  :: Sing 'Natural
+    SList     :: Sing 'List
+    SOptional :: Sing 'Optional
+
+
+data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
                   -> DTerm vs a
     Lam           :: DTerm (a ': vs) b
@@ -114,9 +137,17 @@ data DTerm :: [DType 'Type] -> DType 'Type -> Type where
                   -> DTerm vs 'Natural
                   -> DTerm vs 'Natural
     NaturalIsZero :: DTerm vs ('Natural ':-> 'Natural)
+    NaturalFold   :: DTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
+    NaturalBuild  :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
     ListLit       :: Sing a
                   -> Seq (DTerm vs a)
-                  -> DTerm vs ('List '`TApp` a)
+                  -> DTerm vs ('List ':$ a)
+    ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
+    OptionalLit   :: Sing a
+                  -> Maybe (DTerm vs a)
+                  -> DTerm vs ('Optional ':$ a)
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
