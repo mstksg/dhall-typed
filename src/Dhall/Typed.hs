@@ -107,15 +107,27 @@ data DType :: [DKind] -> DKind -> Type where
 infixr 0 :->
 infixl 9 :$
 
-type family MaybeVar a b where
-    MaybeVar a 'Nothing  = a
-    MaybeVar a ('Just i) = 'TVar i
+type family MaybeVar (x :: DType vs a) (i :: Maybe (Index vs a)) :: DType vs a where
+    MaybeVar x 'Nothing  = x
+    MaybeVar x ('Just i) = 'TVar i
+    MaybeVar x i = TL.TypeError ('TL.Text "No Maybe: " 'TL.:<>: 'TL.ShowType '(x, i))
 
-type family Sub as bs a b (d :: Delete as bs a) x (r :: DType as b) :: DType bs b where
+type family AddVar (x :: DType as b) :: DType (c ': as) b where
+    AddVar ('TVar i) = 'TVar ('IS i)
+    AddVar ('Pi u a) = 'Pi u (AddVar a)         -- ???
+    AddVar (a ':$ b)  = AddVar a ':$ AddVar b
+    AddVar (a ':-> b) = AddVar a ':-> AddVar b
+    AddVar 'Bool = 'Bool
+    AddVar 'Natural = 'Natural
+    AddVar 'List = 'List
+    AddVar 'Optional = 'Optional
+    AddVar x = TL.TypeError ('TL.Text "No AddVar: " 'TL.:<>: 'TL.ShowType x)
+
+type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
     Sub as bs a b                  d x ('TVar i)
         = MaybeVar x (Del as bs a b d i)
     Sub as bs a b                  d x ('Pi (u :: SDKind k) e)
-        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) x e)
+        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) (AddVar x) e)
     Sub as bs a b                  d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
         = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
     Sub as bs a 'Type              d x (i ':-> j)
@@ -128,6 +140,8 @@ type family Sub as bs a b (d :: Delete as bs a) x (r :: DType as b) :: DType bs 
         = 'List
     Sub as bs a ('Type ':~> 'Type) d x 'Optional
         = 'Optional
+    Sub as bs a b d x r
+        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, x, r))
 
 data instance Sing (i :: Index as a) where
     SIZ :: Sing 'IZ
@@ -141,6 +155,10 @@ data instance Sing (a :: DType us k) where
     SNatural  :: Sing 'Natural
     SList     :: Sing 'List
     SOptional :: Sing 'Optional
+
+infixr 0 :%->
+infixl 9 :%$
+
 
 data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
@@ -179,6 +197,8 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs ('Optional ':$ a)
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
+
+-- testVal = TApp (TApp ListFold SBool `App` ListLit SBool (Seq.fromList [BoolLit True, BoolLit False])) SNatural
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -243,15 +263,17 @@ delete = \case
       IZ   -> Just IZ
       IS i -> IS <$> delete d i
 
-type family ISMaybe a where
+type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
     ISMaybe 'Nothing = 'Nothing
     ISMaybe ('Just i) = 'Just ('IS i)
+    ISMaybe i = TL.TypeError ('TL.Text "No ISMaybe: " 'TL.:<>: 'TL.ShowType i)
 
 type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Index bs b) where
     Del (a ': as) as        a a 'DZ     'IZ     = 'Nothing
     Del (a ': as) (a ': bs) b a ('DS d) 'IZ     = 'Just 'IZ
     Del (a ': as) as        a b 'DZ     ('IS i) = 'Just i
     Del (a ': as) (a ': bs) b c ('DS d) ('IS i) = ISMaybe (Del as bs b c d i)
+    Del as bs a b d i = TL.TypeError ('TL.Text "No Del: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, i))
 
 
 -- sub :: Delete as bs b -> b -> Index as a -> Either (Index bs a) a
