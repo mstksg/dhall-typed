@@ -50,6 +50,7 @@ import           Data.Type.Equality
 import           Data.Type.Universe
 import           Data.Void
 import           Debug.Trace
+import           Dhall.Typed.Index
 import           Dhall.Typed.Prod
 import           Dhall.Typed.Sum
 import           GHC.Generics
@@ -112,36 +113,37 @@ type family MaybeVar (x :: DType vs a) (i :: Maybe (Index vs a)) :: DType vs a w
     MaybeVar x ('Just i) = 'TVar i
     MaybeVar x i = TL.TypeError ('TL.Text "No Maybe: " 'TL.:<>: 'TL.ShowType '(x, i))
 
-type family AddVar (x :: DType as b) :: DType (c ': as) b where
-    AddVar ('TVar i) = 'TVar ('IS i)
-    AddVar ('Pi u a) = 'Pi u (AddVar a)         -- ???
-    AddVar (a ':$ b)  = AddVar a ':$ AddVar b
-    AddVar (a ':-> b) = AddVar a ':-> AddVar b
-    AddVar 'Bool = 'Bool
-    AddVar 'Natural = 'Natural
-    AddVar 'List = 'List
-    AddVar 'Optional = 'Optional
-    AddVar x = TL.TypeError ('TL.Text "No AddVar: " 'TL.:<>: 'TL.ShowType x)
+type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType bs b where
+    Shift as bs a b   ins ('TVar i) = 'TVar (Ins as bs a b ins i)
+    Shift as bs a b   ins ('Pi (u :: SDKind k) e) = 'Pi u (Shift (k ': as) (k ': bs) a b ('InsS ins) e)
+    Shift as bs a r i ((u :: DType as (k ':~> r)) ':$ (v :: DType as k))
+        = Shift as bs a (k ':~> r) i u ':$ Shift as bs a k i v
+    Shift as bs a 'Type              i (u ':-> v) = Shift as bs a 'Type i u ':-> Shift as bs a 'Type i v
+    Shift as bs a 'Type              i 'Bool     = 'Bool
+    Shift as bs a 'Type              i 'Natural  = 'Natural
+    Shift as bs a ('Type ':~> 'Type) i 'List     = 'List
+    Shift as bs a ('Type ':~> 'Type) i 'Optional = 'Optional
 
-type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
-    Sub as bs a b                  d x ('TVar i)
+type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
+    Sub as bs a b                  b d x ('TVar i)
         = MaybeVar x (Del as bs a b d i)
-    Sub as bs a b                  d x ('Pi (u :: SDKind k) e)
-        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) (AddVar x) e)
-    Sub as bs a b                  d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
-        = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
-    Sub as bs a 'Type              d x (i ':-> j)
-        = Sub as bs a 'Type d x i ':-> Sub as bs a 'Type d x j
-    Sub as bs a 'Type              d x 'Bool
+    Sub as bs a b                  c d x ('Pi (u :: SDKind k) e)
+        -- = 'Pi u (Sub (k ': as) (k ': bs) a b c ('DS d) (AddVar k bs c x) e)
+        = 'Pi u (Sub (k ': as) (k ': bs) a b c ('DS d) (Shift bs (k ': bs) k c 'InsZ x) e)
+    Sub as bs a b                  c d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
+        = Sub as bs a (k ':~> b) c d x i ':$ Sub as bs a k c d x j
+    Sub as bs a 'Type              c d x (i ':-> j)
+        = Sub as bs a 'Type c d x i ':-> Sub as bs a 'Type c d x j
+    Sub as bs a 'Type              c d x 'Bool
         = 'Bool
-    Sub as bs a 'Type              d x 'Natural
+    Sub as bs a 'Type              c d x 'Natural
         = 'Natural
-    Sub as bs a ('Type ':~> 'Type) d x 'List
+    Sub as bs a ('Type ':~> 'Type) c d x 'List
         = 'List
-    Sub as bs a ('Type ':~> 'Type) d x 'Optional
+    Sub as bs a ('Type ':~> 'Type) c d x 'Optional
         = 'Optional
-    Sub as bs a b d x r
-        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, x, r))
+    Sub as bs a b c d x r
+        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, c, d, x, r))
 
 data instance Sing (i :: Index as a) where
     SIZ :: Sing 'IZ
@@ -160,21 +162,62 @@ data SDType us k :: DType us k -> Type where
 infixr 0 :%->
 infixl 9 :%$
 
+-- sAddVar
+--     :: SDKind c
+--     -> Prod SDKind as
+--     -> SDKind b
+--     -> SDType as b x
+--     -> SDType (c ': as) b (AddVar c as b x)
+-- sAddVar c as b = \case
+--     STVar i   -> STVar (SIS i)
+--     -- SPi (u :: SDKind q) a   -> SPi u _
+--     -- i :%$ j   -> sAddVar a :%$ sAddVar b
+--     i :%-> j  -> sAddVar c as SType i :%-> sAddVar c as SType j
+--     SBool     -> SBool
+--     SNatural  -> SNatural
+--     SList     -> SList
+--     SOptional -> SOptional
+
+-- type family AddVar c as b (x :: DType as b) :: DType (c ': as) b where
+--     AddVar c as b ('TVar i) = 'TVar ('IS i)
+--     AddVar c as b ('Pi u a) = 'Pi u (AddVar c (c ': as) b a)         -- ???
+--     AddVar c as r ((a :: DType as (k ':~> r)) ':$ (b :: DType as k))
+--         = AddVar c as (k ':~> r) a ':$ AddVar c as k b
+--     AddVar c as 'Type (a ':-> b) = AddVar c as 'Type a ':-> AddVar c as 'Type b
+--     AddVar c as 'Type 'Bool = 'Bool
+--     AddVar c as 'Type 'Natural = 'Natural
+--     AddVar c as ('Type ':~> 'Type) 'List = 'List
+--     AddVar c as ('Type ':~> 'Type) 'Optional = 'Optional
+--     AddVar c as b x = TL.TypeError ('TL.Text "No AddVar: " 'TL.:<>: 'TL.ShowType '(c, as, b, x))
+
+
+
+    -- AddVar ('TVar i) = 'TVar ('IS i)
+    -- AddVar ('Pi u a) = 'Pi u (AddVar a)         -- ???
+    -- AddVar (a ':$ b)  = AddVar a ':$ AddVar b
+    -- AddVar (a ':-> b) = AddVar a ':-> AddVar b
+    -- AddVar 'Bool = 'Bool
+    -- AddVar 'Natural = 'Natural
+    -- AddVar 'List = 'List
+    -- AddVar 'Optional = 'Optional
+    -- AddVar x = TL.TypeError ('TL.Text "No AddVar: " 'TL.:<>: 'TL.ShowType x)
+
 
 data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
                   -> DTerm vs a
-    Lam           :: DTerm (a ': vs) b
+    Lam           :: SDType '[] 'Type a
+                  -> DTerm (a ': vs) b
                   -> DTerm vs (a ':-> b)
     App           :: DTerm vs (a ':-> b)
                   -> DTerm vs a
                   -> DTerm vs b
     TLam          :: SDType '[k] 'Type b
-                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
+                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
                   -> DTerm vs ('Pi (u :: SDKind k) b)
     TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
                   -> SDType '[] k a
-                  -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
+                  -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b)
     BoolLit       :: Bool
                   -> DTerm vs 'Bool
     NaturalLit    :: Natural
@@ -201,8 +244,6 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs ('Optional ':$ a)
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
-
--- testVal = TApp (TApp ListFold SBool `App` ListLit SBool (Seq.fromList [BoolLit True, BoolLit False])) SNatural
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -253,41 +294,18 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
+ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
+ident = TLam (STVar SIZ :%-> STVar SIZ) $ \a -> Lam a (Var IZ)
 
-data Delete :: [k] -> [k] -> k -> Type where
-    DZ :: Delete (a ': as) as a
-    DS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
+-- konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst = TLam (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \(a :: SDType '[] 'Type a) ->
+--           TLam _ $ \(b :: SDType '[] 'Type b) -> Lam (Lam (Var (IS IZ)))
 
-delete :: forall as bs a b. Delete as bs a -> Index as b -> Maybe (Index bs b)
-delete = \case
-    DZ -> \case
-      IZ   -> Nothing
-      IS i -> Just i
-    DS d -> \case
-      IZ   -> Just IZ
-      IS i -> IS <$> delete d i
-
-type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
-    ISMaybe 'Nothing = 'Nothing
-    ISMaybe ('Just i) = 'Just ('IS i)
-    ISMaybe i = TL.TypeError ('TL.Text "No ISMaybe: " 'TL.:<>: 'TL.ShowType i)
-
-type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Index bs b) where
-    Del (a ': as) as        a a 'DZ     'IZ     = 'Nothing
-    Del (a ': as) (a ': bs) b a ('DS d) 'IZ     = 'Just 'IZ
-    Del (a ': as) as        a b 'DZ     ('IS i) = 'Just i
-    Del (a ': as) (a ': bs) b c ('DS d) ('IS i) = ISMaybe (Del as bs b c d i)
-    Del as bs a b d i = TL.TypeError ('TL.Text "No Del: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, i))
-
-
--- sub :: Delete as bs b -> b -> Index as a -> Either (Index bs a) a
--- sub = \case
---     RZ -> \x -> \case
---       IZ   -> Right x
---       IS i -> Left (IS i)
-      -- Left i -> case i of
-      --   IZ   -> Right x
-        -- IS i -> Left  _
+-- konst :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> Pi 'SType ('TVar IZ ':-> 'TVar ('IS 'IZ))))
+-- konst = TLam (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \(a :: SDType '[] 'Type a) ->
+--           Lam a $ TLam (STVar SIZ :%-> a) _
+-- -- konst = TLam (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \(a :: SDType '[] 'Type a) ->
+-- --           TLam _ $ \(b :: SDType '[] 'Type b) -> Lam (Lam (Var (IS IZ)))
 
 
 
@@ -318,163 +336,6 @@ type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Inde
 --
 -- evaluates to (forall a. (a -> [a]))
 --
-
--- data family Embed :: N -> a
-
--- reEmbed :: Embed a -> b
--- reEmbed = undefined
-
--- type family CompN n m a b c where
---     CompN 'Z     'Z     a b c = b
---     CompN 'Z     ('S m) a b c = c
---     CompN ('S n) 'Z     a b c = a
---     CompN ('S n) ('S m) a b c = CompN n m a b c
-
--- type family UnEmbed a n t where
---     UnEmbed a 'Z     (Embed 'Z)     = a
---     UnEmbed a 'Z     (Embed ('S m)) = Embed m
---     UnEmbed a ('S n) (Embed 'Z)     = Embed 'Z
---     UnEmbed a ('S n) (Embed ('S m)) = CompN n m (Embed ('S m)) a (Embed m)
---     UnEmbed a n      (Forall k e)   = Forall k (UnEmbed a ('S n) e)
---     UnEmbed a n      (b -> c)       = UnEmbed a n b -> UnEmbed a n c
---     UnEmbed a n      (Seq b)        = Seq (UnEmbed a n b)
---     UnEmbed a n      (Maybe b)      = Maybe (UnEmbed a n b)
---     UnEmbed a n      b              = b
---     -- UnEmbed a n      (f b c)        = f (UnEmbed a n b) (UnEmbed a n c)
---     -- UnEmbed a n      (f b)          = f (UnEmbed a n b)
-
--- data Forall k e = Forall { runForall :: forall r. DType k r -> UnEmbed r 'Z e }
-
--- data DKind :: Type -> Type where
---     KType     :: DKind Type
---     (:~>)     :: DKind a -> DKind b -> DKind (a :~> b)
-
--- -- data FA = FA
--- data a :~> b = FA b
-
--- data SomeDKind :: Type where
---     SDK :: DKind k -> SomeDKind
-
--- data FA :: (Type -> Type) -> Type -> Type -> Type where
---     FAType :: f b -> FA f a b
-
--- type family Sub (a :: k) (b :: k) where
-
--- type family ($$) (a :: j -> k)
-
--- data VIx :: N -> [SomeDKind] -> DKind k -> Type where
---     VIZ :: VIx 'Z ('SDK k ': vs) k
---     VIS :: VIx n vs k -> VIx ('S n) (v ': vs) k
-
--- deriving instance Show (VIx n ks k)
-
--- data family Embed :: N -> DKind k -> k
-
--- data Forall k e = Forall { runForall :: forall r. DType k r -> UnEmbed r 'Z e }
-
--- data SomeDType :: [SomeDKind] -> DKind k -> Type where
---     SDT :: DType vs k a -> SomeDType vs k
-
--- data FA vs v k = FA { runForall :: SomeDType vs v -> SomeDType vs k }
-
--- type family CompN n m a b c where
---     CompN 'Z     'Z     a b c = b
---     CompN 'Z     ('S m) a b c = c
---     CompN ('S n) 'Z     a b c = a
---     CompN ('S n) ('S m) a b c = CompN n m a b c
-
--- type family UnEmbed k a n (t :: k) :: k where
---     UnEmbed k         a 'Z     (Embed 'Z     v) = a
---     UnEmbed k         a 'Z     (Embed ('S m) v) = Embed m v
---     UnEmbed k         a ('S n) (Embed 'Z     v) = Embed 'Z v
---     UnEmbed k         a ('S n) (Embed ('S m) v) = CompN n m (Embed ('S m) v) a (Embed m v)
---     UnEmbed (l :~> u) a n      ('FA e)          = 'FA (UnEmbed u a n e)
---     -- UnEmbed a n      (Forall vs k e)   = Forall vs k (UnEmbed a ('S n) e)
---     -- UnEmbed a n      (Forall '[] k e) = TL.TypeError ('TL.Text "hey")
---     -- UnEmbed a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed a ('S n) e)
---     -- UnEmbed Type a n      (Forall (v ': vs) k e)   = Forall vs k (UnEmbed k a ('S n) e)
---     UnEmbed Type a n      (b -> c)       = UnEmbed Type a n b -> UnEmbed Type a n c
---     UnEmbed Type a n      (Seq b)        = Seq (UnEmbed Type a n b)
---     UnEmbed Type a n      (Maybe b)      = Maybe (UnEmbed Type a n b)
---     UnEmbed Type a n      b              = b
-
--- data Forall :: [SomeDKind] -> DKind k -> Type -> Type where
---     Forall :: { runForall :: forall r. DType vs v r -> UnEmbed Type r 'Z a }
---            -> Forall vs v a
-
--- -- what about TV TZ :$ TBool ?
--- data DType :: forall k. [SomeDKind] -> DKind k -> k -> Type where
---     TV        :: VIx n vs k -> DType vs k (Embed n k)
---     Pi        :: DType ('SDK v ': vs) k a -> DType vs (v ':~> k) ('FA a)
---     (:$)      :: forall k' (k :: DKind k') vs v a b. ()
---               => DType vs (v ':~> k) ('FA a)
---               -> DType vs v b
---               -> DType vs k (UnEmbed k' b 'Z a)
---     Poly      :: DType vs (v ':~> 'KType) ('FA a)
---               -> DType vs 'KType          (Forall vs v a)
---     -- Poly      :: DType vs (v ':~> 'KType) ('FA a) -> DType vs 'KType (Forall vs v a)
---     -- (:$)      :: DType ('SDK v ': vs) k      a -> DType vs v b -> DType vs k (UnEmbed b 'Z a)
---     -- Poly      :: DType ('SDK v ': vs) 'KType a -> DType vs 'KType (Forall vs v a)
---     (:->)     :: DType vs 'KType a -> DType vs 'KType b  -> DType vs 'KType (a -> b)
---     TBool     :: DType vs 'KType Bool
---     TNatural  :: DType vs 'KType Natural
---     TInteger  :: DType vs 'KType Integer
---     TDouble   :: DType vs 'KType Double
---     TText     :: DType vs 'KType Text
---     -- TList     :: DType ('KType ':~> 'KType) Seq
---     -- TOptional :: DType ('KType ':~> 'KType) Maybe
---     TList     :: DType vs 'KType a -> DType vs 'KType (Seq a)
---     TOptional :: DType vs 'KType a -> DType vs 'KType (Maybe a)
-
--- deriving instance Show (DType vs k a)
-
--- infixr 3 :->
-
--- compN :: SN n -> SN m -> f a -> f b -> f c -> f (CompN n m a b c)
--- compN SZ     SZ     _ y _ = y
--- compN SZ     (SS _) _ _ z = z
--- compN (SS _) SZ     x _ _ = x
--- compN (SS n) (SS m) x y z = compN n m x y z
-
--- unEmbed :: DType a -> SN n -> DType t -> DType (UnEmbed a n t)
--- unEmbed x n = \case
---     TV m -> case (n, m) of
---       (SZ   , SZ   ) -> x
---       (SZ   , SS m') -> TV m'
---       (SS _ , SZ   ) -> TV SZ
---       (SS n', SS m') -> compN n' m' (TV m) x (TV m')
---     FA y        -> FA (unEmbed x (SS n) y)
---     y :-> z     -> unEmbed x n y :-> unEmbed x n z
---     TType       -> TType
---     TBool       -> TBool
---     TNatural    -> TNatural
---     TInteger    -> TInteger
---     TDouble     -> TDouble
---     TText       -> TText
---     TList y     -> TList (unEmbed x n y)
---     TOptional y -> TOptional (unEmbed x n y)
-
--- -- new big deal: All function types in dhall are pi types??
-
--- -- infixr 2 :.
-
--- tv :: SingI i => DType (Embed i)
--- tv = TV sing
-
--- tv0 :: DType (Embed 'Z)
--- tv0 = tv
--- tv1 :: DType (Embed ('S 'Z))
--- tv1 = tv
--- tv2 :: DType (Embed ('S ('S 'Z)))
--- tv2 = tv
-
--- data SomeDType :: Type where
---     SomeDType :: DType a -> SomeDType
-
--- deriving instance Show (SomeDType)
-
--- data DTerm :: [SomeDKind] -> Type where
---     DTerm :: DType vs 'KType a -> a -> DTerm vs
 
 -- ident :: DTerm vs
 -- ident = DTerm (Poly (TV VIZ :-> TV VIZ)) $
