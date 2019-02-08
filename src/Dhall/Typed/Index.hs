@@ -2,6 +2,7 @@
 {-# LANGUAGE GADTs                #-}
 {-# LANGUAGE KindSignatures       #-}
 {-# LANGUAGE LambdaCase           #-}
+{-# LANGUAGE ScopedTypeVariables  #-}
 {-# LANGUAGE TypeFamilies         #-}
 {-# LANGUAGE TypeInType           #-}
 {-# LANGUAGE TypeOperators        #-}
@@ -11,12 +12,19 @@ module Dhall.Typed.Index (
   -- * Delete
     Delete(..), delete, ISMaybe, Del
   -- * Insert
-  , Insert(..), insert, Ins
+  , Insert(..), insert, Ins, sInsert
+  -- * Singletons
+  , Sing (SIZ, SIS, SInsZ, SInsS)
   ) where
 
 import           Data.Kind
 import           Data.Type.Universe
 import qualified GHC.TypeLits as TL
+
+data instance Sing (i :: Index as a) where
+    SIZ :: Sing 'IZ
+    SIS :: Sing i -> Sing ('IS i)
+
 
 data Delete :: [k] -> [k] -> k -> Type where
     DZ :: Delete (a ': as) as a
@@ -48,6 +56,10 @@ data Insert :: [k] -> [k] -> k -> Type where
     InsZ :: Insert as (a ': as) a
     InsS :: Insert as bs c -> Insert (a ': as) (a ': bs) c
 
+data instance Sing (i :: Insert as bs a) where
+    SInsZ :: Sing 'InsZ
+    SInsS :: Sing i -> Sing ('InsS i)
+
 insert :: Insert as bs a -> Index as b -> Index bs b
 insert = \case
     InsZ     -> IS
@@ -55,10 +67,26 @@ insert = \case
       IZ   -> IZ
       IS i -> IS (insert ins i)
 
-type family Ins as bs a b (d :: Insert as bs a) (i :: Index as b) :: Index bs b where
+type family Ins as bs a b (ins :: Insert as bs a) (i :: Index as b) :: Index bs b where
     Ins as        (a ': as) a b 'InsZ       i       = 'IS i
-    Ins (a ': as) (a ': bs) b a ('InsS ins) 'IZ     = 'IZ
-    Ins (a ': as) (a ': bs) b a ('InsS ins) ('IS i) = 'IS (Ins as bs b a ins i)
+    Ins (b ': as) (b ': bs) a b ('InsS ins) 'IZ     = 'IZ
+    Ins (a ': as) (a ': bs) a b ('InsS ins) ('IS i) = 'IS (Ins as bs a b ins i)
+
+sInsert
+    :: forall k (as :: [k]) (bs :: [k]) (a :: k) (b :: k) (ins :: Insert as bs a) (i :: Index as b). ()
+    => Sing ins
+    -> Sing i
+    -> Sing (Ins as bs a b ins i)
+sInsert = undefined
+-- sInsert = \case
+--     SInsZ     -> SIS
+--     SInsS ins -> \case
+--       SIZ   -> SIZ
+--       SIS i -> SIS (sInsert ins i)
+--     InsS ins -> \case
+--       IZ   -> IZ
+--       IS i -> IS (insert ins i)
+
 
 -- data Weaken :: [k] -> [k] -> k -> Type where
 --     WZ :: Weaken '[] '[b] b
