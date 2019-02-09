@@ -89,6 +89,8 @@ data SDKind :: DKind -> Type where
     SType  :: SDKind 'Type
     (:%~>) :: SDKind a -> SDKind b -> SDKind (a ':~> b)
 
+deriving instance Show (SDKind k)
+
 data DType :: [DKind] -> DKind -> Type where
     TVar     :: Index us a
              -> DType us a
@@ -147,7 +149,7 @@ type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType 
         = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, c, d, x, r))
 
 data SDType us k :: DType us k -> Type where
-    STVar     :: Sing (i :: Index us a) -> SDType us a ('TVar i)
+    STVar     :: SIndex us a i -> SDType us a ('TVar i)
     SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)    -- ???
     (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
     (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
@@ -158,6 +160,8 @@ data SDType us k :: DType us k -> Type where
 
 infixr 0 :%->
 infixl 9 :%$
+
+deriving instance Show (SDType us k t)
 
 data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
@@ -257,28 +261,79 @@ ident = TLam SType (STVar SIZ :%-> STVar SIZ) $ \a -> Lam a (Var IZ)
 -- Couldn't match type ‘a’
 --   with ‘Sub '[ 'Type] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type] 'Type 'Type 'InsZ a)’
 
+-- type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
+
 subIns
-    :: forall k j a b. ()
-    => SDKind k
-    -> SDKind j
-    -> SDType '[] k     a
-    -> SDType '[] j     b
-    -> (a :~: Sub '[ j ] '[] j k j 'DZ b (Shift '[] '[ j ] j k 'InsZ a))
-subIns _ _ _ = unsafeCoerce (Refl :: a :~: a)
+    :: forall vs us j del ins k a b. ()
+    => SDelete us vs j del
+    -> SInsert vs us j ins
+    -> SDType vs k     a
+    -> SDType vs j     b
+    -> (a :~: Sub us vs j k j del b (Shift vs us j k ins a))
+subIns del ins = \case
+    STVar i -> \b -> case sSub del b (STVar (sInsert ins i)) of
+      STVar j
+        | Just Refl <- sSameIx i j
+        -> Refl
+      _       -> error "huh"
+    SPi _ e -> \b -> case subIns (SDS del) (SInsS ins) e (sShift SInsZ b) of
+      Refl -> Refl
+    u :%$  v  -> \b -> case subIns del ins u b of
+      Refl -> case subIns del ins v b of
+        Refl -> Refl
+    u :%-> v  -> \b -> case subIns del ins u b of
+      Refl -> case subIns del ins v b of
+        Refl -> Refl
+    SBool     -> \_ -> Refl
+    SNatural  -> \_ -> Refl
+    SList     -> \_ -> Refl
+    SOptional -> \_ -> Refl
 
-konst :: DTerm '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst = TLam SType (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
-          TLam SType (sShift SInsZ a :%-> STVar SIZ :%-> sShift SInsZ a) $ \b ->
-            case subIns SType SType a b of
-              Refl -> Lam a (Lam b (Var (IS IZ)))
+-- subIns
+--     :: forall vs k j a b. ()
+--     => SDType vs k     a
+--     -> SDType vs j     b
+--     -> (a :~: Sub (j ': vs) vs j k j 'DZ b (Shift vs (j ': vs) j k 'InsZ a))
+--     -- :: SDType '[] 'Type     a
+--     -- -> SDType '[] 'Type     b
+--     -- -> (a :~: Sub '[ 'Type ] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type ] 'Type 'Type 'InsZ a))
+-- -- subIns _ _ _ _ = unsafeCoerce (Refl :: a :~: a)
+-- subIns = \case
+--     STVar i -> case i of {}
+--     SPi u e -> \b -> case subIns e (sShift SInsZ b) of
+--       Refl -> Refl
+--     -- \b -> case subIns e b of
+--     --                Refl -> Refl
+--     u :%$  v  -> \b -> case subIns u b of
+--       Refl -> case subIns v b of
+--         Refl -> Refl
+--     u :%-> v  -> \b -> case subIns u b of
+--       Refl -> case subIns v b of
+--         Refl -> Refl
+--     SBool     -> \_ -> Refl
+--     SNatural  -> \_ -> Refl
+--     SList     -> \_ -> Refl
+--     SOptional -> \_ -> Refl
 
-konst2 :: DTerm '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst2 = TLam SType (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
-    Lam a $ TLam SType (STVar SIZ :%-> sShift SInsZ a) $ \b ->
-      case subIns SType SType a b of
-        Refl -> Lam b (Var (IS IZ))
 
-sShift :: Sing (ins :: Insert as bs a) -> SDType as b x -> SDType bs b (Shift as bs a b ins x)
+
+
+-- konst :: DTerm '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst = TLam SType (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
+--           TLam SType (sShift SInsZ a :%-> STVar SIZ :%-> sShift SInsZ a) $ \b ->
+--             case subIns a b of
+--               Refl -> Lam a (Lam b (Var (IS IZ)))
+
+-- konst2 :: DTerm '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst2 = TLam SType (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
+--     Lam a $ TLam SType (STVar SIZ :%-> sShift SInsZ a) $ \b ->
+--       case subIns a b of
+--         Refl -> Lam b (Var (IS IZ))
+
+sShift
+    :: SInsert as bs a ins
+    -> SDType as b x
+    -> SDType bs b (Shift as bs a b ins x)
 sShift ins = \case
     STVar i   -> STVar (sInsert ins i)
     SPi u e   -> SPi u (sShift (SInsS ins) e)
@@ -288,6 +343,48 @@ sShift ins = \case
     SNatural  -> SNatural
     SList     -> SList
     SOptional -> SOptional
+
+sSub
+    :: SDelete as bs a del
+    -> SDType bs c x
+    -> SDType as b r
+    -> SDType bs b (Sub as bs a b c del x r)
+sSub del x = \case
+    STVar i -> undefined
+    -- case sDelete del i of
+    -- -- --   YesDelete j -> STVar j
+    --   NoDelete -> x
+    SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
+    u :%$  v -> sSub del x u :%$  sSub del x v
+    u :%-> v -> sSub del x u :%-> sSub del x v
+    SBool -> SBool
+    SNatural -> SNatural
+    SList -> SList
+    SOptional -> SOptional
+    -- STVar i -> case sDelete del i of
+    --   NoDelete -> _
+
+-- type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
+--     Sub as bs a b                  b d x ('TVar i)
+--         = MaybeVar x (Del as bs a b d i)
+--     Sub as bs a b                  c d x ('Pi (u :: SDKind k) e)
+--         = 'Pi u (Sub (k ': as) (k ': bs) a b c ('DS d) (Shift bs (k ': bs) k c 'InsZ x) e)
+--     Sub as bs a b                  c d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
+--         = Sub as bs a (k ':~> b) c d x i ':$ Sub as bs a k c d x j
+--     Sub as bs a 'Type              c d x (i ':-> j)
+--         = Sub as bs a 'Type c d x i ':-> Sub as bs a 'Type c d x j
+--     Sub as bs a 'Type              c d x 'Bool
+--         = 'Bool
+--     Sub as bs a 'Type              c d x 'Natural
+--         = 'Natural
+--     Sub as bs a ('Type ':~> 'Type) c d x 'List
+--         = 'List
+--     Sub as bs a ('Type ':~> 'Type) c d x 'Optional
+--         = 'Optional
+--     Sub as bs a b c d x r
+--         = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, c, d, x, r))
+
+
 
 -- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
 -- is a good reason why we need to have an expression language instead of

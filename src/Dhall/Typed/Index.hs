@@ -1,34 +1,45 @@
-{-# LANGUAGE EmptyCase            #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE KindSignatures       #-}
-{-# LANGUAGE LambdaCase           #-}
-{-# LANGUAGE ScopedTypeVariables  #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE TypeInType           #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE EmptyCase             #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeInType            #-}
+{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 module Dhall.Typed.Index (
+  -- * Index
+    Index(..), SIndex(..), sSameIx
   -- * Delete
-    Delete(..), delete, ISMaybe, Del
+  , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, SDeleted(..)
   -- * Insert
-  , Insert(..), insert, Ins, sInsert
-  -- * Singletons
-  , Sing (SIZ, SIS, SInsZ, SInsS)
+  , Insert(..), insert, Ins, sInsert, SInsert(..)
   ) where
 
 import           Data.Kind
 import           Data.Type.Universe
+import           Data.Type.Equality
 import qualified GHC.TypeLits as TL
 
-data instance Sing (i :: Index as a) where
-    SIZ :: Sing 'IZ
-    SIS :: Sing i -> Sing ('IS i)
+data SIndex as a :: Index as a -> Type where
+    SIZ :: SIndex (a ': as) a 'IZ
+    SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
 
+deriving instance Show (SIndex as a i)
+
+sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
+sSameIx = undefined
 
 data Delete :: [k] -> [k] -> k -> Type where
     DZ :: Delete (a ': as) as a
     DS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
+
+data SDelete as bs a :: Delete as bs a -> Type where
+    SDZ :: SDelete (a ': as) as a 'DZ
+    SDS :: SDelete as bs c del -> SDelete (a ': as) (a ': bs) c ('DS del)
 
 type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
     ISMaybe 'Nothing = 'Nothing
@@ -51,14 +62,32 @@ delete = \case
       IZ   -> Just IZ
       IS i -> IS <$> delete d i
 
+data SDeleted as bs a b :: Delete as bs a -> Index as b -> Maybe (Index bs b) -> Type where
+    NoDelete  :: (Del as bs a b del i ~ 'Nothing) => SDeleted as bs a b del i 'Nothing
+    YesDelete :: (Del as bs a b del i ~ 'Just j)  => SIndex bs b j -> SDeleted as bs a b del i ('Just j)
+
+sDelete
+    :: SDelete as bs a del
+    -> SIndex as b i
+    -> SDeleted as bs a b del i (Del as bs a b del i)
+sDelete = \case
+    SDZ -> \case
+      SIZ   -> NoDelete
+      SIS i -> YesDelete i
+    SDS d -> \case
+      SIZ   -> YesDelete SIZ
+      SIS i -> case sDelete d i of
+        NoDelete    -> NoDelete
+        YesDelete j -> YesDelete (SIS j)
+
 -- | This is just flipped delete, heh.
 data Insert :: [k] -> [k] -> k -> Type where
     InsZ :: Insert as (a ': as) a
     InsS :: Insert as bs c -> Insert (a ': as) (a ': bs) c
 
-data instance Sing (i :: Insert as bs a) where
-    SInsZ :: Sing 'InsZ
-    SInsS :: Sing i -> Sing ('InsS i)
+data SInsert as bs a :: Insert as bs a -> Type where
+    SInsZ :: SInsert as (a ': as) a 'InsZ
+    SInsS :: SInsert as bs c ins -> SInsert (a ': as) (a ': bs) c ('InsS ins)
 
 insert :: Insert as bs a -> Index as b -> Index bs b
 insert = \case
@@ -70,36 +99,16 @@ insert = \case
 type family Ins as bs a b (ins :: Insert as bs a) (i :: Index as b) :: Index bs b where
     Ins as        (a ': as) a b 'InsZ       i       = 'IS i
     Ins (b ': as) (b ': bs) a b ('InsS ins) 'IZ     = 'IZ
-    Ins (a ': as) (a ': bs) a b ('InsS ins) ('IS i) = 'IS (Ins as bs a b ins i)
+    Ins (c ': as) (c ': bs) a b ('InsS ins) ('IS i) = 'IS (Ins as bs a b ins i)
 
 sInsert
-    :: forall k (as :: [k]) (bs :: [k]) (a :: k) (b :: k) (ins :: Insert as bs a) (i :: Index as b). ()
-    => Sing ins
-    -> Sing i
-    -> Sing (Ins as bs a b ins i)
-sInsert = undefined
--- sInsert = \case
---     SInsZ     -> SIS
---     SInsS ins -> \case
---       SIZ   -> SIZ
---       SIS i -> SIS (sInsert ins i)
---     InsS ins -> \case
---       IZ   -> IZ
---       IS i -> IS (insert ins i)
-
-
--- data Weaken :: [k] -> [k] -> k -> Type where
---     WZ :: Weaken '[] '[b] b
---     WS :: Weaken as bs b -> Weaken (a ': as) (a ': bs) b
-
--- type family Weak as bs a b (w :: Weaken as bs a) (i :: Index as b) :: Index bs b where
---     Weak (a ': as) (a ': bs) b a ('WS w) 'IZ     = 'IZ
---     Weak (a ': as) (a ': bs) b a ('WS w) ('IS i) = 'IS (Weak as bs b a w i)
-
--- weak :: Weaken as bs a -> Index as b -> Index bs b
--- weak = \case
---     WZ -> \case {}
---     WS w -> \case
---       IZ   -> IZ
---       IS i -> IS (weak w i)
+    :: forall as bs a b ins i. ()
+    => SInsert as bs a ins
+    -> SIndex as b i
+    -> SIndex bs b (Ins as bs a b ins i)
+sInsert = \case
+    SInsZ     -> SIS
+    SInsS ins -> \case
+      SIZ   -> SIZ
+      SIS i -> SIS (sInsert ins i)
 
