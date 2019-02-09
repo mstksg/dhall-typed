@@ -18,6 +18,7 @@ module Dhall.Typed.Prod (
   , prodSing
   , allProd
   , prodAll
+  , ixProd
   ) where
 
 import           Data.Kind
@@ -94,3 +95,10 @@ prodAll = \case
     x :< xs -> WitAll $ \case
       IZ   -> x
       IS i -> runWitAll (prodAll xs) i
+
+ixProd :: Prod f as -> Index as a -> f a
+ixProd = \case
+    Ø       -> \case {}
+    x :< xs -> \case
+      IZ    -> x
+      IS i -> ixProd xs i

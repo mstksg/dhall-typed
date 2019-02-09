@@ -12,7 +12,7 @@
 
 module Dhall.Typed.Index (
   -- * Index
-    Index(..), SIndex(..), sSameIx
+    Index(..), SIndex(..), sSameIx, fromSIndex
   -- * Delete
   , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, SDeleted(..)
   -- * Insert
@@ -32,6 +32,11 @@ deriving instance Show (SIndex as a i)
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined
+
+fromSIndex :: SIndex as a i -> Index as a
+fromSIndex = \case
+    SIZ   -> IZ
+    SIS i -> IS (fromSIndex i)
 
 data Delete :: [k] -> [k] -> k -> Type where
     DZ :: Delete (a ': as) as a
