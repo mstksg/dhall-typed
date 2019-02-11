@@ -306,7 +306,7 @@ newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 fromTerm :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
 fromTerm vs = \case
     Var i            -> getDTRV $ ixProd vs i
-    Lam _ _          -> undefined   -- this is tricky.
+    Lam _ x          -> \y -> fromTerm (DTRV y :< vs) x
     App f x          -> fromTerm vs f (fromTerm vs x)
     TLam _ f         -> FA (fromTerm vs . f)
     TApp f x         -> runForall (fromTerm vs f) x
@@ -335,34 +335,26 @@ fromTerm vs = \case
     None             -> FA $ \_ -> Nothing
 
 -- toTerm might not be possible.
--- toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> DTerm vs a
--- toTerm = \case
---     STVar i         -> case i of {}
---     a :%-> b        -> \f -> Lam a $ toTerm b $ f undefined
---     SBool           -> BoolLit
---     SNatural        -> NaturalLit
---     SList :%$ a     -> ListLit a . fmap (toTerm a)
---     SOptional :%$ a -> maybe (None `TApp` a) (Some . toTerm a)
+toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> DTerm vs a
+toTerm = \case
+    STVar i         -> case i of {}
+    SPi u b         -> \f -> TLam u $ \a -> toTerm (sSub SDZ a b) $ runForall f a
+    a :%-> b        -> \f -> Lam a $ toTerm b $ f undefined
+    SBool           -> BoolLit
+    SNatural        -> NaturalLit
+    f :%$ x         -> toTermT f x
 
--- data DType :: [DKind] -> DKind -> Type where
---     TVar     :: Index us a
---              -> DType us a
---     Pi       :: SDKind a
---              -> DType (a ': us) b
---              -> DType us b
---     (:$)     :: DType us (a ':~> b)
---              -> DType us a
---              -> DType us b
---     (:->)    :: DType us 'Type
---              -> DType us 'Type
---              -> DType us 'Type
---     Bool     :: DType us 'Type
---     Natural  :: DType us 'Type
---     List     :: DType us ('Type ':~> 'Type)
---     Optional :: DType us ('Type ':~> 'Type)
-
-
-
+toTermT
+    :: SDType '[] (k ':~> 'Type) f
+    -> SDType '[] k              b
+    -> DTypeRep 'Type (f ':$ b)
+    -> DTerm vs (f ':$ b)
+toTermT = \case
+    STVar i   -> case i of {}
+    SPi _ _   -> undefined
+    SList     -> \a -> ListLit a . fmap (toTerm a)
+    SOptional -> \a -> maybe (None `TApp` a) (Some . toTerm a)
+    _ :%$ _   -> \_ -> undefined
 
 naturalFold :: Natural -> (a -> a) -> a -> a
 naturalFold n s = go n
@@ -576,25 +568,25 @@ sShift ins = \case
     SList     -> SList
     SOptional -> SOptional
 
--- sSub
---     :: SDelete as bs a del
---     -> SDType bs c x
---     -> SDType as b r
---     -> SDType bs b (Sub as bs a b c del x r)
--- sSub del x = \case
---     STVar _ -> undefined
---     -- case sDelete del i of
---     -- -- --   YesDelete j -> STVar j
---     --   NoDelete -> x
---     SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
---     u :%$  v -> sSub del x u :%$  sSub del x v
---     u :%-> v -> sSub del x u :%-> sSub del x v
---     SBool -> SBool
---     SNatural -> SNatural
---     SList -> SList
---     SOptional -> SOptional
---     -- STVar i -> case sDelete del i of
---     --   NoDelete -> _
+sSub
+    :: SDelete as bs a del
+    -> SDType bs c x
+    -> SDType as b r
+    -> SDType bs b (Sub as bs a b c del x r)
+sSub del x = \case
+    STVar _ -> undefined
+    -- case sDelete del i of
+    -- -- --   YesDelete j -> STVar j
+    --   NoDelete -> x
+    SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
+    u :%$  v -> sSub del x u :%$  sSub del x v
+    u :%-> v -> sSub del x u :%-> sSub del x v
+    SBool -> SBool
+    SNatural -> SNatural
+    SList -> SList
+    SOptional -> SOptional
+    -- STVar i -> case sDelete del i of
+    --   NoDelete -> _
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
