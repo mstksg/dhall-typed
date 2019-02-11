@@ -32,6 +32,7 @@ import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
 import           Data.Foldable
 import           Data.Functor
+import           Data.Functor.Identity
 import           Data.Kind
 import           Data.List hiding                          (delete)
 import           Data.List.NonEmpty                        (NonEmpty(..))
@@ -53,9 +54,9 @@ import           Data.Type.Universe
 import           Data.Void
 import           Debug.Trace
 import           Dhall.Typed.Index
+import           Dhall.Typed.N
 import           Dhall.Typed.Prod
 import           Dhall.Typed.Sum
-import           Dhall.Typed.N
 import           GHC.Generics
 import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
@@ -109,9 +110,18 @@ data Forall k :: DType '[k] 'Type -> Type where
     FA :: { runForall :: forall r. SDType '[] k r -> DTypeRep 'Type (Sub '[k] '[] k 'Type k 'DZ r a) }
        -> Forall k a
 
+data ForallT j k :: DType '[k] (j ':~> 'Type) -> DKindRep j -> Type where
+    FAT :: { runForallTC
+               :: forall r. ()
+               => SDType '[] k r
+               -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) k 'DZ r a) x
+           }
+        -> ForallT j k a x
+
 type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
-    DTypeRep k                  ('TVar i)  = TL.TypeError ('TL.Text "Free variable in type expression")
-    DTypeRep 'Type                 ('Pi (u :: SDKind a) t) = Forall a t
+    DTypeRep k                  ('TVar i)                   = TL.TypeError ('TL.Text "Free variable in type expression")
+    DTypeRep 'Type              ('Pi (u :: SDKind a) t)     = Forall a t
+    DTypeRep (k ':~> 'Type)         ('Pi (u :: SDKind a) t) = ForallT k a t
     DTypeRep k                  ((f :: DType '[] (r ':~> k)) ':$ (x :: DType '[] r))
         = DTypeRep (r ':~> k) f (DTypeRep r x)
     DTypeRep 'Type              (a ':-> b) = DTypeRep 'Type a -> DTypeRep 'Type b
@@ -119,6 +129,7 @@ type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
     DTypeRep 'Type              'Natural   = Natural
     DTypeRep ('Type ':~> 'Type) 'List      = Seq
     DTypeRep ('Type ':~> 'Type) 'Optional  = Maybe
+    DTypeRep k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
 
 type family MaybeVar (x :: DType vs a) (i :: Maybe (Index vs a)) :: DType vs a where
     MaybeVar x 'Nothing  = x
@@ -197,7 +208,6 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs a
                   -> DTerm vs b
     TLam          :: SDKind k
-                  -- -> SDType '[k] 'Type b
                   -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
                   -> DTerm vs ('Pi (u :: SDKind k) b)
     TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
@@ -215,7 +225,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     NaturalTimes  :: DTerm vs 'Natural
                   -> DTerm vs 'Natural
                   -> DTerm vs 'Natural
-    NaturalIsZero :: DTerm vs ('Natural ':-> 'Natural)
+    NaturalIsZero :: DTerm vs ('Natural ':-> 'Bool)
     ListLit       :: SDType '[] 'Type a
                   -> Seq (DTerm vs a)
                   -> DTerm vs ('List ':$ a)
@@ -232,6 +242,10 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs ('Optional ':$ a)
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
+
+-- -- kindOf :: Prod SDKind us -> SDType us k t -> SDKind k
+-- typeOf :: Prod (SDType '[]) vs -> DTerm vs a -> SDType 'Type a
+-- typeOf = undefined
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -287,11 +301,45 @@ ident = TLam SType $ \a -> Lam a (Var IZ)
 -- Couldn't match type ‘a’
 --   with ‘Sub '[ 'Type] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type] 'Type 'Type 'InsZ a)’
 
--- type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
+newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 
--- data IfEq k :: k -> k -> Type -> Type where
---     IsEq  :: (a :~: b -> c) -> IfEq k a b c
---     NotEq :: Refuted (a :~: b) -> IfEq k a b c
+fromTerm :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
+fromTerm vs = \case
+    Var i            -> getDTRV $ ixProd vs i
+    Lam _ _          -> undefined
+    App f x          -> fromTerm vs f (fromTerm vs x)
+    TLam _ f         -> FA (fromTerm vs . f)
+    TApp f x         -> runForall (fromTerm vs f) x
+    BoolLit b        -> b
+    NaturalLit n     -> n
+    NaturalFold      -> \n -> FA $ \_ s z -> naturalFold n s z
+    NaturalBuild     -> \f -> runForall f SNatural (+ 1) 0
+    NaturalPlus x y  -> fromTerm vs x + fromTerm vs y
+    NaturalTimes x y -> fromTerm vs x * fromTerm vs y
+    NaturalIsZero    -> (== 0)
+    ListLit _ xs     -> fromTerm vs <$> xs
+    ListFold         -> FA $ \a xs -> FA $ \l cons nil -> case subIns a l of
+                          Refl -> foldr cons nil xs
+    -- example of sub-ins living under a type family (DTypeRep
+    ListBuild        -> FA $ \a f -> case subIns a (SList :%$ a) of
+                          Refl -> runForall f (SList :%$ a) (Seq.<|) Seq.empty
+    ListAppend xs ys -> fromTerm vs xs <> fromTerm vs ys
+    -- TODO: any way to not require dummy argument?
+    ListHead         -> FA $ \_ -> \case x Seq.:<| _ -> Just x
+                                         Seq.Empty   -> Nothing
+    ListLast         -> FA $ \_ -> \case _ Seq.:|> x -> Just x
+                                         Seq.Empty   -> Nothing
+    ListReverse      -> FA $ \_ -> Seq.reverse
+    OptionalLit _ x  -> fromTerm vs <$> x
+    Some x           -> Just $ fromTerm vs x
+    None             -> FA $ \_ -> Nothing
+
+
+naturalFold :: Natural -> (a -> a) -> a -> a
+naturalFold n s = go n
+  where
+    go 0 !x = x
+    go i !x = go (i - 1) (s x)
 
 data NotVarFunc vs k :: N -> DType vs k -> Type where
     NVF :: { runNVF :: forall (u ::  DType vs 'Type) (v :: DType vs 'Type). ()
@@ -518,56 +566,6 @@ sShift ins = \case
 --     SOptional -> SOptional
 --     -- STVar i -> case sDelete del i of
 --     --   NoDelete -> _
-
--- type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
---     Sub as bs a b                  b d x ('TVar i)
---         = MaybeVar x (Del as bs a b d i)
---     Sub as bs a b                  c d x ('Pi (u :: SDKind k) e)
---         = 'Pi u (Sub (k ': as) (k ': bs) a b c ('DS d) (Shift bs (k ': bs) k c 'InsZ x) e)
---     Sub as bs a b                  c d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
---         = Sub as bs a (k ':~> b) c d x i ':$ Sub as bs a k c d x j
---     Sub as bs a 'Type              c d x (i ':-> j)
---         = Sub as bs a 'Type c d x i ':-> Sub as bs a 'Type c d x j
---     Sub as bs a 'Type              c d x 'Bool
---         = 'Bool
---     Sub as bs a 'Type              c d x 'Natural
---         = 'Natural
---     Sub as bs a ('Type ':~> 'Type) c d x 'List
---         = 'List
---     Sub as bs a ('Type ':~> 'Type) c d x 'Optional
---         = 'Optional
---     Sub as bs a b c d x r
---         = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, c, d, x, r))
-
-
-
--- okay, being able to state (forall r. (r -> r) -> (r -> r)) symbolically
--- is a good reason why we need to have an expression language instead of
--- just first classing things.
-
--- So apparently, we need to somehow link:
---
--- (r .:. ((r -> r) -> (r -> r))) Natural
---
--- with
---
--- (forall r. (r -> r) -> (r -> r)) -> Natural
---
--- Problem is that user can instnatiate with specific r, so we need it to
--- be rank-n as well.  So maybe
---
--- (forall r. DType r -> DType ((r -> r) -> (r -> r))) -> Natural
--- ^-------------------------------------------------^
--- \- that's exactly what foo is.
---
--- Rep MyFun -> (forall r. TyFun MyFun r) -> Natural
-
--- wouldn't it be nice if we could define a type family where
---
--- Forall "a" (Embed "a" -> [Embed "a"])
---
--- evaluates to (forall a. (a -> [a]))
---
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
