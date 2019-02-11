@@ -31,12 +31,14 @@ dependencies:
 library:
   source-dirs: src
   dependencies:
+  - containers
+  - decidable
   - dhall
+  - ghc
+  - ghc-tcplugins-extra
+  - profunctors
   - singletons
   - text
-  - decidable
-  - containers
-  - profunctors
 
 # executables:
 #   dhall-typed-exe:

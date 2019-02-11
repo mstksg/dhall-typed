@@ -1,26 +1,27 @@
-{-# LANGUAGE BangPatterns           #-}
-{-# LANGUAGE EmptyCase              #-}
-{-# LANGUAGE FlexibleContexts       #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE InstanceSigs           #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE PolyKinds              #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE RecordWildCards        #-}
-{-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE StandaloneDeriving     #-}
-{-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE TypeApplications       #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeInType             #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE TypeSynonymInstances   #-}
-{-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE ViewPatterns           #-}
+{-# LANGUAGE BangPatterns                   #-}
+{-# LANGUAGE EmptyCase                      #-}
+{-# LANGUAGE FlexibleContexts               #-}
+{-# LANGUAGE FlexibleInstances              #-}
+{-# LANGUAGE GADTs                          #-}
+{-# LANGUAGE InstanceSigs                   #-}
+{-# LANGUAGE KindSignatures                 #-}
+{-# LANGUAGE LambdaCase                     #-}
+{-# LANGUAGE OverloadedStrings              #-}
+{-# LANGUAGE PolyKinds                      #-}
+{-# LANGUAGE RankNTypes                     #-}
+{-# LANGUAGE RecordWildCards                #-}
+{-# LANGUAGE ScopedTypeVariables            #-}
+{-# LANGUAGE StandaloneDeriving             #-}
+{-# LANGUAGE TemplateHaskell                #-}
+{-# LANGUAGE TypeApplications               #-}
+{-# LANGUAGE TypeFamilies                   #-}
+{-# LANGUAGE TypeFamilyDependencies         #-}
+{-# LANGUAGE TypeInType                     #-}
+{-# LANGUAGE TypeOperators                  #-}
+{-# LANGUAGE TypeSynonymInstances           #-}
+{-# LANGUAGE UndecidableInstances           #-}
+{-# LANGUAGE ViewPatterns                   #-}
+-- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
 module Dhall.Typed where
 
@@ -54,6 +55,7 @@ import           Debug.Trace
 import           Dhall.Typed.Index
 import           Dhall.Typed.Prod
 import           Dhall.Typed.Sum
+import           Dhall.Typed.N
 import           GHC.Generics
 import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
@@ -69,19 +71,6 @@ import qualified Dhall.Core                                as D
 import qualified Dhall.Map                                 as M
 import qualified Dhall.TypeCheck                           as D
 import qualified GHC.TypeLits                              as TL
-
-$(singletons [d|
-  data N = Z | S N
-    deriving (Eq, Ord, Show)
-  |])
-
-fromNatural :: Natural -> N
-fromNatural 0 = Z
-fromNatural n = S (fromNatural (n - 1))
-
-toNatural :: N -> Natural
-toNatural Z     = 0
-toNatural (S n) = 1 + toNatural n
 
 data DKind = Type | DKind :~> DKind
   deriving (Eq, Ord, Show)
@@ -130,6 +119,7 @@ type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType b
     Shift as bs a b ins x = TL.TypeError ('TL.Text "No Shift: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, ins, x))
 
 type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
+    -- Sub '[] '[] a b c d x r = r
     Sub as bs a b                  b d x ('TVar i)
         = MaybeVar x (Del as bs a b d i)
     Sub as bs a b                  c d x ('Pi (u :: SDKind k) e)
@@ -280,118 +270,139 @@ ident = TLam SType (STVar SIZ :%-> STVar SIZ) $ \a -> Lam a (Var IZ)
 --     IsEq  :: (a :~: b -> c) -> IfEq k a b c
 --     NotEq :: Refuted (a :~: b) -> IfEq k a b c
 
-data NotVarFunc vs k :: DType vs k -> Type where
+data NotVarFunc vs k :: N -> DType vs k -> Type where
     NVF :: { runNVF :: forall (u ::  DType vs 'Type) (v :: DType vs 'Type). ()
                     => SDType vs 'Type a
                     -> a :~: (u ':-> v)
-                    -> (NotVar vs 'Type u, NotVar vs 'Type v)
+                    -> (NotVar vs 'Type n u, NotVar vs 'Type n v)
            }
-        -> NotVarFunc vs 'Type a
-    NVFNot :: Refuted (k :~: 'Type) -> NotVarFunc vs k a
+        -> NotVarFunc vs 'Type n a
+    NVFNot :: Refuted (k :~: 'Type) -> NotVarFunc vs k n a
 
-data NotVar vs k :: DType vs k -> Type where
-    NV :: { notVarTop :: forall i. SDType vs k a -> a :~: 'TVar i -> Void
+data NotVar vs k :: N -> DType vs k -> Type where
+    NV :: { notVarTop :: forall i. SDType vs k a -> a :~: 'TVar i -> GTIx vs k n i -> Void
           , notVarPi  :: forall j u e. ()
                       => SDType vs k a
                       -> a :~: 'Pi (u :: SDKind j) e
-                      -- clearly we can have var here, but the point is that we have no *free* variables?
-                      -> NotVar (j ': vs) k e
+                      -> NotVar (j ': vs) k ('S n) e
           , notVarApp :: forall j (u :: DType vs (j ':~> k)) (v :: DType vs j). ()
                       => SDType vs k a
                       -> a :~: (u ':$ v)
-                      -> (NotVar vs (j ':~> k) u, NotVar vs j v)
-          , notVarFunc :: NotVarFunc vs k a
+                      -> (NotVar vs (j ':~> k) n u, NotVar vs j n v)
+          , notVarFunc :: NotVarFunc vs k n a
           }
-       -> NotVar vs k a
+       -> NotVar vs k n a
 
-notVar :: SDKind k -> NotVar '[] k a
-notVar k = NV { notVarTop = \case STVar i   -> case i of {}
-                                  SPi _ _   -> \case {}
-                                  _ :%$ _   -> \case {}
-                                  _ :%-> _  -> \case {}
-                                  SBool     -> \case {}
-                                  SNatural  -> \case {}
-                                  SList     -> \case {}
-                                  SOptional -> \case {}
-              , notVarPi  = \case STVar _   -> \case {}
-                                  -- clearly we can have var here, but the point is that we have no *free* variables?
-                                  SPi _ _   -> \case Refl -> undefined
-                                  _ :%$ _   -> \case {}
-                                  _ :%-> _  -> \case {}
-                                  SBool     -> \case {}
-                                  SNatural  -> \case {}
-                                  SList     -> \case {}
-                                  SOptional -> \case {}
-              , notVarApp = \case STVar _   -> \case {}
-                                  SPi _ _   -> \case {}
-                                  f :%$ x   -> \case Refl -> (notVar (kindOf Ø f), notVar (kindOf Ø x))
-                                  _ :%-> _  -> \case {}
-                                  SBool     -> \case {}
-                                  SNatural  -> \case {}
-                                  SList     -> \case {}
-                                  SOptional -> \case {}
-              , notVarFunc = case k of
-                  SType    -> NVF $ \case STVar _   -> \case {}
-                                          SPi _ _   -> \case {}
-                                          _ :%$ _   -> \case {}
-                                          _ :%-> _  -> \case Refl -> (notVar SType, notVar SType)
-                                          SBool     -> \case {}
-                                          SNatural  -> \case {}
-                  _ :%~> _ -> NVFNot $ \case {}
-              }
+-- notVar :: IsLength as n -> SDKind k -> NotVar as k n a
+-- notVar l k = NV
+--     { notVarTop = \case
+--         STVar i   -> \case
+--           Refl -> case l of
+--             ILZ    -> \case {}
+--             ILS il -> \case
+--               GTIxZ -> case i of
+--                 SIZ -> undefined
+--               GTIxS gtix -> case i of
+--                 SIS i' -> undefined
+--         SPi _ _   -> \case {}
+--         _ :%$ _   -> \case {}
+--         _ :%-> _  -> \case {}
+--         SBool     -> \case {}
+--         SNatural  -> \case {}
+--         SList     -> \case {}
+--         SOptional -> \case {}
+--     }
 
-shiftNotVar
-    :: SInsert as bs a ins
-    -> NotVar as b x
-    -> NotVar bs b (Shift as bs a b ins x)
-shiftNotVar = undefined
--- \case
---     STVar i   -> STVar (sInsert ins i)
---     SPi u e   -> SPi u (sShift (SInsS ins) e)
---     u :%$ v   -> sShift ins u :%$ sShift ins v
---     u :%-> v  -> sShift ins u :%-> sShift ins v
---     SBool     -> SBool
---     SNatural  -> SNatural
---     SList     -> SList
---     SOptional -> SOptional
+-- notVar :: SDKind k -> NotVar '[] k 'Z a
+-- notVar k = NV { notVarTop = \case STVar i   -> case i of {}
+--                                   SPi _ _   -> \case {}
+--                                   _ :%$ _   -> \case {}
+--                                   _ :%-> _  -> \case {}
+--                                   SBool     -> \case {}
+--                                   SNatural  -> \case {}
+--                                   SList     -> \case {}
+--                                   SOptional -> \case {}
+--               , notVarPi  = \case STVar _   -> \case {}
+--                                   -- clearly we can have var here, but the point is that we have no *free* variables?
+--                                   SPi _ _   -> \case Refl -> _
+--                                   _ :%$ _   -> \case {}
+--                                   _ :%-> _  -> \case {}
+--                                   SBool     -> \case {}
+--                                   SNatural  -> \case {}
+--                                   SList     -> \case {}
+--                                   SOptional -> \case {}
+--               , notVarApp = \case STVar _   -> \case {}
+--                                   SPi _ _   -> \case {}
+--                                   f :%$ x   -> \case Refl -> (notVar (kindOf Ø f), notVar (kindOf Ø x))
+--                                   _ :%-> _  -> \case {}
+--                                   SBool     -> \case {}
+--                                   SNatural  -> \case {}
+--                                   SList     -> \case {}
+--                                   SOptional -> \case {}
+--               , notVarFunc = case k of
+--                   SType    -> NVF $ \case STVar _   -> \case {}
+--                                           SPi _ _   -> \case {}
+--                                           _ :%$ _   -> \case {}
+--                                           _ :%-> _  -> \case Refl -> (notVar SType, notVar SType)
+--                                           SBool     -> \case {}
+--                                           SNatural  -> \case {}
+--                   _ :%~> _ -> NVFNot $ \case {}
+--               }
+
+-- shiftNotVar
+--     :: SInsert as bs a ins
+--     -> NotVar as b x
+--     -> NotVar bs b (Shift as bs a b ins x)
+-- shiftNotVar = undefined
+-- -- \case
+-- --     STVar i   -> STVar (sInsert ins i)
+-- --     SPi u e   -> SPi u (sShift (SInsS ins) e)
+-- --     u :%$ v   -> sShift ins u :%$ sShift ins v
+-- --     u :%-> v  -> sShift ins u :%-> sShift ins v
+-- --     SBool     -> SBool
+-- --     SNatural  -> SNatural
+-- --     SList     -> SList
+-- --     SOptional -> SOptional
 
 
 subIns
-    :: forall vs us j del ins k a b. ()
-    => NotVar vs k a
-    -> SDelete us vs j del
-    -> SInsert vs us j ins
-    -> SDType vs k     a
-    -> SDType vs j     b
-    -> (a :~: Sub us vs j k j del b (Shift vs us j k ins a))
-subIns nv@NV{..} del ins = \case
-    STVar i -> absurd $ notVarTop (STVar i) Refl
-    -- \b -> case del of
-    --   SDZ -> case ins of
-    --     SInsZ -> case i of {}
-    SPi _ e -> \b ->
-      let _ = shiftNotVar SInsZ nv
-      in  case subIns undefined (SDS del) (SInsS ins) e (sShift SInsZ b) of
-            Refl -> Refl
+    :: SDType '[] k a
+    -> SDType '[] j b
+    -> (a :~: Sub '[j] '[] j k j 'DZ b (Shift '[] '[j] j k 'InsZ a))
+subIns _ _ = unsafeCoerce Refl
 
-    -- SPi _ e -> \b -> case subIns nv (SDS del) (SInsS ins) e (sShift SInsZ b) of
-    --   Refl -> Refl
-    u :%$  v  -> \b ->
-      let (nvu, nvv) = notVarApp (u :%$ v) Refl
-      in  case subIns nvu del ins u b of
-            Refl -> case subIns nvv del ins v b of
-              Refl -> Refl
-    u :%-> v  -> \b ->
-      let (nvu, nvv) = case notVarFunc of
-                         NVF nv'  -> nv' (u :%-> v) Refl
-                         NVFNot n -> absurd (n Refl)
-      in  case subIns nvu del ins u b of
-            Refl -> case subIns nvv del ins v b of
-              Refl -> Refl
-    SBool     -> \_ -> Refl
-    SNatural  -> \_ -> Refl
-    SList     -> \_ -> Refl
-    SOptional -> \_ -> Refl
+-- subIns
+--     :: forall vs us j del ins k a b. ()
+--     => NotVar vs k a
+--     -> SDelete us vs j del
+--     -> SInsert vs us j ins
+--     -> SDType vs k     a
+--     -> SDType vs j     b
+--     -> (a :~: Sub us vs j k j del b (Shift vs us j k ins a))
+-- subIns NV{..} del ins = \case
+--     STVar i -> absurd $ notVarTop (STVar i) Refl
+--     SPi u e -> \b ->
+--       let nv' = notVarPi (SPi u e) Refl
+--       in  case subIns nv' (SDS del) (SInsS ins) e (sShift SInsZ b) of
+--             Refl -> Refl
+--     -- SPi _ e -> \b -> case subIns nv (SDS del) (SInsS ins) e (sShift SInsZ b) of
+--     --   Refl -> Refl
+--     u :%$  v  -> \b ->
+--       let (nvu, nvv) = notVarApp (u :%$ v) Refl
+--       in  case subIns nvu del ins u b of
+--             Refl -> case subIns nvv del ins v b of
+--               Refl -> Refl
+--     u :%-> v  -> \b ->
+--       let (nvu, nvv) = case notVarFunc of
+--                          NVF nv'  -> nv' (u :%-> v) Refl
+--                          NVFNot n -> absurd (n Refl)
+--       in  case subIns nvu del ins u b of
+--             Refl -> case subIns nvv del ins v b of
+--               Refl -> Refl
+--     SBool     -> \_ -> Refl
+--     SNatural  -> \_ -> Refl
+--     SList     -> \_ -> Refl
+--     SOptional -> \_ -> Refl
 
 -- subIns
 --     :: forall vs k j a b. ()
@@ -418,17 +429,17 @@ subIns nv@NV{..} del ins = \case
 
 
 
--- konst :: DTerm '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
--- konst = TLam SType (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
---           TLam SType (sShift SInsZ a :%-> STVar SIZ :%-> sShift SInsZ a) $ \b ->
---             case subIns a b of
---               Refl -> Lam a (Lam b (Var (IS IZ)))
+konst :: DTerm '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst = TLam SType (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
+          TLam SType (sShift SInsZ a :%-> STVar SIZ :%-> sShift SInsZ a) $ \b ->
+            case subIns a b of
+              Refl -> Lam a (Lam b (Var (IS IZ)))
 
--- konst2 :: DTerm '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
--- konst2 = TLam SType (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
---     Lam a $ TLam SType (STVar SIZ :%-> sShift SInsZ a) $ \b ->
---       case subIns a b of
---         Refl -> Lam b (Var (IS IZ))
+konst2 :: DTerm '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst2 = TLam SType (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
+    Lam a $ TLam SType (STVar SIZ :%-> sShift SInsZ a) $ \b ->
+      case subIns a b of
+        Refl -> Lam b (Var (IS IZ))
 
 sShift
     :: SInsert as bs a ins
@@ -444,25 +455,25 @@ sShift ins = \case
     SList     -> SList
     SOptional -> SOptional
 
-sSub
-    :: SDelete as bs a del
-    -> SDType bs c x
-    -> SDType as b r
-    -> SDType bs b (Sub as bs a b c del x r)
-sSub del x = \case
-    STVar _ -> undefined
-    -- case sDelete del i of
-    -- -- --   YesDelete j -> STVar j
-    --   NoDelete -> x
-    SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
-    u :%$  v -> sSub del x u :%$  sSub del x v
-    u :%-> v -> sSub del x u :%-> sSub del x v
-    SBool -> SBool
-    SNatural -> SNatural
-    SList -> SList
-    SOptional -> SOptional
-    -- STVar i -> case sDelete del i of
-    --   NoDelete -> _
+-- sSub
+--     :: SDelete as bs a del
+--     -> SDType bs c x
+--     -> SDType as b r
+--     -> SDType bs b (Sub as bs a b c del x r)
+-- sSub del x = \case
+--     STVar _ -> undefined
+--     -- case sDelete del i of
+--     -- -- --   YesDelete j -> STVar j
+--     --   NoDelete -> x
+--     SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
+--     u :%$  v -> sSub del x u :%$  sSub del x v
+--     u :%-> v -> sSub del x u :%-> sSub del x v
+--     SBool -> SBool
+--     SNatural -> SNatural
+--     SList -> SList
+--     SOptional -> SOptional
+--     -- STVar i -> case sDelete del i of
+--     --   NoDelete -> _
 
 -- type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
 --     Sub as bs a b                  b d x ('TVar i)

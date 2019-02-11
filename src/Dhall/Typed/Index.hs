@@ -12,7 +12,7 @@
 
 module Dhall.Typed.Index (
   -- * Index
-    Index(..), SIndex(..), sSameIx, fromSIndex
+    Index(..), SIndex(..), sSameIx, fromSIndex, GTIx(..)
   -- * Delete
   , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, SDeleted(..)
   -- * Insert
@@ -20,9 +20,14 @@ module Dhall.Typed.Index (
   ) where
 
 import           Data.Kind
-import           Data.Type.Universe
 import           Data.Type.Equality
-import qualified GHC.TypeLits as TL
+import           Data.Type.Universe
+import           Dhall.Typed.N
+import qualified GHC.TypeLits       as TL
+
+data GTIx as a :: N -> Index as a -> Type where
+    GTIxZ :: GTIx (a ': as) a ('S n) 'IZ
+    GTIxS :: GTIx as a n i -> GTIx (b ': as) a ('S n) ('IS i)
 
 data SIndex as a :: Index as a -> Type where
     SIZ :: SIndex (a ': as) a 'IZ
