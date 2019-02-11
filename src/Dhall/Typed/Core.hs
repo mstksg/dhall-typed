@@ -120,14 +120,14 @@ type family DKindRep (x :: DKind) where
     DKindRep (a ':~> b) = DKindRep a -> DKindRep b
 
 data Forall k :: DType '[k] 'Type -> Type where
-    FA :: { runForall :: forall r. SDType '[] k r -> DTypeRep 'Type (Sub '[k] '[] k 'Type k 'DZ r a) }
+    FA :: { runForall :: forall r. SDType '[] k r -> DTypeRep 'Type (Sub '[k] '[] k 'Type 'DZ r a) }
        -> Forall k a
 
 data ForallTC j k :: DType '[k] (j ':~> 'Type) -> DKindRep j -> Type where
     FATC :: { runForallTCC
                 :: forall r. ()
                 => SDType '[] k r
-                -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) k 'DZ r a) x
+                -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) 'DZ r a) x
             }
          -> ForallTC j k a x
 
@@ -144,10 +144,11 @@ type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
     DTypeRep ('Type ':~> 'Type) 'Optional  = Maybe
     DTypeRep k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
 
-type family MaybeVar (x :: DType vs a) (i :: Maybe (Index vs a)) :: DType vs a where
-    MaybeVar x 'Nothing  = x
-    MaybeVar x ('Just i) = 'TVar i
-    MaybeVar x i = TL.TypeError ('TL.Text "No Maybe: " 'TL.:<>: 'TL.ShowType '(x, i))
+type family MaybeVar a b (x :: DType vs a) (i :: Maybe (Index vs b)) :: DType vs b where
+    MaybeVar a a x 'Nothing  = x
+    MaybeVar a b x 'Nothing  = TL.TypeError ('TL.Text "What happened?")
+    MaybeVar a b x ('Just i) = 'TVar i
+    MaybeVar a b x i = TL.TypeError ('TL.Text "No Maybe: " 'TL.:<>: 'TL.ShowType '(x, i))
 
 type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType bs b where
     Shift as bs a b   ins ('TVar i) = 'TVar (Ins as bs a b ins i)
@@ -161,26 +162,25 @@ type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType b
     Shift as bs a ('Type ':~> 'Type) i 'Optional = 'Optional
     Shift as bs a b ins x = TL.TypeError ('TL.Text "No Shift: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, ins, x))
 
-type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType as b) :: DType bs b where
-    -- Sub '[] '[] a b c d x r = r
-    Sub as bs a b                  b d x ('TVar i)
-        = MaybeVar x (Del as bs a b d i)
-    Sub as bs a b                  c d x ('Pi (u :: SDKind k) e)
-        = 'Pi u (Sub (k ': as) (k ': bs) a b c ('DS d) (Shift bs (k ': bs) k c 'InsZ x) e)
-    Sub as bs a b                  c d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
-        = Sub as bs a (k ':~> b) c d x i ':$ Sub as bs a k c d x j
-    Sub as bs a 'Type              c d x (i ':-> j)
-        = Sub as bs a 'Type c d x i ':-> Sub as bs a 'Type c d x j
-    Sub as bs a 'Type              c d x 'Bool
+type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs a) (r :: DType as b) :: DType bs b where
+    Sub as bs a b                  d x ('TVar i)
+        = MaybeVar a b x (Del as bs a b d i)
+    Sub as bs a b                  d x ('Pi (u :: SDKind k) e)
+        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) (Shift bs (k ': bs) k a 'InsZ x) e)
+    Sub as bs a b                  d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
+        = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
+    Sub as bs a 'Type              d x (i ':-> j)
+        = Sub as bs a 'Type d x i ':-> Sub as bs a 'Type d x j
+    Sub as bs a 'Type              d x 'Bool
         = 'Bool
-    Sub as bs a 'Type              c d x 'Natural
+    Sub as bs a 'Type              d x 'Natural
         = 'Natural
-    Sub as bs a ('Type ':~> 'Type) c d x 'List
+    Sub as bs a ('Type ':~> 'Type) d x 'List
         = 'List
-    Sub as bs a ('Type ':~> 'Type) c d x 'Optional
+    Sub as bs a ('Type ':~> 'Type) d x 'Optional
         = 'Optional
-    Sub as bs a b c d x r
-        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, c, d, x, r))
+    Sub as bs a b d x r
+        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, x, r))
 
 data SDType us k :: DType us k -> Type where
     STVar     :: SIndex us a i -> SDType us a ('TVar i)
@@ -221,11 +221,11 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs a
                   -> DTerm vs b
     TLam          :: SDKind k
-                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
+                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
                   -> DTerm vs ('Pi (u :: SDKind k) b)
     TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
                   -> SDType '[] k a
-                  -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b)
+                  -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
     BoolLit       :: Bool
                   -> DTerm vs 'Bool
     NaturalLit    :: Natural
@@ -322,7 +322,7 @@ data SDTerm vs t :: DTerm vs t -> Type where
     --               -> DTerm vs ('Pi (u :: SDKind k) b)
     STApp          :: SDTerm vs ('Pi (u :: SDKind k) b) x
                    -> SDType '[] k a
-                   -> SDTerm vs (Sub '[k] '[] k 'Type k 'DZ a b) ('TApp x (q :: SDType '[] k a))
+                   -> SDTerm vs (Sub '[k] '[] k 'Type 'DZ a b) ('TApp x (q :: SDType '[] k a))
     SBoolLit       :: Sing b
                    -> SDTerm vs 'Bool ('BoolLit b)
     SNaturalLit    :: Sing n
@@ -361,7 +361,7 @@ typeOf vs = \case
     SApp f _          -> case typeOf vs f of
       _ :%-> r -> r
     STApp f x         -> case typeOf vs f of
-      SPi _ g  -> sSub SDZ x g
+      SPi _ g  -> sSub x g
     SBoolLit _        -> SBool
     SNaturalLit _     -> SNatural
     SNaturalFold      -> SNatural :%-> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)
@@ -451,7 +451,7 @@ subIns
     :: forall k j a b. ()
     => SDType '[] k a
     -> SDType '[] j b
-    -> (a :~: Sub '[j] '[] j k j 'DZ b (Shift '[] '[j] j k 'InsZ a))
+    -> (a :~: Sub '[j] '[] j k 'DZ b (Shift '[] '[j] j k 'InsZ a))
 subIns _ _ = unsafeCoerce $ Refl @a
 
 konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
@@ -507,26 +507,27 @@ sShift_ ins = \case
     SOptional -> SOptional
 
 sSub
-    :: SDelete as bs a del
+    :: SDType bs a x
+    -> SDType (a ': bs) b r
+    -> SDType bs b (Sub (a ': bs) bs a b 'DZ x r)
+sSub = sSub_ SDZ
+
+sSub_
+    :: SDelete as bs c del
     -> SDType bs c x
     -> SDType as b r
-    -> SDType bs b (Sub as bs a b c del x r)
-sSub del x = \case
-    STVar _ -> undefined
-    SPi _ _ -> undefined
-    -- STVar _
-    -- case sDelete del i of
-    -- -- --   YesDelete j -> STVar j
-    --   NoDelete -> x
-    -- SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
-    u :%$  v -> sSub del x u :%$  sSub del x v
-    u :%-> v -> sSub del x u :%-> sSub del x v
-    SBool -> SBool
-    SNatural -> SNatural
-    SList -> SList
+    -> SDType bs b (Sub as bs c b del x r)
+sSub_ del x = \case
+    STVar i -> case sDelete del i of
+      GotDeleted Refl -> x
+      ThatsToxic j    -> STVar j
+    SPi u e -> SPi u $ sSub_ (SDS del) (sShift x) e
+    u :%$  v  -> sSub_ del x u :%$  sSub_ del x v
+    u :%-> v  -> sSub_ del x u :%-> sSub_ del x v
+    SBool     -> SBool
+    SNatural  -> SNatural
+    SList     -> SList
     SOptional -> SOptional
-    -- STVar i -> case sDelete del i of
-    --   NoDelete -> _
 
 -- -- | Syntax tree for expressions
 -- data Expr s a

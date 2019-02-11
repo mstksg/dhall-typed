@@ -14,16 +14,18 @@ module Dhall.Typed.Index (
   -- * Index
     Index(..), SIndex(..), sSameIx, fromSIndex, GTIx(..)
   -- * Delete
-  , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, SDeleted(..)
+  , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, GetDeleted(..)
   -- * Insert
   , Insert(..), insert, Ins, sInsert, SInsert(..)
   ) where
 
 import           Data.Kind
 import           Data.Type.Equality
+import           Data.Type.Predicate
+import           Dhall.Typed.Option
 import           Data.Type.Universe
 import           Dhall.Typed.N
-import qualified GHC.TypeLits       as TL
+import qualified GHC.TypeLits        as TL
 
 data GTIx as a :: N -> Index as a -> Type where
     GTIxZ :: GTIx (a ': as) a ('S n) 'IZ
@@ -72,23 +74,24 @@ delete = \case
       IZ   -> Just IZ
       IS i -> IS <$> delete d i
 
-data SDeleted as bs a b :: Delete as bs a -> Index as b -> Maybe (Index bs b) -> Type where
-    NoDelete  :: (Del as bs a b del i ~ 'Nothing) => SDeleted as bs a b del i 'Nothing
-    YesDelete :: (Del as bs a b del i ~ 'Just j)  => SIndex bs b j -> SDeleted as bs a b del i ('Just j)
+data GetDeleted as bs a b :: Delete as bs a -> Index as b -> Type where
+    GotDeleted :: (Del as bs a b del i ~ 'Nothing) => a :~: b -> GetDeleted as bs a b del i
+    ThatsToxic :: (Del as bs a b del i ~ 'Just j ) => SIndex bs b j -> GetDeleted as bs a b del i
 
 sDelete
     :: SDelete as bs a del
     -> SIndex as b i
-    -> SDeleted as bs a b del i (Del as bs a b del i)
+    -> GetDeleted as bs a b del i
 sDelete = \case
     SDZ -> \case
-      SIZ   -> NoDelete
-      SIS i -> YesDelete i
+      SIZ   -> GotDeleted Refl
+      SIS i -> ThatsToxic i
     SDS d -> \case
-      SIZ   -> YesDelete SIZ
+      SIZ   -> ThatsToxic SIZ
       SIS i -> case sDelete d i of
-        NoDelete    -> NoDelete
-        YesDelete j -> YesDelete (SIS j)
+        GotDeleted Refl -> GotDeleted Refl
+        ThatsToxic j    -> ThatsToxic (SIS j)
+
 
 -- | This is just flipped delete, heh.
 data Insert :: [k] -> [k] -> k -> Type where

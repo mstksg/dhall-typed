@@ -9,5 +9,5 @@ module Dhall.Typed.Option (
 import           Data.Kind
 
 data Option :: (k -> Type) -> Maybe k -> Type where
-    Noth :: Option f 'Nothing
-    Jus  :: f a -> Option f ('Just a)
+    Noot :: Option f 'Nothing
+    Juus :: f a -> Option f ('Just a)
