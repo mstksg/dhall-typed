@@ -306,7 +306,7 @@ newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 fromTerm :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
 fromTerm vs = \case
     Var i            -> getDTRV $ ixProd vs i
-    Lam _ _          -> undefined
+    Lam _ _          -> undefined   -- this is tricky.
     App f x          -> fromTerm vs f (fromTerm vs x)
     TLam _ f         -> FA (fromTerm vs . f)
     TApp f x         -> runForall (fromTerm vs f) x
@@ -333,6 +333,35 @@ fromTerm vs = \case
     OptionalLit _ x  -> fromTerm vs <$> x
     Some x           -> Just $ fromTerm vs x
     None             -> FA $ \_ -> Nothing
+
+-- toTerm might not be possible.
+-- toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> DTerm vs a
+-- toTerm = \case
+--     STVar i         -> case i of {}
+--     a :%-> b        -> \f -> Lam a $ toTerm b $ f undefined
+--     SBool           -> BoolLit
+--     SNatural        -> NaturalLit
+--     SList :%$ a     -> ListLit a . fmap (toTerm a)
+--     SOptional :%$ a -> maybe (None `TApp` a) (Some . toTerm a)
+
+-- data DType :: [DKind] -> DKind -> Type where
+--     TVar     :: Index us a
+--              -> DType us a
+--     Pi       :: SDKind a
+--              -> DType (a ': us) b
+--              -> DType us b
+--     (:$)     :: DType us (a ':~> b)
+--              -> DType us a
+--              -> DType us b
+--     (:->)    :: DType us 'Type
+--              -> DType us 'Type
+--              -> DType us 'Type
+--     Bool     :: DType us 'Type
+--     Natural  :: DType us 'Type
+--     List     :: DType us ('Type ':~> 'Type)
+--     Optional :: DType us ('Type ':~> 'Type)
+
+
 
 
 naturalFold :: Natural -> (a -> a) -> a -> a
