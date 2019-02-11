@@ -151,6 +151,8 @@ data SDType us k :: DType us k -> Type where
 
 infixr 0 :%->
 infixl 9 :%$
+infixl 3 `App`
+infixl 3 `TApp`
 
 deriving instance Show (SDType us k t)
 
@@ -176,7 +178,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs a
                   -> DTerm vs b
     TLam          :: SDKind k
-                  -> SDType '[k] 'Type b
+                  -- -> SDType '[k] 'Type b
                   -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
                   -> DTerm vs ('Pi (u :: SDKind k) b)
     TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
@@ -200,6 +202,9 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs ('List ':$ a)
     ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
     ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+    ListAppend    :: DTerm vs ('List ':$ a)
+                  -> DTerm vs ('List ':$ a)
+                  -> DTerm vs ('List ':$ a)
     ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
     ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
@@ -237,7 +242,6 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     | Text
 --     | TextLit (Chunks s a)
 --     | TextAppend (Expr s a) (Expr s a)
---     | ListAppend (Expr s a) (Expr s a)
 --     | ListLength
 --     | ListIndexed
 --     | OptionalFold
@@ -259,7 +263,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
-ident = TLam SType (STVar SIZ :%-> STVar SIZ) $ \a -> Lam a (Var IZ)
+ident = TLam SType $ \a -> Lam a (Var IZ)
 
 -- Couldn't match type ‘a’
 --   with ‘Sub '[ 'Type] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type] 'Type 'Type 'InsZ a)’
@@ -429,17 +433,38 @@ subIns _ _ = unsafeCoerce Refl
 
 
 
-konst :: DTerm '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst = TLam SType (SPi SType (STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
-          TLam SType (sShift SInsZ a :%-> STVar SIZ :%-> sShift SInsZ a) $ \b ->
+konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst = TLam SType $ \a ->
+          TLam SType $ \b ->
             case subIns a b of
               Refl -> Lam a (Lam b (Var (IS IZ)))
 
-konst2 :: DTerm '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst2 = TLam SType (STVar SIZ :%-> SPi SType (STVar SIZ :%-> STVar (SIS SIZ))) $ \a ->
-    Lam a $ TLam SType (STVar SIZ :%-> sShift SInsZ a) $ \b ->
+konst2 :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst2 = TLam SType $ \a ->
+    Lam a $ TLam SType $ \b ->
       case subIns a b of
         Refl -> Lam b (Var (IS IZ))
+
+natBuild
+    :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
+natBuild = Lam (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+           Var IZ
+    `TApp` SNatural
+     `App` Lam SNatural (NaturalPlus (Var IZ) (NaturalLit 1))
+     `App` NaturalLit 0
+
+-- there is asymmetry between Lam and TLam.  maybe use type variables to
+-- address, instead of functions?
+
+listBuild
+    :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+listBuild = TLam SType $ \a ->
+    Lam (SPi SType ((sShift SInsZ a :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+      case subIns a (SList :%$ a) of
+        Refl ->   Var IZ
+          `TApp` (SList :%$ a)
+           `App` Lam a (Lam (SList :%$ a) (ListAppend (ListLit a (Seq.singleton (Var (IS IZ)))) (Var IZ)))
+           `App` ListLit a Seq.empty
 
 sShift
     :: SInsert as bs a ins
