@@ -3,9 +3,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies    #-}
 
-module Dhall.Typed.Plugin (
-    plugin
-  ) where
+module Dhall.Typed.Plugin where
+
+-- module Dhall.Typed.Plugin (
+--     plugin
+--   ) where
 
 import           Control.Monad
 import           Dhall.Typed.Core    ()

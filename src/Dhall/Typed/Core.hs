@@ -23,10 +23,22 @@
 {-# LANGUAGE ViewPatterns                   #-}
 -- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
-module Dhall.Typed.Core where
-
--- module Dhall.Typed (
---   ) where
+module Dhall.Typed.Core (
+  -- * Kinds
+    DKind(..), SDKind(..)
+  -- * Types
+  , DType(..), SDType(..), kindOf
+  , Sub, Shift
+  -- * Terms
+  , DTerm(..), SDTerm(..), SeqListEq(..), typeOf
+  -- * Evaluation
+  , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
+  , fromTerm
+  -- * Manipulation
+  , sShift, sShift_, subIns
+  -- * Samples
+  , ident, konst, konst2, natBuild, listBuild
+  ) where
 
 import           Control.Applicative hiding                (Const(..))
 import           Control.Monad
@@ -55,6 +67,7 @@ import           Data.Void
 import           Debug.Trace
 import           Dhall.Typed.Index
 import           Dhall.Typed.N
+import           Dhall.Typed.Option
 import           Dhall.Typed.Prod
 import           Dhall.Typed.Sum
 import           GHC.Generics
@@ -110,18 +123,18 @@ data Forall k :: DType '[k] 'Type -> Type where
     FA :: { runForall :: forall r. SDType '[] k r -> DTypeRep 'Type (Sub '[k] '[] k 'Type k 'DZ r a) }
        -> Forall k a
 
-data ForallT j k :: DType '[k] (j ':~> 'Type) -> DKindRep j -> Type where
-    FAT :: { runForallTC
-               :: forall r. ()
-               => SDType '[] k r
-               -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) k 'DZ r a) x
-           }
-        -> ForallT j k a x
+data ForallTC j k :: DType '[k] (j ':~> 'Type) -> DKindRep j -> Type where
+    FATC :: { runForallTCC
+                :: forall r. ()
+                => SDType '[] k r
+                -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) k 'DZ r a) x
+            }
+         -> ForallTC j k a x
 
 type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
     DTypeRep k                  ('TVar i)                   = TL.TypeError ('TL.Text "Free variable in type expression")
     DTypeRep 'Type              ('Pi (u :: SDKind a) t)     = Forall a t
-    DTypeRep (k ':~> 'Type)         ('Pi (u :: SDKind a) t) = ForallT k a t
+    DTypeRep (k ':~> 'Type)     ('Pi (u :: SDKind a) t) = ForallTC k a t
     DTypeRep k                  ((f :: DType '[] (r ':~> k)) ':$ (x :: DType '[] r))
         = DTypeRep (r ':~> k) f (DTypeRep r x)
     DTypeRep 'Type              (a ':-> b) = DTypeRep 'Type a -> DTypeRep 'Type b
@@ -171,7 +184,7 @@ type family Sub as bs a b c (d :: Delete as bs a) (x :: DType bs c) (r :: DType 
 
 data SDType us k :: DType us k -> Type where
     STVar     :: SIndex us a i -> SDType us a ('TVar i)
-    SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)    -- ???
+    SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)
     (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
     (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
     SBool     :: SDType us 'Type 'Bool
@@ -243,10 +256,6 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
 
--- -- kindOf :: Prod SDKind us -> SDType us k t -> SDKind k
--- typeOf :: Prod (SDType '[]) vs -> DTerm vs a -> SDType 'Type a
--- typeOf = undefined
-
 -- -- | Syntax tree for expressions
 -- data Expr s a
 --     = Const Const
@@ -295,6 +304,82 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
+
+data SeqListEq :: Seq a -> [a] -> Type where
+    SeqListEq :: SeqListEq xs ys    -- TODO: define
+
+data SDTerm vs t :: DTerm vs t -> Type where
+    SVar           :: SIndex vs a i
+                   -> SDTerm vs a ('Var i)
+    SLam           :: SDType '[] 'Type a
+                   -> SDTerm (a ': vs) b x
+                   -> SDTerm vs (a ':-> b) ('Lam (u :: SDType '[] 'Type a) x)
+    SApp           :: SDTerm vs (a ':-> b) f
+                   -> SDTerm vs a x
+                   -> SDTerm vs b ('App f x)
+    -- TLam          :: SDKind k
+    --               -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
+    --               -> DTerm vs ('Pi (u :: SDKind k) b)
+    STApp          :: SDTerm vs ('Pi (u :: SDKind k) b) x
+                   -> SDType '[] k a
+                   -> SDTerm vs (Sub '[k] '[] k 'Type k 'DZ a b) ('TApp x (q :: SDType '[] k a))
+    SBoolLit       :: Sing b
+                   -> SDTerm vs 'Bool ('BoolLit b)
+    SNaturalLit    :: Sing n
+                   -> SDTerm vs 'Natural ('NaturalLit n)
+    SNaturalFold   :: SDTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)) 'NaturalFold
+    SNaturalBuild  :: SDTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural) 'NaturalBuild
+    SNaturalPlus   :: SDTerm vs 'Natural x
+                   -> SDTerm vs 'Natural y
+                   -> SDTerm vs 'Natural ('NaturalPlus x y)
+    SNaturalTimes  :: SDTerm vs 'Natural x
+                   -> SDTerm vs 'Natural y
+                   -> SDTerm vs 'Natural ('NaturalTimes x y)
+    SNaturalIsZero :: SDTerm vs ('Natural ':-> 'Bool) 'NaturalIsZero
+    SListLit       :: SeqListEq xs xs'
+                   -> SDType '[] 'Type a
+                   -> Prod (SDTerm vs a) xs'
+                   -> SDTerm vs ('List ':$ a) ('ListLit (u :: SDType '[] 'Type a) xs)
+    SListFold      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))) 'ListFold
+    SListBuild     :: SDTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ)) 'ListBuild
+    SListAppend    :: SDTerm vs ('List ':$ a) xs
+                   -> SDTerm vs ('List ':$ a) ys
+                   -> SDTerm vs ('List ':$ a) ('ListAppend xs ys)
+    SListHead      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListHead
+    SListLast      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListLast
+    SListReverse   :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ)) 'ListReverse
+    SOptionalLit   :: SDType '[] 'Type a
+                   -> Option (SDTerm vs a) o
+                   -> SDTerm vs ('Optional ':$ a) ('OptionalLit (u :: SDType '[] 'Type a) o)
+    SSome          :: SDTerm vs a x -> SDTerm vs ('Optional ':$ a) ('Some x)
+    SNone          :: SDTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ)) 'None
+
+typeOf :: Prod (SDType '[] 'Type) vs -> SDTerm vs a x -> SDType '[] 'Type a
+typeOf vs = \case
+    SVar i            -> ixProd vs (fromSIndex i)
+    SLam t x          -> t :%-> typeOf (t :< vs) x
+    SApp f _          -> case typeOf vs f of
+      _ :%-> r -> r
+    STApp f x         -> case typeOf vs f of
+      SPi _ g  -> sSub SDZ x g
+    SBoolLit _        -> SBool
+    SNaturalLit _     -> SNatural
+    SNaturalFold      -> SNatural :%-> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)
+    SNaturalBuild     -> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> SNatural
+    SNaturalPlus _ _  -> SNatural
+    SNaturalTimes _ _ -> SNatural
+    SNaturalIsZero    -> SNatural :%-> SBool
+    SListLit _ a _    -> SList :%$ a
+    SListFold         -> SPi SType (SList :%$ STVar SIZ :%-> SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ))
+    SListBuild        -> SPi SType (SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> SList :%$ STVar SIZ)
+    SListAppend xs _  -> typeOf vs xs
+    SListHead         -> SPi SType (SList :%$ STVar SIZ :%-> SOptional :%$ STVar SIZ)
+    SListLast         -> SPi SType (SList :%$ STVar SIZ :%-> SOptional :%$ STVar SIZ)
+    SListReverse      -> SPi SType (SList :%$ STVar SIZ :%-> SList     :%$ STVar SIZ)
+    SOptionalLit a _  -> SOptional :%$ a
+    SSome x           -> SOptional :%$ typeOf vs x
+    SNone             -> SPi SType (SOptional :%$ STVar SIZ)
+
 ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
 ident = TLam SType $ \a -> Lam a (Var IZ)
 
@@ -338,7 +423,7 @@ fromTerm vs = \case
 -- toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> DTerm '[] a
 -- toTerm = \case
 --     STVar i         -> case i of {}
---     SPi u b         -> \f -> TLam u $ \a -> toTerm (sSub SDZ a b) $ runForall f a
+--     gPi u b         -> \f -> TLam u $ \a -> toTerm (sSub SDZ a b) $ runForall f a
 --     a :%-> b        -> \f -> Lam a $ toTerm b $ f undefined
 --     SBool           -> BoolLit
 --     SNatural        -> NaturalLit
@@ -421,25 +506,27 @@ sShift_ ins = \case
     SList     -> SList
     SOptional -> SOptional
 
--- sSub
---     :: SDelete as bs a del
---     -> SDType bs c x
---     -> SDType as b r
---     -> SDType bs b (Sub as bs a b c del x r)
--- sSub del x = \case
---     STVar i -> STVar _
---     -- case sDelete del i of
---     -- -- --   YesDelete j -> STVar j
---     --   NoDelete -> x
---     SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
---     u :%$  v -> sSub del x u :%$  sSub del x v
---     u :%-> v -> sSub del x u :%-> sSub del x v
---     SBool -> SBool
---     SNatural -> SNatural
---     SList -> SList
---     SOptional -> SOptional
---     -- STVar i -> case sDelete del i of
---     --   NoDelete -> _
+sSub
+    :: SDelete as bs a del
+    -> SDType bs c x
+    -> SDType as b r
+    -> SDType bs b (Sub as bs a b c del x r)
+sSub del x = \case
+    STVar _ -> undefined
+    SPi _ _ -> undefined
+    -- STVar _
+    -- case sDelete del i of
+    -- -- --   YesDelete j -> STVar j
+    --   NoDelete -> x
+    -- SPi u e -> SPi u $ sSub (SDS del) (sShift SInsZ x) e
+    u :%$  v -> sSub del x u :%$  sSub del x v
+    u :%-> v -> sSub del x u :%-> sSub del x v
+    SBool -> SBool
+    SNatural -> SNatural
+    SList -> SList
+    SOptional -> SOptional
+    -- STVar i -> case sDelete del i of
+    --   NoDelete -> _
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
