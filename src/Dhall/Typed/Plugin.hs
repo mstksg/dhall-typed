@@ -15,10 +15,8 @@ module Dhall.Typed.Plugin (
 
 import           Control.Applicative
 import           Control.Monad
-import           Data.Functor
 import           Data.Maybe
 import           DataCon
-import           Outputable
 import           Dhall.Typed.N
 import           GHC.TcPluginM.Extra
 import           Module
@@ -30,7 +28,6 @@ import           TcRnTypes
 import           TyCoRep             (Type (..))
 import           TyCon
 import           Type
-import           TysWiredIn
 import qualified Data.Kind           as K
 
 

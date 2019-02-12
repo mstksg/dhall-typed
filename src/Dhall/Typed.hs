@@ -11,11 +11,22 @@ module Dhall.Typed (
   ) where
 
 import           Dhall.Typed.Core
-import qualified Data.Sequence as Seq
 import           Dhall.Typed.Index
-import qualified Dhall.Core         as D
-import qualified Dhall.TypeCheck    as D
+import qualified Data.Sequence     as Seq
+import qualified Dhall.Core        as D
+import qualified Dhall.TypeCheck   as D
 
+-- | Convert an untyped Dhall expression into a typed one with no free
+-- variables representing a Dhall type of a desired kind.
+--
+-- Will fail if:
+--
+-- *  The Dhall expression does not represent a type
+-- *  The kind does not match
+-- *  There are any free variables
+--
+-- Will behave unpredictably if the Dhall expression does not typecheck
+-- within Dhall itself.
 toTypedType
     :: SDKind k
     -> D.Expr () D.X
@@ -32,6 +43,17 @@ toTypedType k = \case
     _ -> Nothing
 
 
+-- | Convert an untyped dhall expression into a typed one representing
+-- a Dhall term of a desired type.
+--
+-- Will fail if:
+--
+-- *  The Dhall expression does not represent a term
+-- *  The type does not match
+-- *  There are any free variables
+--
+-- Will behave unpredictably if the Dhall expression does not typecheck
+-- within Dhall itself.
 toTypedTerm
     :: SDType '[] 'Type a
     -> D.Expr () D.X
@@ -102,16 +124,33 @@ toTypedTerm a = \case
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 
+-- | The identity function, encoded as a 'DTerm'.  Provided as an example.
+ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
+ident = TLam SType $ \a -> Lam a (Var IZ)
+
+-- | The constant function, encoded as a 'DTerm'.  Provided as an example.
+-- All of the multi-Pi functions here require the typechecker plugin.
 konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
 konst = TLam SType $ \a ->
           TLam SType $ \b -> Lam a (Lam b (Var (IS IZ)))
 
+-- | The constant function with flipped parameter order, encoded as
+-- a 'DTerm'.  Provided as an example.
+konst' :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst' = TLam SType $ \a ->
+    Lam a $ TLam SType $ \b -> Lam b (Var (IS IZ))
+
+
+-- | The constant function with three inputs, encoded as a 'DTerm'.
+-- Provided as an example.
 konst3 :: DTerm vs ('Pi 'SType ('Pi 'SType ('Pi 'SType ('TVar ('IS ('IS 'IZ)) ':-> 'TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS ('IS 'IZ))))))
 konst3 = TLam SType $ \a ->
            TLam SType $ \b ->
              TLam SType $ \c ->
                 Lam a (Lam b (Lam c (Var (IS (IS IZ)))))
 
+-- | The constant function with four inputs, encoded as a 'DTerm'.
+-- Provided as an example.
 konst4 :: DTerm vs ('Pi 'SType ('Pi 'SType ('Pi 'SType ('Pi 'SType ('TVar ('IS ('IS ('IS 'IZ))) ':-> 'TVar ('IS ('IS 'IZ)) ':-> 'TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS ('IS ('IS 'IZ))))))))
 konst4 = TLam SType $ \a ->
            TLam SType $ \b ->
@@ -119,13 +158,8 @@ konst4 = TLam SType $ \a ->
                TLam SType $ \d ->
                  Lam a (Lam b (Lam c (Lam d (Var (IS (IS (IS IZ)))))))
 
-ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
-ident = TLam SType $ \a -> Lam a (Var IZ)
 
-konst' :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst' = TLam SType $ \a ->
-    Lam a $ TLam SType $ \b -> Lam b (Var (IS IZ))
-
+-- | @Natural/build@, encoded as a 'DTerm'.  Provided as an example.
 natBuild
     :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
 natBuild = Lam (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
@@ -137,6 +171,7 @@ natBuild = Lam (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar 
 -- there is asymmetry between Lam and TLam.  maybe use type variables to
 -- address, instead of functions?
 
+-- | @List/build@, encoded as a 'DTerm'.  Provided as an example.
 listBuild
     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
 listBuild = TLam SType $ \a ->
