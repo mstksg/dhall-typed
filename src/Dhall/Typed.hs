@@ -13,11 +13,13 @@ module Dhall.Typed (
   , ident, konst, konst', konst3, konst4, natBuild, listBuild
   ) where
 
+import           Data.Text          (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
 import           Dhall.Typed.Index
 import           Dhall.Typed.Prod
 import qualified Data.Sequence      as Seq
+import qualified Data.Text          as T
 import qualified Dhall.Core         as D
 import qualified Dhall.TypeCheck    as D
 
@@ -34,26 +36,24 @@ import qualified Dhall.TypeCheck    as D
 -- within Dhall itself.
 toTypedType
     :: SDKind k
+    -> Prod SDKind us     -- kinds of free variables
     -> D.Expr () D.X
-    -> Maybe (DType '[] k)
-toTypedType k = \case
+    -> Maybe (DType us k)
+toTypedType k us = \case
 --     | Var Var
 --     | Lam Text (Expr s a) (Expr s a)
 --     | Pi  Text (Expr s a) (Expr s a)
 --     | App (Expr s a) (Expr s a)
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
 --     | Annot (Expr s a) (Expr s a)
-    D.Bool
-      | SType <- k -> Just Bool
-    D.Natural
-      | SType <- k -> Just Natural
+    D.Annot x _ -> toTypedType k us x
+    D.Bool     -> kindcheckType k Bool
+    D.Natural  -> kindcheckType k Natural
 --     | Integer
 --     | Double
 --     | Text
-    D.List
-      | SType :%~> SType <- k -> Just List
-    D.Optional
-      | SType :%~> SType <- k -> Just Optional
+    D.List     -> kindcheckType k List
+    D.Optional -> kindcheckType k Optional
 --     | Record    (Map Text (Expr s a))
 --     | RecordLit (Map Text (Expr s a))
 --     | Union     (Map Text (Expr s a))
@@ -70,6 +70,17 @@ toTypedType k = \case
 --     | Embed a
     _ -> Nothing
 
+kindcheckType
+    :: forall a b us. SDKindI b
+    => SDKind a
+    -> DType us b
+    -> Maybe (DType us a)
+kindcheckType a x = case sameDKind a (sdKind @b) of
+    Just Refl -> Just x
+    Nothing   -> Nothing
+
+
+
 
 -- | Convert an untyped dhall expression into a typed one representing
 -- a Dhall term of a desired type.
@@ -84,7 +95,7 @@ toTypedType k = \case
 -- within Dhall itself.
 toTypedTerm
     :: SDType '[] 'Type a
-    -> Prod (SDType '[] 'Type) vs     -- types of free variables
+    -> Prod (SDType '[] 'Type) vs     -- ^ types of free variables, and original names
     -> D.Expr () D.X
     -> Maybe (DTerm vs a)
 toTypedTerm a vs = \case
