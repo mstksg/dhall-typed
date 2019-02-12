@@ -21,7 +21,6 @@ module Dhall.Typed.Index (
 
 import           Data.Kind
 import           Data.Type.Equality
-import           Data.Type.Predicate
 import           Data.Type.Universe
 import           Dhall.Typed.N
 import qualified GHC.TypeLits        as TL

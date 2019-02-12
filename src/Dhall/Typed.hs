@@ -1,14 +1,17 @@
-{-# LANGUAGE GADTs      #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TypeInType #-}
+{-# LANGUAGE GADTs                          #-}
+{-# LANGUAGE LambdaCase                     #-}
+{-# LANGUAGE TypeInType                     #-}
+{-# LANGUAGE TypeOperators                  #-}
+{-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
 module Dhall.Typed (
     toTypedTerm
   ) where
 
 import           Dhall.Typed.Core
-import qualified Dhall.Core       as D
-import qualified Dhall.TypeCheck  as D
+import           Dhall.Typed.Index
+import qualified Dhall.Core         as D
+import qualified Dhall.TypeCheck    as D
 
 toTypedType
     :: SDKind k
@@ -96,4 +99,7 @@ toTypedTerm a = \case
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 
+konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst = TLam SType $ \a ->
+          TLam SType $ \b -> Lam a (Lam b (Var (IS IZ)))
 

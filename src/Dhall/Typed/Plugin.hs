@@ -1,22 +1,28 @@
-{-# LANGUAGE EmptyCase       #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeFamilies    #-}
+{-# LANGUAGE EmptyCase         #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TupleSections     #-}
+{-# LANGUAGE TypeFamilies      #-}
 
-module Dhall.Typed.Plugin where
+module Dhall.Typed.Plugin (
+    plugin
+  ) where
 
--- module Dhall.Typed.Plugin (
---     plugin
---   ) where
-
+import           Control.Applicative
 import           Control.Monad
-import           Dhall.Typed.Core    ()
+import           Data.Maybe
+import           DataCon
 import           GHC.TcPluginM.Extra
+import           Module
+import           OccName
 import           Plugins
+import           TcEvidence
+import           TcPluginM
 import           TcRnTypes
 import           TyCoRep             (Type (..))
 import           TyCon
 import           Type
+import           TysWiredIn
 
 
 plugin :: Plugin
@@ -27,41 +33,56 @@ plugin = defaultPlugin
 
 subShiftEq :: TcPlugin
 subShiftEq = tracePlugin "dhall-typed-plugin"
-    TcPlugin { tcPluginInit  = return ()
-             , tcPluginSolve = const solveSubShift
+    TcPlugin { tcPluginInit  = lookupDTTC
+             , tcPluginSolve = solveSubShift
              , tcPluginStop  = const (return ())
              }
 
 solveSubShift
-  :: [Ct]
+  :: DTTyCons
+  -> [Ct]
   -> [Ct]
   -> [Ct]
   -> TcPluginM TcPluginResult
-solveSubShift = undefined
-
--- Sub '[ 'Type] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type] 'Type 'Type 'InsZ a)
---  ~ a
+solveSubShift _dtty _givens _deriveds []      = return (TcPluginOk [] [])
+solveSubShift dtty  _  _deriveds wanteds = do
+    let wanteds'     = filter (isWanted . ctEvidence) wanteds
+        unit_wanteds = mapMaybe (toSubShiftEquality dtty) wanteds'
+    pure $ TcPluginOk unit_wanteds []
 
 data DTTyCons = DTTC { dttcSub   :: TyCon       -- ^ 'Dhall.Typed.Core.Sub'
                      , dttcShift :: TyCon       -- ^ 'Dhall.Typed.Core.Shift'
+                     , dttcDKind :: TyCon       -- ^ 'Dhall.Typed.Core.DKind'
                      , dttcDZ    :: TyCon       -- ^ lifted 'Dhall.Typed.Index.DZ'
                      , dttcInsZ  :: TyCon       -- ^ lifted 'Dhall.Typed.Index.IndZ'
-                     , dttcNil   :: TyCon       -- ^ lifted '[]'
-                     , dttcCons  :: TyCon       -- ^ lifted ':'
                      }
 
--- toSubShiftEquality :: DTTyCons -> Ct -> Maybe [(Type, Type)]
--- toSubShiftEquality DTTC{..} ct = case classifyPredType $ ctEvPred $ ctEvidence ct of
---     EqPred NomEq t1 t2 -> go t1 t2
---     _                  -> Nothing
---   where
---     go x y = undefined
+lookupDTTC :: TcPluginM DTTyCons
+lookupDTTC = do
+    core  <- lookupModule (mkModuleNameFS "Dhall.Typed.Core") "dhall-typed"
+    index <- lookupModule (mkModuleNameFS "Dhall.Typed.Index") "dhall-typed"
+    dttcSub   <- tcLookupTyCon   =<< lookupName core (mkTcOccFS "Sub")
+    dttcShift <- tcLookupTyCon   =<< lookupName core (mkTcOccFS "Shift")
+    dttcDKind <- tcLookupTyCon   =<< lookupName core (mkTcOccFS "DKind")    -- should we promote?
+    dttcDZ    <- fmap promoteDataCon . tcLookupDataCon =<< lookupName index (mkDataOccFS "DZ")
+    dttcInsZ  <- fmap promoteDataCon . tcLookupDataCon =<< lookupName index (mkDataOccFS "InsZ")
+    pure DTTC{..}
 
+
+toSubShiftEquality :: DTTyCons -> Ct -> Maybe (EvTerm, Ct)
+toSubShiftEquality dttc ct = (,ct) <$> case classifyPredType $ ctEvPred $ ctEvidence ct of
+    EqPred NomEq t1 t2 -> go t1 t2 <|> go t2 t1
+    _                  -> Nothing
+  where
+    go t1 t2 = do
+      t3 <- subShiftTerm dttc t1
+      guard $ t3 `eqType` t2
+      pure $ evByFiat "sub-shift" t1 t2
 
 -- |
 --
 -- @
--- Sub '[j] '[] j k j 'DZ b (Shift '[] '[j] j k 'InsZ a))
+-- Sub '[j] '[] j k 'DZ b (Shift '[] '[j] j k 'InsZ a))
 -- -- => a
 -- @
 --
@@ -72,62 +93,42 @@ subShiftTerm
     -> Type
     -> Maybe Type
 subShiftTerm DTTC{..} t = do
-    sub   `TyConApp` [ TyConApp c0 [TyConApp j0 [], TyConApp n0 []]
-                     , TyConApp n1 []
+    sub   `TyConApp` [ TyConApp c0 [ TyConApp dk0 []
+                                   , TyConApp j0 []
+                                   , TyConApp n0 [TyConApp dk1 []]
+                                   ]
+                     , TyConApp n1 [ TyConApp dk2 [] ]
                      , TyConApp j1 []
                      , TyConApp k0 []
-                     , TyConApp j2 []
-                     , TyConApp d []
+                     , TyConApp d  [ TyConApp dk3 []
+                                   , TyConApp j2 []
+                                   , TyConApp n2 [TyConApp dk4 []]
+                                   ]
                      , _
                      , r
                      ] <- Just t
-    shift `TyConApp` [ TyConApp n2 []
-                     , TyConApp c1 [TyConApp j3 [], TyConApp n3 []]
+    shift `TyConApp` [ TyConApp n3 [ TyConApp dk5 [] ]
+                     , TyConApp c1 [ TyConApp dk6 []
+                                   , TyConApp j3 []
+                                   , TyConApp n4 [TyConApp dk7 []]
+                                   ]
                      , TyConApp j4 []
                      , TyConApp k1 []
-                     , TyConApp i  []
+                     , TyConApp i  [ TyConApp dk8 []
+                                   , TyConApp n5 [TyConApp dk9 []]
+                                   , TyConApp j5  []
+                                   ]
                      , a
                      ] <- Just r
     guard . and $
-      [ j0 == j1 && j1 == j2 && j2 == j3 && j3 == j4
+      [ j0 == j1 && j1 == j2 && j2 == j3 && j3 == j4 && j4 == j5
       , k0 == k1
-      , all (== dttcNil ) [n0, n1, n2, n3]
-      , all (== dttcCons) [c0, c1]
+      , all (== promotedNilDataCon ) [n0, n1, n2, n3, n4, n5]
+      , all (== promotedConsDataCon) [c0, c1]
+      , all (== dttcDKind)           [dk0, dk1, dk2, dk3, dk4, dk5, dk6, dk7, dk8, dk9]
       , sub   == dttcSub
       , shift == dttcShift
       , d     == dttcDZ
       , i     == dttcInsZ
       ]
     pure a
-
-    -- go (TyConApp tc xs) (TyConApp tc' ys)
-    --   | tc == tc'
-    --   , null ([tc,tc'] `intersect` [typeNatAddTyCon,typeNatSubTyCon
-    --                                ,typeNatMulTyCon,typeNatExpTyCon])
-    --   = case filter (not . uncurry eqType) (zip xs ys) of
-    --       [(x,y)]
-    --         | isNatKind (typeKind x)
-    --         , isNatKind (typeKind y)
-    --         , let (x',k1) = runWriter (normaliseNat x)
-    --         , let (y',k2) = runWriter (normaliseNat y)
-    --         -> Just (Left (ct, x', y'),k1 ++ k2)
-    --       _ -> Nothing
-    --   | tc == typeNatLeqTyCon
-    --   , [x,y] <- xs
-    --   , let (x',k1) = runWriter (normaliseNat x)
-    --   , let (y',k2) = runWriter (normaliseNat y)
-    --   , let ks      = k1 ++ k2
-    --   = case tc' of
-    --      _ | tc' == promotedTrueDataCon
-    --        -> Just (Right (ct, (x', y', True)), ks)
-    --      _ | tc' == promotedFalseDataCon
-    --        -> Just (Right (ct, (x', y', False)), ks)
-    --      _ -> Nothing
-    -- go x y
-    --   | isNatKind (typeKind x)
-    --   , isNatKind (typeKind y)
-    --   , let (x',k1) = runWriter (normaliseNat x)
-    --   , let (y',k2) = runWriter (normaliseNat y)
-    --   = Just (Left (ct,x',y'),k1 ++ k2)
-    --   | otherwise
-    --   = Nothing

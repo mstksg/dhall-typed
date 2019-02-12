@@ -21,7 +21,6 @@
 {-# LANGUAGE TypeSynonymInstances           #-}
 {-# LANGUAGE UndecidableInstances           #-}
 {-# LANGUAGE ViewPatterns                   #-}
--- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
 module Dhall.Typed.Core (
   -- * Kinds
@@ -434,11 +433,16 @@ naturalFold n s = go n
     go 0 !x = x
     go i !x = go (i - 1) (s x)
 
+-- | This is automatically resolved if you turn on the typechecker plugin
+--
+-- @
+-- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
+-- @
 subIns
     :: forall k j a b. ()
     => SDType '[] k a
     -> SDType '[] j b
-    -> (a :~: Sub '[j] '[] j k 'DZ b (Shift '[] '[j] j k 'InsZ a))
+    -> (a :~: Sub '[j] '[] j k ('DZ :: Delete '[j] '[] j) b (Shift '[] '[j] j k ('InsZ :: Insert '[] '[j] j) a))
 subIns _ _ = unsafeCoerce $ Refl @a
 
 konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
