@@ -1,5 +1,8 @@
+{-# LANGUAGE FlexibleContexts               #-}
 {-# LANGUAGE GADTs                          #-}
 {-# LANGUAGE LambdaCase                     #-}
+{-# LANGUAGE ScopedTypeVariables            #-}
+{-# LANGUAGE TypeApplications               #-}
 {-# LANGUAGE TypeInType                     #-}
 {-# LANGUAGE TypeOperators                  #-}
 {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
@@ -10,11 +13,13 @@ module Dhall.Typed (
   , ident, konst, konst', konst3, konst4, natBuild, listBuild
   ) where
 
+import           Data.Type.Equality
 import           Dhall.Typed.Core
 import           Dhall.Typed.Index
-import qualified Data.Sequence     as Seq
-import qualified Dhall.Core        as D
-import qualified Dhall.TypeCheck   as D
+import           Dhall.Typed.Prod
+import qualified Data.Sequence      as Seq
+import qualified Dhall.Core         as D
+import qualified Dhall.TypeCheck    as D
 
 -- | Convert an untyped Dhall expression into a typed one with no free
 -- variables representing a Dhall type of a desired kind.
@@ -79,35 +84,39 @@ toTypedType k = \case
 -- within Dhall itself.
 toTypedTerm
     :: SDType '[] 'Type a
+    -> Prod (SDType '[] 'Type) vs     -- types of free variables
     -> D.Expr () D.X
-    -> Maybe (DTerm '[] a)
-toTypedTerm a = \case
+    -> Maybe (DTerm vs a)
+toTypedTerm a vs = \case
 --     | Var Var
 --     | Lam Text (Expr s a) (Expr s a)
 --     | App (Expr s a) (Expr s a)
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
---     | Annot (Expr s a) (Expr s a)
-    D.BoolLit b
-      | SBool    <- a -> Just $ BoolLit b
+    D.Annot x _  -> toTypedTerm a vs x
+    D.BoolLit b  -> typecheckTerm a $ BoolLit b
 --     | BoolAnd (Expr s a) (Expr s a)
 --     | BoolOr  (Expr s a) (Expr s a)
 --     | BoolEQ  (Expr s a) (Expr s a)
 --     | BoolNE  (Expr s a) (Expr s a)
 --     | BoolIf (Expr s a) (Expr s a) (Expr s a)
-    D.NaturalLit n
-      | SNatural <- a -> Just $ NaturalLit n
-    D.NaturalFold
-      | SNatural :%-> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) <- a
-      -> Just NaturalFold
---     | NaturalFold
---     | NaturalBuild
---     | NaturalIsZero
+    D.NaturalLit n  -> typecheckTerm a $ NaturalLit n
+    D.NaturalFold   -> typecheckTerm a $ NaturalFold
+    D.NaturalBuild  -> typecheckTerm a $ NaturalBuild
+    D.NaturalIsZero -> typecheckTerm a $ NaturalIsZero
 --     | NaturalEven
 --     | NaturalOdd
 --     | NaturalToInteger
 --     | NaturalShow
---     | NaturalPlus (Expr s a) (Expr s a)
---     | NaturalTimes (Expr s a) (Expr s a)
+    D.NaturalPlus x y -> do
+      Refl <- a `sameDType` SNatural
+      x'   <- toTypedTerm SNatural vs x
+      y'   <- toTypedTerm SNatural vs y
+      pure $ NaturalPlus x' y'
+    D.NaturalTimes x y -> do
+      Refl <- a `sameDType` SNatural
+      x'   <- toTypedTerm SNatural vs x
+      y'   <- toTypedTerm SNatural vs y
+      pure $ NaturalTimes x' y'
 --     | IntegerLit Integer
 --     | IntegerShow
 --     | IntegerToDouble
@@ -121,8 +130,10 @@ toTypedTerm a = \case
 --     | ListFold
 --     | ListLength
 --     | ListIndexed
+--     | OptionalLit (Expr s a) (Maybe (Expr s a))
 --     | OptionalFold
 --     | OptionalBuild
+    D.None -> typecheckTerm a None
 --     | RecordLit (Map Text (Expr s a))
 --     | UnionLit Text (Expr s a) (Map Text (Expr s a))
 --     | Combine (Expr s a) (Expr s a)
@@ -134,6 +145,32 @@ toTypedTerm a = \case
 --     | ImportAlt (Expr s a) (Expr s a)
 --     | Embed a
     _ -> Nothing
+    -- ListLit       :: SDType '[] 'Type a
+    --               -> Seq (DTerm vs a)
+    --               -> DTerm vs ('List ':$ a)
+    -- ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
+    -- ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+    -- ListAppend    :: DTerm vs ('List ':$ a)
+    --               -> DTerm vs ('List ':$ a)
+    --               -> DTerm vs ('List ':$ a)
+    -- ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    -- ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    -- ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
+    -- OptionalLit   :: SDType '[] 'Type a
+    --               -> Maybe (DTerm vs a)
+    --               -> DTerm vs ('Optional ':$ a)
+    -- Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
+
+typecheckTerm
+    :: forall a b vs. SDTypeI '[] 'Type b
+    => SDType '[] 'Type a
+    -> DTerm vs b
+    -> Maybe (DTerm vs a)
+typecheckTerm a x = case sameDType a (sdType @_ @_ @b) of
+    Just Refl -> Just x
+    Nothing   -> Nothing
+
+
 
 
 -- -- | Syntax tree for expressions
