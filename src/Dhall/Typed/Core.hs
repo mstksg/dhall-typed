@@ -42,17 +42,18 @@ module Dhall.Typed.Core (
   ) where
 
 import           Data.Kind
-import           Data.Sequence                                (Seq(..))
-import           Data.Singletons.Prelude.List                 (Sing(..))
-import           Data.Singletons.TH hiding                    (Sum)
+import           Data.Sequence                (Seq(..))
+import           Data.Singletons.Prelude.List (Sing(..))
+import           Data.Singletons.TH hiding    (Sum)
+import           Data.Type.Equality
 import           Data.Type.Universe
 import           Dhall.Typed.Index
 import           Dhall.Typed.Option
 import           Dhall.Typed.Prod
 import           Numeric.Natural
-import           Unsafe.Coerce                                (unsafeCoerce)
-import qualified Data.Sequence                                as Seq
-import qualified GHC.TypeLits                                 as TL
+import           Unsafe.Coerce                (unsafeCoerce)
+import qualified Data.Sequence                as Seq
+import qualified GHC.TypeLits                 as TL
 
 -- | Represents the possible kinds encountered in Dhall.
 data DKind = Type | DKind :~> DKind
@@ -71,6 +72,10 @@ deriving instance Show (SDKind k)
 data instance Sing (k :: DKind) where
     SDK :: SDKind k -> Sing k
 
+type family SDKindOf (k :: DKind) = (s :: SDKind k) | s -> k where
+    SDKindOf 'Type = 'SType
+    SDKindOf (a ':~> b) = SDKindOf a ':%~> SDKindOf b
+
 -- | Typeclass for automatically generating singletons for a 'DType'.
 -- Analogous to 'SingI' for 'Sing'.
 class SDKindI (k :: DKind) where
@@ -83,7 +88,7 @@ instance (SDKindI a, SDKindI b) => SDKindI (a ':~> b) where
 
 -- | Compare two type-level 'DKind' for equality.
 sameDKind :: SDKind k -> SDKind j -> Maybe (k :~: j)
-sameDKind = \case 
+sameDKind = \case
     SType -> \case
       SType -> Just Refl
       _     -> Nothing
@@ -215,7 +220,7 @@ type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs a) (r :: DType as
 -- TODO: TLet
 data SDType us k :: DType us k -> Type where
     STVar     :: SIndex us a i -> SDType us a ('TVar i)
-    SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)
+    SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (SDKindOf a) x)
     (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
     (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
     SBool     :: SDType us 'Type 'Bool
@@ -233,6 +238,8 @@ deriving instance Show (SDType us k a)
 data instance Sing (a :: DType us k) where
     SDTy :: SDType us k a -> Sing a
 
+type family SDTypeOf us k (a :: DType us k) = (s :: SDType us k a) | s -> a where
+
 -- | Typeclass for automatically generating singletons for a 'DType'.
 -- Analogous to 'SingI' for 'Sing', but with explicit kind parameters.
 class SDTypeI us k (a :: DType us k) where
@@ -240,7 +247,7 @@ class SDTypeI us k (a :: DType us k) where
 
 instance SIndexI us a i => SDTypeI us a ('TVar i) where
     sdType = STVar sIndex
-instance (SDKindI a, SDTypeI (a ': us) b x) => SDTypeI us b ('Pi (u :: SDKind a) x) where
+instance (SDKindI a, SDTypeI (a ': us) b x, u ~ SDKindOf a) => SDTypeI us b ('Pi u x) where
     sdType = SPi sdKind sdType
 instance (SDTypeI us (r ':~> k) f, SDTypeI us r x) => SDTypeI us k (f ':$ x) where
     sdType = sdType :%$ sdType
@@ -274,12 +281,11 @@ sameDTypeWith vs a = \case
       | STVar j   <- a
       , Just Refl <- sSameIx i j
       -> Just Refl
-    -- SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)
     SPi u x
       | SPi v y   <- a
       , Just Refl <- sameDKind u v
       , Just Refl <- sameDTypeWith (u :< vs) x y
-      -> Nothing    -- TODO
+      -> Just Refl
     f :%$ x
       | g :%$ y   <- a
       , Just Refl <- sameDKind (kindOfWith vs f) (kindOfWith vs g)
@@ -343,8 +349,8 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     -- Show and Eq instances
     TLam          :: SDKind k
                   -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
-                  -> DTerm vs ('Pi (u :: SDKind k) b)
-    TApp          :: DTerm vs ('Pi (u :: SDKind k) b)
+                  -> DTerm vs ('Pi (SDKindOf k) b)
+    TApp          :: DTerm vs ('Pi (SDKindOf k) b)
                   -> SDType '[] k a
                   -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
     BoolLit       :: Bool
@@ -376,6 +382,30 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> DTerm vs ('Optional ':$ a)
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
+
+-- type family MapPi (k :: DKind) (us :: [DKind]) (q :: SDKind k) (vs :: [DType (k ': us) 'Type]) = (qs :: [DType us 'Type]) where
+--     MapPi k us q '[]       = '[]
+--     MapPi k us q (b ': bs) =  'Pi q b ': MapPi k us q bs
+
+-- data DTerm2 us :: [DType us 'Type] -> DType us 'Type -> Type where
+--     Var2          :: Index vs a
+--                   -> DTerm2 us vs a
+--     Lam2          :: SDType us 'Type a
+--                   -> DTerm2 us (a ': vs) b
+--                   -> DTerm2 us vs (a ':-> b)
+--     TLam2 :: SDKind k
+--           -> DTerm2 (k ': us) vs b
+--           -> DTerm2 us (MapPi k us (SDKindOf k) vs) ('Pi (SDKindOf k) b)
+--     TApp2 :: DTerm2 us vs ('Pi (SDKindOf k) b)
+--           -> SDType us k a
+--           -> DTerm2 us vs (Sub (k ': us) us k 'Type 'DZ a b)
+
+-- konst :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst = TLam2 @_ @_ @'[] SType $
+--           TLam2 @_ @_ @'[] SType $
+--             Lam2 (STVar (SIS SIZ)) $
+--             Lam2 (STVar SIZ) $
+--               Var2 (IS IZ)
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -439,7 +469,7 @@ data SDTerm vs t :: DTerm vs t -> Type where
                    -> SDTerm vs a ('Var i)
     SLam           :: SDType '[] 'Type a
                    -> SDTerm (a ': vs) b x
-                   -> SDTerm vs (a ':-> b) ('Lam (u :: SDType '[] 'Type a) x)
+                   -> SDTerm vs (a ':-> b) ('Lam (SDTypeOf '[] 'Type a) x)
     SApp           :: SDTerm vs (a ':-> b) f
                    -> SDTerm vs a x
                    -> SDTerm vs b ('App f x)
@@ -448,7 +478,7 @@ data SDTerm vs t :: DTerm vs t -> Type where
     -- TLam          :: SDKind k
     --               -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
     --               -> DTerm vs ('Pi (u :: SDKind k) b)
-    STApp          :: SDTerm vs ('Pi (u :: SDKind k) b) x
+    STApp          :: SDTerm vs ('Pi (SDKindOf k) b) x
                    -> SDType '[] k a
                    -> SDTerm vs (Sub '[k] '[] k 'Type 'DZ a b) ('TApp x (q :: SDType '[] k a))
     SBoolLit       :: Sing b
@@ -467,7 +497,7 @@ data SDTerm vs t :: DTerm vs t -> Type where
     SListLit       :: SeqListEq xs xs'
                    -> SDType '[] 'Type a
                    -> Prod (SDTerm vs a) xs'
-                   -> SDTerm vs ('List ':$ a) ('ListLit (u :: SDType '[] 'Type a) xs)
+                   -> SDTerm vs ('List ':$ a) ('ListLit (SDTypeOf '[] 'Type a) xs)
     SListFold      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))) 'ListFold
     SListBuild     :: SDTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ)) 'ListBuild
     SListAppend    :: SDTerm vs ('List ':$ a) xs
@@ -478,7 +508,7 @@ data SDTerm vs t :: DTerm vs t -> Type where
     SListReverse   :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ)) 'ListReverse
     SOptionalLit   :: SDType '[] 'Type a
                    -> Option (SDTerm vs a) o
-                   -> SDTerm vs ('Optional ':$ a) ('OptionalLit (u :: SDType '[] 'Type a) o)
+                   -> SDTerm vs ('Optional ':$ a) ('OptionalLit (SDTypeOf '[] 'Type a) o)
     SSome          :: SDTerm vs a x -> SDTerm vs ('Optional ':$ a) ('Some x)
     SNone          :: SDTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ)) 'None
 

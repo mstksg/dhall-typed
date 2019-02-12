@@ -96,6 +96,9 @@ toTypedTerm a = \case
 --     | BoolIf (Expr s a) (Expr s a) (Expr s a)
     D.NaturalLit n
       | SNatural <- a -> Just $ NaturalLit n
+    D.NaturalFold
+      | SNatural :%-> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) <- a
+      -> Just NaturalFold
 --     | NaturalFold
 --     | NaturalBuild
 --     | NaturalIsZero
