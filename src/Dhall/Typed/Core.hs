@@ -30,61 +30,28 @@ module Dhall.Typed.Core (
   , DType(..), SDType(..), kindOf
   , Sub, Shift
   -- * Terms
-  , DTerm(..), SDTerm(..), SeqListEq(..), typeOf
+  , DTerm(..), Bindings(..), SDTerm(..), SeqListEq(..), typeOf
   -- * Evaluation
   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
-  , fromTerm, toTerm
+  , fromTerm, fromTermWith, toTerm
   -- * Manipulation
   , sShift, sShift_, subIns
   -- * Samples
   , ident, konst, konst2, natBuild, listBuild
   ) where
 
-import           Control.Applicative hiding                (Const(..))
-import           Control.Monad
-import           Data.Foldable
-import           Data.Functor
-import           Data.Functor.Identity
 import           Data.Kind
-import           Data.List hiding                          (delete)
-import           Data.List.NonEmpty                        (NonEmpty(..))
-import           Data.Maybe
-import           Data.Profunctor
-import           Data.Sequence                             (Seq(..))
-import           Data.Sequence                             (Seq)
-import           Data.Singletons
-import           Data.Singletons.Prelude.List              (Sing(..))
-import           Data.Singletons.Prelude.Maybe
-import           Data.Singletons.Prelude.Tuple
-import           Data.Singletons.Sigma
-import           Data.Singletons.TH hiding                 (Sum)
-import           Data.Singletons.TypeLits
-import           Data.Text                                 (Text)
-import           Data.Traversable
-import           Data.Type.Equality
+import           Data.Sequence                                (Seq(..))
+import           Data.Singletons.Prelude.List                 (Sing(..))
+import           Data.Singletons.TH hiding                    (Sum)
 import           Data.Type.Universe
-import           Data.Void
-import           Debug.Trace
 import           Dhall.Typed.Index
-import           Dhall.Typed.N
 import           Dhall.Typed.Option
 import           Dhall.Typed.Prod
-import           Dhall.Typed.Sum
-import           GHC.Generics
-import           GHC.TypeLits                              (Symbol)
 import           Numeric.Natural
-import           Text.Printf
-import           Unsafe.Coerce                             (unsafeCoerce)
-import qualified Control.Applicative                       as P
-import qualified Data.List.NonEmpty                        as NE
-import qualified Data.Sequence                             as Seq
-import qualified Data.Text                                 as T
-import qualified Dhall                         as D hiding (Type)
-import qualified Dhall.Context                             as D
-import qualified Dhall.Core                                as D
-import qualified Dhall.Map                                 as M
-import qualified Dhall.TypeCheck                           as D
-import qualified GHC.TypeLits                              as TL
+import           Unsafe.Coerce                                (unsafeCoerce)
+import qualified Data.Sequence                                as Seq
+import qualified GHC.TypeLits                                 as TL
 
 data DKind = Type | DKind :~> DKind
   deriving (Eq, Ord, Show)
@@ -211,6 +178,12 @@ kindOf vs = \case
     SList -> SType :%~> SType
     SOptional -> SType :%~> SType
 
+data Bindings :: [DType '[] 'Type] -> [DType '[] 'Type] -> Type where
+    BNil  :: DTerm vs a -> Bindings vs (a ': vs)
+    (:<?) :: DTerm vs a -> Bindings (a ': vs) us -> Bindings vs us
+
+infixr 5 :<?
+
 data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Var           :: Index vs a
                   -> DTerm vs a
@@ -220,6 +193,9 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     App           :: DTerm vs (a ':-> b)
                   -> DTerm vs a
                   -> DTerm vs b
+    Let           :: Bindings vs us
+                  -> DTerm us a
+                  -> DTerm vs a
     TLam          :: SDKind k
                   -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
                   -> DTerm vs ('Pi (u :: SDKind k) b)
@@ -386,35 +362,47 @@ ident = TLam SType $ \a -> Lam a (Var IZ)
 
 newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 
-fromTerm :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
-fromTerm vs = \case
+fromTerm :: DTerm '[] a -> DTypeRep 'Type a
+fromTerm = fromTermWith Ø
+
+fromBindings
+    :: Prod DTypeRepVal vs
+    -> Bindings vs us
+    -> Prod DTypeRepVal us
+fromBindings vs = \case
+    BNil b   -> DTRV (fromTermWith vs b) :< vs
+    b :<? bs -> fromBindings (DTRV (fromTermWith vs b) :< vs) bs
+
+fromTermWith :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
+fromTermWith vs = \case
     Var i            -> getDTRV $ ixProd vs i
-    Lam _ x          -> \y -> fromTerm (DTRV y :< vs) x
-    App f x          -> fromTerm vs f (fromTerm vs x)
-    TLam _ f         -> FA (fromTerm vs . f)
-    TApp f x         -> runForall (fromTerm vs f) x
+    Lam _ x          -> \y -> fromTermWith (DTRV y :< vs) x
+    Let bs x         -> fromTermWith (fromBindings vs bs) x
+    App f x          -> fromTermWith vs f (fromTermWith vs x)
+    TLam _ f         -> FA (fromTermWith vs . f)
+    TApp f x         -> runForall (fromTermWith vs f) x
     BoolLit b        -> b
     NaturalLit n     -> n
     NaturalFold      -> \n -> FA $ \_ s z -> naturalFold n s z
     NaturalBuild     -> \f -> runForall f SNatural (+ 1) 0
-    NaturalPlus x y  -> fromTerm vs x + fromTerm vs y
-    NaturalTimes x y -> fromTerm vs x * fromTerm vs y
+    NaturalPlus x y  -> fromTermWith vs x + fromTermWith vs y
+    NaturalTimes x y -> fromTermWith vs x * fromTermWith vs y
     NaturalIsZero    -> (== 0)
-    ListLit _ xs     -> fromTerm vs <$> xs
+    ListLit _ xs     -> fromTermWith vs <$> xs
     ListFold         -> FA $ \a xs -> FA $ \l cons nil -> case subIns a l of
                           Refl -> foldr cons nil xs
     -- example of sub-ins living under a type family (DTypeRep
     ListBuild        -> FA $ \a f -> case subIns a (SList :%$ a) of
                           Refl -> runForall f (SList :%$ a) (Seq.<|) Seq.empty
-    ListAppend xs ys -> fromTerm vs xs <> fromTerm vs ys
+    ListAppend xs ys -> fromTermWith vs xs <> fromTermWith vs ys
     -- TODO: any way to not require dummy argument?
     ListHead         -> FA $ \_ -> \case x Seq.:<| _ -> Just x
                                          Seq.Empty   -> Nothing
     ListLast         -> FA $ \_ -> \case _ Seq.:|> x -> Just x
                                          Seq.Empty   -> Nothing
     ListReverse      -> FA $ \_ -> Seq.reverse
-    OptionalLit _ x  -> fromTerm vs <$> x
-    Some x           -> Just $ fromTerm vs x
+    OptionalLit _ x  -> fromTermWith vs <$> x
+    Some x           -> Just $ fromTermWith vs x
     None             -> FA $ \_ -> Nothing
 
 -- toTerm might not be possible.
