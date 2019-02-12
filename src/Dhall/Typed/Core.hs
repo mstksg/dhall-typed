@@ -35,8 +35,6 @@ module Dhall.Typed.Core (
   , fromTerm, fromTermWith, toTerm
   -- * Manipulation
   , sShift, sShift_, subIns
-  -- * Samples
-  , ident, konst, konst2, natBuild, listBuild
   ) where
 
 import           Data.Kind
@@ -356,9 +354,6 @@ typeOf vs = \case
     SSome x           -> SOptional :%$ typeOf vs x
     SNone             -> SPi SType (SOptional :%$ STVar SIZ)
 
-ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
-ident = TLam SType $ \a -> Lam a (Var IZ)
-
 newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 
 fromTerm :: DTerm '[] a -> DTypeRep 'Type a
@@ -445,38 +440,24 @@ subIns
     -> (a :~: Sub '[j] '[] j k ('DZ :: Delete '[j] '[] j) b (Shift '[] '[j] j k ('InsZ :: Insert '[] '[j] j) a))
 subIns _ _ = unsafeCoerce $ Refl @a
 
-konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst = TLam SType $ \a ->
-          TLam SType $ \b ->
-            case subIns a b of
-              Refl -> Lam a (Lam b (Var (IS IZ)))
-
-konst2 :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst2 = TLam SType $ \a ->
-    Lam a $ TLam SType $ \b ->
-      case subIns a b of
-        Refl -> Lam b (Var (IS IZ))
-
-natBuild
-    :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
-natBuild = Lam (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
-           Var IZ
-    `TApp` SNatural
-     `App` Lam SNatural (NaturalPlus (Var IZ) (NaturalLit 1))
-     `App` NaturalLit 0
-
--- there is asymmetry between Lam and TLam.  maybe use type variables to
--- address, instead of functions?
-
-listBuild
-    :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
-listBuild = TLam SType $ \a ->
-    Lam (SPi SType ((sShift a :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
-      case subIns a (SList :%$ a) of
-        Refl ->   Var IZ
-          `TApp` (SList :%$ a)
-           `App` Lam a (Lam (SList :%$ a) (ListAppend (ListLit a (Seq.singleton (Var (IS IZ)))) (Var IZ)))
-           `App` ListLit a Seq.empty
+-- | This is automatically resolved if you turn on the typechecker plugin
+--
+-- @
+-- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
+-- @
+subIns2
+    :: SDType '[] k a
+    -> SDType '[] j b
+    -> SDType '[] l c
+    -> (a :~:
+        Sub '[ l ] '[] l k 'DZ c
+          (Sub '[l, j] '[ l ] j k ('DS 'DZ) (Shift '[] '[ l ] l j 'InsZ b)
+              (Shift '[ j ] '[ l, j ] l k 'InsZ
+                 (Shift '[] '[ j ] j k 'InsZ a)
+              )
+          )
+       )
+subIns2 _ _ _ = unsafeCoerce $ Refl
 
 sShift
     :: SDType as k x

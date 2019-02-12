@@ -1,8 +1,13 @@
-{-# LANGUAGE EmptyCase         #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TupleSections     #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE EmptyCase           #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE KindSignatures      #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TypeInType          #-}
 
 module Dhall.Typed.Plugin (
     plugin
@@ -10,8 +15,11 @@ module Dhall.Typed.Plugin (
 
 import           Control.Applicative
 import           Control.Monad
+import           Data.Functor
 import           Data.Maybe
 import           DataCon
+import           Outputable
+import           Dhall.Typed.N
 import           GHC.TcPluginM.Extra
 import           Module
 import           OccName
@@ -23,6 +31,7 @@ import           TyCoRep             (Type (..))
 import           TyCon
 import           Type
 import           TysWiredIn
+import qualified Data.Kind           as K
 
 
 plugin :: Plugin
@@ -54,6 +63,7 @@ data DTTyCons = DTTC { dttcSub   :: TyCon       -- ^ 'Dhall.Typed.Core.Sub'
                      , dttcShift :: TyCon       -- ^ 'Dhall.Typed.Core.Shift'
                      , dttcDKind :: TyCon       -- ^ 'Dhall.Typed.Core.DKind'
                      , dttcDZ    :: TyCon       -- ^ lifted 'Dhall.Typed.Index.DZ'
+                     , dttcDS    :: TyCon       -- ^ lifted 'Dhall.Typed.Index.DZ'
                      , dttcInsZ  :: TyCon       -- ^ lifted 'Dhall.Typed.Index.IndZ'
                      }
 
@@ -65,6 +75,7 @@ lookupDTTC = do
     dttcShift <- tcLookupTyCon   =<< lookupName core (mkTcOccFS "Shift")
     dttcDKind <- tcLookupTyCon   =<< lookupName core (mkTcOccFS "DKind")    -- should we promote?
     dttcDZ    <- fmap promoteDataCon . tcLookupDataCon =<< lookupName index (mkDataOccFS "DZ")
+    dttcDS    <- fmap promoteDataCon . tcLookupDataCon =<< lookupName index (mkDataOccFS "DS")
     dttcInsZ  <- fmap promoteDataCon . tcLookupDataCon =<< lookupName index (mkDataOccFS "InsZ")
     pure DTTC{..}
 
@@ -79,6 +90,91 @@ toSubShiftEquality dttc ct = (,ct) <$> case classifyPredType $ ctEvPred $ ctEvid
       guard $ t3 `eqType` t2
       pure $ evByFiat "sub-shift" t1 t2
 
+
+-- Sub 0 X (Shift X)
+--
+-- Sob 0 - x
+--       \ Shift x
+--
+-- Sub 0 X (Sub 1 (Shift X) (Shift (Shift X)))
+--
+-- Sub 0 - X
+--       \ Sub 1 - Shift X
+--               \ Shift (Shift X)
+--
+-- Sub 0 X (Sub 1 (Shift X) (Sub 2 (Shift (Shift X)) (Shift (Shift (Shift X)))
+--
+-- Sub 0 - X
+--       \ Sub 1 - Shift X
+--               \ Sub 2   - Shift (Shift X)
+--                         \ Shift (Shift (Shift X))
+
+data ShiftMatch :: N -> K.Type where
+    ShiftMatch :: Type -> ShiftMatch n
+
+data SubMatch :: N -> K.Type where
+    SubMatch :: ShiftMatch n
+             -> Either (ShiftMatch ('S n)) (SubMatch ('S n))
+             -> SubMatch n
+
+finalMatch
+    :: SubMatch n
+    -> Type
+finalMatch (SubMatch _ y) = case y of
+    Left (ShiftMatch x) -> x
+    Right s             -> finalMatch s
+
+parseShift
+    :: DTTyCons
+    -> Sing n
+    -> Type
+    -> Maybe (ShiftMatch n)
+parseShift DTTC{..} = go
+  where
+    go :: Sing m -> Type -> Maybe (ShiftMatch m)
+    go = \case
+      SZ   -> pure . ShiftMatch
+      SS m -> \t -> do
+        shift `TyConApp` [ _ , _ , _ , _ , TyConApp ins _ , a ] <- Just t
+        guard $ shift == dttcShift
+             && ins   == dttcInsZ
+        ShiftMatch b <- go m a
+        pure $ ShiftMatch b
+
+parseSub
+    :: DTTyCons
+    -> Sing n
+    -> Type
+    -> Maybe (SubMatch n)
+parseSub tc@DTTC{..} = go
+  where
+    go :: Sing m -> Type -> Maybe (SubMatch m)
+    go n t = do
+      sub `TyConApp` [_, _, _, _, del, s, a] <- Just t
+      guard $ sub == dttcSub
+           && parseDel tc n del
+      shift <- parseShift tc n s
+      rest  <- (Left  <$> parseShift tc (SS n) a)
+           <|> (Right <$> go (SS n) a           )
+      pure $ SubMatch shift rest
+
+parseDel
+    :: forall (n :: N). ()
+    => DTTyCons
+    -> Sing n
+    -> Type
+    -> Bool
+parseDel DTTC{..} = go
+  where
+    go :: forall (m :: N). Sing m -> Type -> Bool
+    go = \case
+      SZ -> \case
+        dz `TyConApp` _ -> dz == dttcDZ
+        _               -> False
+      SS n -> \case
+        ds `TyConApp` [_, _, _, _, _, d] -> ds == dttcDS && go n d
+        _                                -> False
+
 -- |
 --
 -- @
@@ -86,49 +182,17 @@ toSubShiftEquality dttc ct = (,ct) <$> case classifyPredType $ ctEvPred $ ctEvid
 -- -- => a
 -- @
 --
---
--- TODO: double/triple Pi's? check.
+-- @
+-- Sub '[ l ] '[] l k 'DZ c
+--   (Sub '[l, j] '[ l ] j k ('DS 'DZ) (Shift '[] '[ l ] l j 'InsZ b)
+--       (Shift '[ j ] '[ l, j ] l k 'InsZ
+--          (Shift '[] '[ j ] j k 'InsZ a)
+--       )
+--   )
+-- -- => a
+-- @
 subShiftTerm
     :: DTTyCons
     -> Type
     -> Maybe Type
-subShiftTerm DTTC{..} t = do
-    sub   `TyConApp` [ TyConApp c0 [ TyConApp dk0 []
-                                   , TyConApp j0 []
-                                   , TyConApp n0 [TyConApp dk1 []]
-                                   ]
-                     , TyConApp n1 [ TyConApp dk2 [] ]
-                     , TyConApp j1 []
-                     , TyConApp k0 []
-                     , TyConApp d  [ TyConApp dk3 []
-                                   , TyConApp j2 []
-                                   , TyConApp n2 [TyConApp dk4 []]
-                                   ]
-                     , _
-                     , r
-                     ] <- Just t
-    shift `TyConApp` [ TyConApp n3 [ TyConApp dk5 [] ]
-                     , TyConApp c1 [ TyConApp dk6 []
-                                   , TyConApp j3 []
-                                   , TyConApp n4 [TyConApp dk7 []]
-                                   ]
-                     , TyConApp j4 []
-                     , TyConApp k1 []
-                     , TyConApp i  [ TyConApp dk8 []
-                                   , TyConApp n5 [TyConApp dk9 []]
-                                   , TyConApp j5  []
-                                   ]
-                     , a
-                     ] <- Just r
-    guard . and $
-      [ j0 == j1 && j1 == j2 && j2 == j3 && j3 == j4 && j4 == j5
-      , k0 == k1
-      , all (== promotedNilDataCon ) [n0, n1, n2, n3, n4, n5]
-      , all (== promotedConsDataCon) [c0, c1]
-      , all (== dttcDKind)           [dk0, dk1, dk2, dk3, dk4, dk5, dk6, dk7, dk8, dk9]
-      , sub   == dttcSub
-      , shift == dttcShift
-      , d     == dttcDZ
-      , i     == dttcInsZ
-      ]
-    pure a
+subShiftTerm d = fmap finalMatch . parseSub d SZ

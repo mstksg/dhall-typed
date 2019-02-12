@@ -23,6 +23,7 @@ ghc-options:
 - -Wall
 - -Wcompat
 - -Wredundant-constraints
+- -fobject-code
 # - -Werror=incomplete-patterns
 
 dependencies:

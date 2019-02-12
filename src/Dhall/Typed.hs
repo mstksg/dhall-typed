@@ -5,10 +5,13 @@
 {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
 module Dhall.Typed (
-    toTypedTerm
+    toTypedType, toTypedTerm
+  -- * Samples
+  , ident, konst, konst', konst3, konst4, natBuild, listBuild
   ) where
 
 import           Dhall.Typed.Core
+import qualified Data.Sequence as Seq
 import           Dhall.Typed.Index
 import qualified Dhall.Core         as D
 import qualified Dhall.TypeCheck    as D
@@ -103,3 +106,42 @@ konst :: DTerm vs ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> '
 konst = TLam SType $ \a ->
           TLam SType $ \b -> Lam a (Lam b (Var (IS IZ)))
 
+konst3 :: DTerm vs ('Pi 'SType ('Pi 'SType ('Pi 'SType ('TVar ('IS ('IS 'IZ)) ':-> 'TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS ('IS 'IZ))))))
+konst3 = TLam SType $ \a ->
+           TLam SType $ \b ->
+             TLam SType $ \c ->
+                Lam a (Lam b (Lam c (Var (IS (IS IZ)))))
+
+konst4 :: DTerm vs ('Pi 'SType ('Pi 'SType ('Pi 'SType ('Pi 'SType ('TVar ('IS ('IS ('IS 'IZ))) ':-> 'TVar ('IS ('IS 'IZ)) ':-> 'TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS ('IS ('IS 'IZ))))))))
+konst4 = TLam SType $ \a ->
+           TLam SType $ \b ->
+             TLam SType $ \c ->
+               TLam SType $ \d ->
+                 Lam a (Lam b (Lam c (Lam d (Var (IS (IS (IS IZ)))))))
+
+ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
+ident = TLam SType $ \a -> Lam a (Var IZ)
+
+konst' :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst' = TLam SType $ \a ->
+    Lam a $ TLam SType $ \b -> Lam b (Var (IS IZ))
+
+natBuild
+    :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
+natBuild = Lam (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+           Var IZ
+    `TApp` SNatural
+     `App` Lam SNatural (NaturalPlus (Var IZ) (NaturalLit 1))
+     `App` NaturalLit 0
+
+-- there is asymmetry between Lam and TLam.  maybe use type variables to
+-- address, instead of functions?
+
+listBuild
+    :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+listBuild = TLam SType $ \a ->
+    Lam (SPi SType ((sShift a :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+            Var IZ
+     `TApp` (SList :%$ a)
+      `App` Lam a (Lam (SList :%$ a) (ListAppend (ListLit a (Seq.singleton (Var (IS IZ)))) (Var IZ)))
+      `App` ListLit a Seq.empty
