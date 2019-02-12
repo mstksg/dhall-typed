@@ -111,36 +111,6 @@ data Bindings k :: ([k] -> k -> Type) -> [k] -> [k] -> Type where
 
 infixr 5 :<?
 
-data PrimType :: DKind -> Type where
-    Bool     :: PrimType 'Type
-    Natural  :: PrimType 'Type
-    List     :: PrimType ('Type ':~> 'Type)
-    Optional :: PrimType ('Type ':~> 'Type)
-
-data SPrimType k :: PrimType k -> Type where
-    SBool     :: SPrimType 'Type 'Bool
-    SNatural  :: SPrimType 'Type 'Natural
-    SList     :: SPrimType ('Type ':~> 'Type) 'List
-    SOptional :: SPrimType ('Type ':~> 'Type) 'Optional
-
-type family PrimTypeRep k (x :: PrimType k) :: DKindRep k where
-    PrimTypeRep 'Type              'Bool     = Bool
-    PrimTypeRep 'Type              'Natural  = Natural
-    PrimTypeRep ('Type ':~> 'Type) 'List     = Seq
-    PrimTypeRep ('Type ':~> 'Type) 'Optional = Maybe
-
-class SPrimTypeI k (x :: PrimType k) where
-    sPrimType :: SPrimType k x
-
-instance SPrimTypeI 'Type 'Bool where
-    sPrimType = SBool
-instance SPrimTypeI 'Type 'Natural where
-    sPrimType = SNatural
-instance SPrimTypeI ('Type ':~> 'Type) 'List where
-    sPrimType = SList
-instance SPrimTypeI ('Type ':~> 'Type) 'Optional where
-    sPrimType = SOptional
-        
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
 -- @
@@ -167,7 +137,10 @@ data DType :: [DKind] -> DKind -> Type where
     TLet     :: Bindings DKind DType vs us
              -> DType us a
              -> DType vs a
-    TPrim    :: PrimType k -> DType us k
+    Bool     :: DType us 'Type
+    Natural  :: DType us 'Type
+    List     :: DType us ('Type ':~> 'Type)
+    Optional :: DType us ('Type ':~> 'Type)
 
 infixr 0 :->
 infixl 9 :$
@@ -195,7 +168,10 @@ type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
     DTypeRep k                  ((f :: DType '[] (r ':~> k)) ':$ (x :: DType '[] r))
         = DTypeRep (r ':~> k) f (DTypeRep r x)
     DTypeRep 'Type              (a ':-> b) = DTypeRep 'Type a -> DTypeRep 'Type b
-    DTypeRep k                  ('TPrim p) = PrimTypeRep k p
+    DTypeRep 'Type              'Bool      = Bool
+    DTypeRep 'Type              'Natural   = Natural
+    DTypeRep ('Type ':~> 'Type) 'List      = Seq
+    DTypeRep ('Type ':~> 'Type) 'Optional  = Maybe
     DTypeRep k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
 
 type family MaybeVar a b (x :: DType vs a) (i :: Maybe (Index vs b)) :: DType vs b where
@@ -209,8 +185,11 @@ type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType b
     Shift as bs a b   ins ('Pi (u :: SDKind k) e) = 'Pi u (Shift (k ': as) (k ': bs) a b ('InsS ins) e)
     Shift as bs a r i ((u :: DType as (k ':~> r)) ':$ (v :: DType as k))
         = Shift as bs a (k ':~> r) i u ':$ Shift as bs a k i v
-    Shift as bs a 'Type              i (u ':-> v)    = Shift as bs a 'Type i u ':-> Shift as bs a 'Type i v
-    Shift as b a  k                  i ('TPrim p) = 'TPrim p
+    Shift as bs a 'Type              i (u ':-> v) = Shift as bs a 'Type i u ':-> Shift as bs a 'Type i v
+    Shift as bs a 'Type              i 'Bool     = 'Bool
+    Shift as bs a 'Type              i 'Natural  = 'Natural
+    Shift as bs a ('Type ':~> 'Type) i 'List     = 'List
+    Shift as bs a ('Type ':~> 'Type) i 'Optional = 'Optional
     Shift as bs a b ins x = TL.TypeError ('TL.Text "No Shift: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, ins, x))
 
 -- | Substitute in a value for a given variable.
@@ -223,8 +202,14 @@ type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs a) (r :: DType as
         = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
     Sub as bs a 'Type              d x (i ':-> j)
         = Sub as bs a 'Type d x i ':-> Sub as bs a 'Type d x j
-    Sub as bs a k                  d x ('TPrim p)
-        = 'TPrim p
+    Sub as bs a 'Type              d x 'Bool
+        = 'Bool
+    Sub as bs a 'Type              d x 'Natural
+        = 'Natural
+    Sub as bs a ('Type ':~> 'Type) d x 'List
+        = 'List
+    Sub as bs a ('Type ':~> 'Type) d x 'Optional
+        = 'Optional
     Sub as bs a b d x r
         = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, x, r))
 
@@ -238,6 +223,10 @@ data SDType us k :: DType us k -> Type where
     SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (SDKindOf a) x)
     (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
     (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
+    SBool     :: SDType us 'Type 'Bool
+    SNatural  :: SDType us 'Type 'Natural
+    SList     :: SDType us ('Type ':~> 'Type) 'List
+    SOptional :: SDType us ('Type ':~> 'Type) 'Optional
 
 infixr 0 :%->
 infixl 9 :%$
@@ -365,17 +354,17 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
                   -> SDType '[] k a
                   -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
     BoolLit       :: Bool
-                  -> DTerm vs ('TPrim 'Bool)
+                  -> DTerm vs 'Bool
     NaturalLit    :: Natural
-                  -> DTerm vs ('TPrim 'Natural)
+                  -> DTerm vs 'Natural
     NaturalFold   :: DTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
     NaturalBuild  :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
-    NaturalPlus   :: DTerm vs ('TPrim 'Natural)
-                  -> DTerm vs ('TPrim 'Natural)
-                  -> DTerm vs ('TPrim 'Natural)
-    NaturalTimes  :: DTerm vs ('TPrim 'Natural)
-                  -> DTerm vs ('TPrim 'Natural)
-                  -> DTerm vs ('TPrim 'Natural)
+    NaturalPlus   :: DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+    NaturalTimes  :: DTerm vs 'Natural
+                  -> DTerm vs 'Natural
+                  -> DTerm vs 'Natural
     NaturalIsZero :: DTerm vs ('Natural ':-> 'Bool)
     ListLit       :: SDType '[] 'Type a
                   -> Seq (DTerm vs a)
