@@ -19,9 +19,11 @@ module Dhall.Typed.Prod (
   , allProd
   , prodAll
   , ixProd
+  , SeqListEq(..)
   ) where
 
 import           Data.Kind
+import           Data.Sequence                (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Type.Universe
@@ -102,3 +104,7 @@ ixProd = \case
     x :< xs -> \case
       IZ    -> x
       IS i -> ixProd xs i
+
+data SeqListEq :: Seq a -> [a] -> Type where
+    SeqListEq :: SeqListEq xs ys    -- TODO: define
+

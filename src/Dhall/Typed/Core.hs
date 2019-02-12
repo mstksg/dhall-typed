@@ -33,7 +33,7 @@ module Dhall.Typed.Core (
   , DTerm(..), SDTerm(..), SeqListEq(..), typeOf
   -- * Evaluation
   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
-  , fromTerm
+  , fromTerm, toTerm
   -- * Manipulation
   , sShift, sShift_, subIns
   -- * Samples
@@ -305,9 +305,8 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 
-data SeqListEq :: Seq a -> [a] -> Type where
-    SeqListEq :: SeqListEq xs ys    -- TODO: define
 
+-- | TODO: TLam?
 data SDTerm vs t :: DTerm vs t -> Type where
     SVar           :: SIndex vs a i
                    -> SDTerm vs a ('Var i)
@@ -317,6 +316,8 @@ data SDTerm vs t :: DTerm vs t -> Type where
     SApp           :: SDTerm vs (a ':-> b) f
                    -> SDTerm vs a x
                    -> SDTerm vs b ('App f x)
+    -- STLam          :: SDKind k
+    --                -> SDTerm vs ('Pi (u :: SDKind k) b) ('TLam (u :: SDKind k) (f :: forall (a :: DType '[] k). SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)))
     -- TLam          :: SDKind k
     --               -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
     --               -> DTerm vs ('Pi (u :: SDKind k) b)
@@ -383,9 +384,6 @@ typeOf vs = \case
 ident :: DTerm vs ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
 ident = TLam SType $ \a -> Lam a (Var IZ)
 
--- Couldn't match type ‘a’
---   with ‘Sub '[ 'Type] '[] 'Type 'Type 'Type 'DZ b (Shift '[] '[ 'Type] 'Type 'Type 'InsZ a)’
-
 newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
 
 fromTerm :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
@@ -419,27 +417,28 @@ fromTerm vs = \case
     Some x           -> Just $ fromTerm vs x
     None             -> FA $ \_ -> Nothing
 
--- -- toTerm might not be possible.
--- toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> DTerm '[] a
--- toTerm = \case
---     STVar i         -> case i of {}
---     gPi u b         -> \f -> TLam u $ \a -> toTerm (sSub SDZ a b) $ runForall f a
---     a :%-> b        -> \f -> Lam a $ toTerm b $ f undefined
---     SBool           -> BoolLit
---     SNatural        -> NaturalLit
---     f :%$ x         -> toTermT f x
+-- toTerm might not be possible.
+toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> Maybe (DTerm '[] a)
+toTerm = \case
+    STVar i         -> \_ -> Just $ case i of {}
+    -- SPi u b         -> \f -> Just $ TLam u $ \a -> fromJust $ toTerm (sSub a b) $ runForall f a
+    SPi _ _         -> \_ -> Nothing
+    _ :%-> _        -> \_ -> Nothing
+    SBool           -> Just . BoolLit
+    SNatural        -> Just . NaturalLit
+    f :%$ x         -> toTermT f x
 
--- toTermT
---     :: SDType '[] (k ':~> 'Type) f
---     -> SDType '[] k              b
---     -> DTypeRep 'Type (f ':$ b)
---     -> DTerm vs (f ':$ b)
--- toTermT = \case
---     STVar i   -> case i of {}
---     SPi _ _   -> undefined
---     SList     -> \a -> ListLit a . fmap (toTerm a)
---     SOptional -> \a -> maybe (None `TApp` a) (Some . toTerm a)
---     _ :%$ _   -> \_ -> undefined
+toTermT
+    :: SDType '[] (k ':~> 'Type) f
+    -> SDType '[] k              b
+    -> DTypeRep 'Type (f ':$ b)
+    -> Maybe (DTerm '[] (f ':$ b))
+toTermT = \case
+    STVar i   -> \_ -> const $ Just (case i of {})
+    SPi _ _   -> \_ -> const Nothing
+    SList     -> \a -> fmap (ListLit a) . traverse (toTerm a)
+    SOptional -> \a -> maybe (Just (None `TApp` a)) (fmap Some . toTerm a)
+    _ :%$ _   -> \_ -> const Nothing        -- ??
 
 naturalFold :: Natural -> (a -> a) -> a -> a
 naturalFold n s = go n
