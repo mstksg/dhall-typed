@@ -1,32 +1,34 @@
-{-# LANGUAGE BangPatterns                   #-}
-{-# LANGUAGE EmptyCase                      #-}
-{-# LANGUAGE FlexibleContexts               #-}
-{-# LANGUAGE FlexibleInstances              #-}
-{-# LANGUAGE GADTs                          #-}
-{-# LANGUAGE InstanceSigs                   #-}
-{-# LANGUAGE KindSignatures                 #-}
-{-# LANGUAGE LambdaCase                     #-}
-{-# LANGUAGE OverloadedStrings              #-}
-{-# LANGUAGE PolyKinds                      #-}
-{-# LANGUAGE RankNTypes                     #-}
-{-# LANGUAGE RecordWildCards                #-}
-{-# LANGUAGE ScopedTypeVariables            #-}
-{-# LANGUAGE StandaloneDeriving             #-}
-{-# LANGUAGE TemplateHaskell                #-}
-{-# LANGUAGE TypeApplications               #-}
-{-# LANGUAGE TypeFamilies                   #-}
-{-# LANGUAGE TypeFamilyDependencies         #-}
-{-# LANGUAGE TypeInType                     #-}
-{-# LANGUAGE TypeOperators                  #-}
-{-# LANGUAGE TypeSynonymInstances           #-}
-{-# LANGUAGE UndecidableInstances           #-}
-{-# LANGUAGE ViewPatterns                   #-}
+{-# LANGUAGE AllowAmbiguousTypes    #-}
+{-# LANGUAGE BangPatterns           #-}
+{-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE InstanceSigs           #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE RecordWildCards        #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE TypeSynonymInstances   #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE ViewPatterns           #-}
 
 module Dhall.Typed.Core (
   -- * Kinds
-    DKind(..), SDKind(..)
+    DKind(..), SDKind(..), SDKindI(..), sameDKind
   -- * Types
-  , DType(..), SDType(..), kindOf, kindOfWith
+  , DType(..), SDType(..), SDTypeI(..), sameDType, sameDTypeWith, kindOf, kindOfWith
   , Sub, Shift
   -- * Terms
   , DTerm(..), Bindings(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
@@ -58,6 +60,8 @@ data DKind = Type | DKind :~> DKind
 
 -- | Singletons for 'DKind'.  These are defined independently of 'Sing' to
 -- avoid limitations of data family instances.
+--
+-- Note that at the moment, kind variables are not yet supported.
 data SDKind :: DKind -> Type where
     SType  :: SDKind 'Type
     (:%~>) :: SDKind a -> SDKind b -> SDKind (a ':~> b)
@@ -67,11 +71,40 @@ deriving instance Show (SDKind k)
 data instance Sing (k :: DKind) where
     SDK :: SDKind k -> Sing k
 
+-- | Typeclass for automatically generating singletons for a 'DType'.
+-- Analogous to 'SingI' for 'Sing'.
+class SDKindI (k :: DKind) where
+    sdKind :: SDKind k
+
+instance SDKindI 'Type where
+    sdKind = SType
+instance (SDKindI a, SDKindI b) => SDKindI (a ':~> b) where
+    sdKind = sdKind :%~> sdKind
+
+-- | Compare two type-level 'DKind' for equality.
+sameDKind :: SDKind k -> SDKind j -> Maybe (k :~: j)
+sameDKind = \case 
+    SType -> \case
+      SType -> Just Refl
+      _     -> Nothing
+    a :%~> b -> \case
+      SType    -> Nothing
+      c :%~> d -> do
+        Refl <- sameDKind a c
+        Refl <- sameDKind b d
+        pure Refl
+
 -- | Matches a 'DKind' to the actual Haskell Kind that it represents.
 type family DKindRep (x :: DKind) where
     DKindRep 'Type      = Type
     DKindRep (a ':~> b) = DKindRep a -> DKindRep b
 
+-- | A non-empty series of /Let/ bindings.
+data Bindings k :: ([k] -> k -> Type) -> [k] -> [k] -> Type where
+    BNil  :: f vs a -> Bindings k f vs (a ': vs)
+    (:<?) :: f vs a -> Bindings k f (a ': vs) us -> Bindings k f vs us
+
+infixr 5 :<?
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -96,6 +129,9 @@ data DType :: [DKind] -> DKind -> Type where
     (:->)    :: DType us 'Type
              -> DType us 'Type
              -> DType us 'Type
+    TLet     :: Bindings DKind DType vs us
+             -> DType us a
+             -> DType vs a
     Bool     :: DType us 'Type
     Natural  :: DType us 'Type
     List     :: DType us ('Type ':~> 'Type)
@@ -175,6 +211,8 @@ type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs a) (r :: DType as
 -- | Singletons for 'DType'.  These are defined independently of 'Sing'
 -- mostly to move the kind parameters to the front, to make them more easy
 -- to use.
+
+-- TODO: TLet
 data SDType us k :: DType us k -> Type where
     STVar     :: SIndex us a i -> SDType us a ('TVar i)
     SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)
@@ -190,10 +228,75 @@ infixl 9 :%$
 infixl 3 `App`
 infixl 3 `TApp`
 
-deriving instance Show (SDType us k t)
+deriving instance Show (SDType us k a)
 
 data instance Sing (a :: DType us k) where
     SDTy :: SDType us k a -> Sing a
+
+-- | Typeclass for automatically generating singletons for a 'DType'.
+-- Analogous to 'SingI' for 'Sing', but with explicit kind parameters.
+class SDTypeI us k (a :: DType us k) where
+    sdType :: SDType us k a
+
+instance SIndexI us a i => SDTypeI us a ('TVar i) where
+    sdType = STVar sIndex
+instance (SDKindI a, SDTypeI (a ': us) b x) => SDTypeI us b ('Pi (u :: SDKind a) x) where
+    sdType = SPi sdKind sdType
+instance (SDTypeI us (r ':~> k) f, SDTypeI us r x) => SDTypeI us k (f ':$ x) where
+    sdType = sdType :%$ sdType
+instance (SDTypeI us 'Type a, SDTypeI us 'Type b) => SDTypeI us 'Type (a ':-> b) where
+    sdType = sdType :%-> sdType
+instance SDTypeI us 'Type 'Bool where
+    sdType = SBool
+instance SDTypeI us 'Type 'Natural where
+    sdType = SNatural
+instance SDTypeI us ('Type ':~> 'Type) 'List where
+    sdType = SList
+instance SDTypeI us ('Type ':~> 'Type) 'Optional where
+    sdType = SOptional
+
+-- | Compare two type-level 'DType' with no free variables for equality.
+sameDType
+    :: SDType '[] k a
+    -> SDType '[] k b
+    -> Maybe (a :~: b)
+sameDType = sameDTypeWith Ø
+
+-- | Compare two type-level 'DType' with free variables for equality by
+-- providing the kinds of each of the free variables.
+sameDTypeWith
+    :: Prod SDKind us
+    -> SDType us k a
+    -> SDType us k b
+    -> Maybe (a :~: b)
+sameDTypeWith vs a = \case
+    STVar i
+      | STVar j   <- a
+      , Just Refl <- sSameIx i j
+      -> Just Refl
+    -- SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (u :: SDKind a) x)
+    SPi u x
+      | SPi v y   <- a
+      , Just Refl <- sameDKind u v
+      , Just Refl <- sameDTypeWith (u :< vs) x y
+      -> Nothing    -- TODO
+    f :%$ x
+      | g :%$ y   <- a
+      , Just Refl <- sameDKind (kindOfWith vs f) (kindOfWith vs g)
+      , Just Refl <- sameDKind (kindOfWith vs x) (kindOfWith vs y)
+      , Just Refl <- sameDTypeWith vs f g
+      , Just Refl <- sameDTypeWith vs x y
+      -> Just Refl
+    x :%-> y
+      | u :%-> v  <- a
+      , Just Refl <- sameDTypeWith vs x u
+      , Just Refl <- sameDTypeWith vs y v
+      -> Just Refl
+    SBool     | SBool     <- a -> Just Refl
+    SNatural  | SNatural  <- a -> Just Refl
+    SList     | SList     <- a -> Just Refl
+    SOptional | SOptional <- a -> Just Refl
+    _       -> Nothing
 
 -- | Find the kind of a type singleton with no free variables.
 kindOf :: SDType '[] k t -> SDKind k
@@ -212,13 +315,6 @@ kindOfWith vs = \case
     SNatural -> SType
     SList -> SType :%~> SType
     SOptional -> SType :%~> SType
-
--- | A non-empty series of /Let/ bindings.
-data Bindings :: [DType '[] 'Type] -> [DType '[] 'Type] -> Type where
-    BNil  :: DTerm vs a -> Bindings vs (a ': vs)
-    (:<?) :: DTerm vs a -> Bindings (a ': vs) us -> Bindings vs us
-
-infixr 5 :<?
 
 -- | Represents the possible terms encountered in Dhall.  A value of type
 --
@@ -240,7 +336,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     App           :: DTerm vs (a ':-> b)
                   -> DTerm vs a
                   -> DTerm vs b
-    Let           :: Bindings vs us
+    Let           :: Bindings (DType '[] 'Type) DTerm vs us
                   -> DTerm us a
                   -> DTerm vs a
     -- it would be very nice if we could have this not be a function, for
@@ -336,6 +432,8 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --
 -- Note that there is currently no singleton implemented for the 'TLam'
 -- constructor.
+
+-- TODO: TLam
 data SDTerm vs t :: DTerm vs t -> Type where
     SVar           :: SIndex vs a i
                    -> SDTerm vs a ('Var i)
@@ -429,7 +527,7 @@ fromTerm = fromTermWith Ø
 
 fromBindings
     :: Prod DTypeRepVal vs
-    -> Bindings vs us
+    -> Bindings (DType '[] 'Type) DTerm vs us
     -> Prod DTypeRepVal us
 fromBindings vs = \case
     BNil b   -> DTRV (fromTermWith vs b) :< vs

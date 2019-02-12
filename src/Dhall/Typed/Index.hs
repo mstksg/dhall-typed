@@ -1,7 +1,9 @@
 {-# LANGUAGE EmptyCase             #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
@@ -12,7 +14,7 @@
 
 module Dhall.Typed.Index (
   -- * Index
-    Index(..), SIndex(..), sSameIx, fromSIndex, GTIx(..)
+    Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex
   -- * Delete
   , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, GetDeleted(..)
   -- * Insert
@@ -22,18 +24,21 @@ module Dhall.Typed.Index (
 import           Data.Kind
 import           Data.Type.Equality
 import           Data.Type.Universe
-import           Dhall.Typed.N
 import qualified GHC.TypeLits        as TL
-
-data GTIx as a :: N -> Index as a -> Type where
-    GTIxZ :: GTIx (a ': as) a ('S n) 'IZ
-    GTIxS :: GTIx as a n i -> GTIx (b ': as) a ('S n) ('IS i)
 
 data SIndex as a :: Index as a -> Type where
     SIZ :: SIndex (a ': as) a 'IZ
     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
 
 deriving instance Show (SIndex as a i)
+
+class SIndexI as a (i :: Index as a) where
+    sIndex :: SIndex as a i
+
+instance SIndexI (a ': as) a 'IZ where
+    sIndex = SIZ
+instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
+    sIndex = SIS sIndex
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined

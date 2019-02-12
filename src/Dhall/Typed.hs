@@ -32,14 +32,37 @@ toTypedType
     -> D.Expr () D.X
     -> Maybe (DType '[] k)
 toTypedType k = \case
+--     | Var Var
+--     | Lam Text (Expr s a) (Expr s a)
+--     | Pi  Text (Expr s a) (Expr s a)
+--     | App (Expr s a) (Expr s a)
+--     | Let (NonEmpty (Binding s a)) (Expr s a)
+--     | Annot (Expr s a) (Expr s a)
     D.Bool
       | SType <- k -> Just Bool
     D.Natural
       | SType <- k -> Just Natural
+--     | Integer
+--     | Double
+--     | Text
     D.List
       | SType :%~> SType <- k -> Just List
     D.Optional
       | SType :%~> SType <- k -> Just Optional
+--     | Record    (Map Text (Expr s a))
+--     | RecordLit (Map Text (Expr s a))
+--     | Union     (Map Text (Expr s a))
+--     | UnionLit Text (Expr s a) (Map Text (Expr s a))
+--     | CombineTypes (Expr s a) (Expr s a)
+--     | Combine (Expr s a) (Expr s a)
+--     | Prefer (Expr s a) (Expr s a)
+--     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
+--     | Field (Expr s a) Text
+--     | Project (Expr s a) (Set Text)
+--     | Constructors (Expr s a)
+--     | Note s (Expr s a)
+--     | ImportAlt (Expr s a) (Expr s a)
+--     | Embed a
     _ -> Nothing
 
 
@@ -59,27 +82,20 @@ toTypedTerm
     -> D.Expr () D.X
     -> Maybe (DTerm '[] a)
 toTypedTerm a = \case
-    D.BoolLit b
-      | SBool    <- a -> Just $ BoolLit b
-    D.NaturalLit n
-      | SNatural <- a -> Just $ NaturalLit n
-    _ -> Nothing
-
-
--- -- | Syntax tree for expressions
--- data Expr s a
---     = Const Const
 --     | Var Var
 --     | Lam Text (Expr s a) (Expr s a)
---     | Pi  Text (Expr s a) (Expr s a)
 --     | App (Expr s a) (Expr s a)
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
 --     | Annot (Expr s a) (Expr s a)
+    D.BoolLit b
+      | SBool    <- a -> Just $ BoolLit b
 --     | BoolAnd (Expr s a) (Expr s a)
 --     | BoolOr  (Expr s a) (Expr s a)
 --     | BoolEQ  (Expr s a) (Expr s a)
 --     | BoolNE  (Expr s a) (Expr s a)
 --     | BoolIf (Expr s a) (Expr s a) (Expr s a)
+    D.NaturalLit n
+      | SNatural <- a -> Just $ NaturalLit n
 --     | NaturalFold
 --     | NaturalBuild
 --     | NaturalIsZero
@@ -89,14 +105,11 @@ toTypedTerm a = \case
 --     | NaturalShow
 --     | NaturalPlus (Expr s a) (Expr s a)
 --     | NaturalTimes (Expr s a) (Expr s a)
---     | Integer
 --     | IntegerLit Integer
 --     | IntegerShow
 --     | IntegerToDouble
---     | Double
 --     | DoubleLit Double
 --     | DoubleShow
---     | Text
 --     | TextLit (Chunks s a)
 --     | TextAppend (Expr s a) (Expr s a)
 --     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
@@ -107,20 +120,21 @@ toTypedTerm a = \case
 --     | ListIndexed
 --     | OptionalFold
 --     | OptionalBuild
---     | Record    (Map Text (Expr s a))
 --     | RecordLit (Map Text (Expr s a))
---     | Union     (Map Text (Expr s a))
 --     | UnionLit Text (Expr s a) (Map Text (Expr s a))
 --     | Combine (Expr s a) (Expr s a)
---     | CombineTypes (Expr s a) (Expr s a)
 --     | Prefer (Expr s a) (Expr s a)
 --     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
---     | Constructors (Expr s a)
 --     | Field (Expr s a) Text
 --     | Project (Expr s a) (Set Text)
 --     | Note s (Expr s a)
 --     | ImportAlt (Expr s a) (Expr s a)
 --     | Embed a
+    _ -> Nothing
+
+
+-- -- | Syntax tree for expressions
+-- data Expr s a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 
