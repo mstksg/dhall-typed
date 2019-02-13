@@ -383,21 +383,29 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
 
-data DTypeWith :: DKind -> Type where
-    DTW :: Prod SDKind us -> DType us k -> DTypeWith k
+-- data DTypeWith :: DKind -> Type where
+--     DTW :: Prod SDKind us -> DType us k -> DTypeWith k
 
-type family TyVarProd (ks :: [DKind]) = (us :: Prod SDKind ks) | us -> ks where
-        TyVarProd '[]       = 'Ø
-        TyVarProd (k ': ks) = SDKindOf k ':< TyVarProd ks
+-- type family TyVarProd (ks :: [DKind]) = (us :: Prod SDKind ks) | us -> ks where
+--         TyVarProd '[]       = 'Ø
+--         TyVarProd (k ': ks) = SDKindOf k ':< TyVarProd ks
 
-data DTerm2 (us :: [DKind]) :: [DTypeWith 'Type] -> DType us 'Type -> Type where
-    Var2          :: Index vs ('DTW (TyVarProd us) a)
+type family MapShift (k :: DKind) (us :: [DKind]) (vs :: [DType us 'Type]) :: [DType (k ': us) 'Type] where
+    MapShift k us '[]       = '[]
+    MapShift k us (v ': vs) = Shift us (k ': us) k 'Type 'InsZ v ': MapShift k us vs
+    -- MapShift (v ': vs) =
+
+-- type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType bs b where
+
+-- data DTerm2 (us :: [DKind]) :: [DTypeWith 'Type] -> DType us 'Type -> Type where
+data DTerm2 (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
+    Var2          :: Index vs a
                   -> DTerm2 us vs a
     Lam2          :: SDType us 'Type a
-                  -> DTerm2 us ('DTW (TyVarProd us) a ': vs) b
-                  -> DTerm2 us vs                            (a ':-> b)
+                  -> DTerm2 us (a ': vs) b
+                  -> DTerm2 us vs        (a ':-> b)
     TLam2         :: SDKind k
-                  -> DTerm2 (k ': us) vs b
+                  -> DTerm2 (k ': us) (MapShift k us vs) b
                   -> DTerm2 us        vs ('Pi (SDKindOf k) b)
     TApp2         :: DTerm2 us        vs ('Pi (SDKindOf k) b)
                   -> SDType us        k  a
@@ -413,12 +421,12 @@ konst = TLam2 SType $
               Lam2 (STVar SIZ) $
                 Var2 (IS IZ)
 
--- konst' :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
--- konst' = TLam2 SType $
---            Lam2 (STVar SIZ) $
---              TLam2 SType $
---                Lam2 (STVar SIZ) $
---                  Var2 _
+konst' :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst' = TLam2 SType $
+           Lam2 (STVar SIZ) $
+             TLam2 SType $
+               Lam2 (STVar SIZ) $
+                 Var2 (IS IZ)
 
 
 -- -- | Syntax tree for expressions
