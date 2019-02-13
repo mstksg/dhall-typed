@@ -368,7 +368,7 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     NaturalIsZero :: DTerm vs ('Natural ':-> 'Bool)
     ListLit       :: SDType '[] 'Type a
                   -> Seq (DTerm vs a)
-                  -> DTerm vs ('List ':$ a)
+                  -> DTerm vs ('List ':$ a)         -- we should force evaluation to list a
     ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
     ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
     ListAppend    :: DTerm vs ('List ':$ a)
@@ -404,12 +404,28 @@ data DTerm2 (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
     Lam2          :: SDType us 'Type a
                   -> DTerm2 us (a ': vs) b
                   -> DTerm2 us vs        (a ':-> b)
+    App2          :: DTerm2 us vs (a ':-> b)
+                  -> DTerm2 us vs a
+                  -> DTerm2 us vs b
     TLam2         :: SDKind k
                   -> DTerm2 (k ': us) (MapShift k us vs) b
                   -> DTerm2 us        vs ('Pi (SDKindOf k) b)
     TApp2         :: DTerm2 us        vs ('Pi (SDKindOf k) b)
                   -> SDType us        k  a
                   -> DTerm2 us        vs (Sub (k ': us) us k 'Type 'DZ a b)
+    NaturalLit2   :: Natural -> DTerm2 uv vs 'Natural
+    NaturalPlus2  :: DTerm2 us vs 'Natural
+                  -> DTerm2 us vs 'Natural
+                  -> DTerm2 us vs 'Natural
+    ListLit2      :: SDType us 'Type a
+                  -> Seq (DTerm2 us vs a)
+                  -> DTerm2 us vs ('List ':$ a)
+    ListAppend2   :: DTerm2 us vs ('List ':$ a)
+                  -> DTerm2 us vs ('List ':$ a)
+                  -> DTerm2 us vs ('List ':$ a)
+
+infixl 3 `App2`
+infixl 3 `TApp2`
 
 ident :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
 ident = TLam2 SType $ Lam2 (STVar SIZ) (Var2 IZ)
@@ -428,6 +444,27 @@ konst' = TLam2 SType $
                Lam2 (STVar SIZ) $
                  Var2 (IS IZ)
 
+natBuild
+    :: DTerm2 '[] '[] ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
+natBuild = Lam2 (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+           Var2 IZ
+   `TApp2` SNatural
+    `App2` Lam2 SNatural (NaturalPlus2 (Var2 IZ) (NaturalLit2 1))
+    `App2` NaturalLit2 0
+
+listBuild
+    :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+listBuild = TLam2 SType $
+    Lam2 (SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+              Var2 IZ
+      `TApp2` (SList :%$ STVar SIZ)
+       `App2` Lam2 (STVar SIZ)
+                    ( Lam2 (SList :%$ STVar SIZ)
+                        (ListAppend2 (ListLit2 (STVar SIZ)
+                                     (Seq.singleton (Var2 (IS IZ)))) (Var2 IZ)
+                        )
+                    )
+       `App2` ListLit2 (STVar SIZ) Seq.empty
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
