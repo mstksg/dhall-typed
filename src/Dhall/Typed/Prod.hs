@@ -23,6 +23,7 @@ module Dhall.Typed.Prod (
   , SeqListEq(..)
   , IxProd
   , SProd(..)
+  , sIxProd
   ) where
 
 import           Data.Kind
@@ -121,4 +122,14 @@ data SeqListEq :: Seq a -> [a] -> Type where
 type family IxProd f as b (p :: Prod f as) (i :: Index as b) :: f b where
     IxProd f (a ': as) a (x ':< xs) 'IZ                     = x
     IxProd f (a ': as) c (x ':< xs) ('IS (i :: Index as c)) = IxProd f as c xs i
+
+sIxProd
+    :: SProd f as xs
+    -> SIndex as a i
+    -> Sing (IxProd f as a xs i)
+sIxProd = \case
+    SØ -> \case {}
+    x :%< xs -> \case
+      SIZ   -> x
+      SIS i -> sIxProd xs i
 
