@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE TypeOperators         #-}
 
@@ -20,6 +21,8 @@ module Dhall.Typed.Prod (
   , prodAll
   , ixProd
   , SeqListEq(..)
+  , IxProd
+  , SProd(..)
   ) where
 
 import           Data.Kind
@@ -27,6 +30,7 @@ import           Data.Sequence                (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Type.Universe
+import           Dhall.Typed.Index
 import           GHC.Generics
 
 data Prod :: (k -> Type) -> [k] -> Type where
@@ -34,6 +38,12 @@ data Prod :: (k -> Type) -> [k] -> Type where
     (:<) :: f a -> Prod f as -> Prod f (a ': as)
 
 infixr 5 :<
+
+data SProd f as :: Prod f as -> Type where
+    SØ    :: SProd f '[] 'Ø
+    (:%<) :: Sing (x :: f a)
+          -> SProd f as xs
+          -> SProd f (a ': as) (x ':< xs)
 
 -- this Show instance is not general enough
 deriving instance (forall a. Show (f a)) => Show (Prod f as)
@@ -102,9 +112,13 @@ ixProd :: Prod f as -> Index as a -> f a
 ixProd = \case
     Ø       -> \case {}
     x :< xs -> \case
-      IZ    -> x
+      IZ   -> x
       IS i -> ixProd xs i
 
 data SeqListEq :: Seq a -> [a] -> Type where
     SeqListEq :: SeqListEq xs ys    -- TODO: define
+
+type family IxProd f as b (p :: Prod f as) (i :: Index as b) :: f b where
+    IxProd f (a ': as) a (x ':< xs) 'IZ                     = x
+    IxProd f (a ': as) c (x ':< xs) ('IS (i :: Index as c)) = IxProd f as c xs i
 

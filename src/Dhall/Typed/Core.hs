@@ -34,7 +34,7 @@ module Dhall.Typed.Core (
   , DTerm(..), Bindings(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
   -- * Evaluation
   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
-  , fromTerm, fromTermWith, toTerm
+  -- , fromTerm, fromTermWith, toTerm
   -- * Manipulation
   , sShift, sShift_, subIns, subIns2, sSub, sSub_
   -- * Singletons
@@ -146,33 +146,36 @@ infixr 0 :->
 infixl 9 :$
 
 -- | A value of a polymorphic type.
-data Forall k :: DType '[k] 'Type -> Type where
-    FA :: { runForall :: forall r. SDType '[] k r -> DTypeRep 'Type (Sub '[k] '[] k 'Type 'DZ r a) }
-       -> Forall k a
+data Forall us p k :: DType (k ': us) 'Type -> Type where
+    FA :: { runForall :: forall r. SDType us k r -> DTypeRep us p 'Type (Sub (k ': us) us k 'Type 'DZ r a) }
+       -> Forall us p k a
 
 -- | A value of a polymorphic type, lifted to take a type constructor as
 -- a parameter.
-data ForallTC j k :: DType '[k] (j ':~> 'Type) -> DKindRep j -> Type where
+data ForallTC us p j k :: DType (k ': us) (j ':~> 'Type) -> DKindRep j -> Type where
     FATC :: { runForallTCC
                 :: forall r. ()
-                => SDType '[] k r
-                -> DTypeRep (j ':~> 'Type) (Sub '[k] '[] k (j ':~> 'Type) 'DZ r a) x
+                => SDType us k r
+                -> DTypeRep us p (j ':~> 'Type) (Sub (k ': us) us k (j ':~> 'Type) 'DZ r a) x
             }
-         -> ForallTC j k a x
+         -> ForallTC us p j k a x
+
+-- type family IxProd f as b c (p :: Prod f as) (i :: Index as b) :: f c where
 
 -- | Matches a 'DType' to the actual Haskell type that it represents.
-type family DTypeRep k (x :: DType '[] k) :: DKindRep k where
-    DTypeRep k                  ('TVar i)                   = TL.TypeError ('TL.Text "Free variable in type expression")
-    DTypeRep 'Type              ('Pi (u :: SDKind a) t)     = Forall a t
-    DTypeRep (k ':~> 'Type)     ('Pi (u :: SDKind a) t) = ForallTC k a t
-    DTypeRep k                  ((f :: DType '[] (r ':~> k)) ':$ (x :: DType '[] r))
-        = DTypeRep (r ':~> k) f (DTypeRep r x)
-    DTypeRep 'Type              (a ':-> b) = DTypeRep 'Type a -> DTypeRep 'Type b
-    DTypeRep 'Type              'Bool      = Bool
-    DTypeRep 'Type              'Natural   = Natural
-    DTypeRep ('Type ':~> 'Type) 'List      = Seq
-    DTypeRep ('Type ':~> 'Type) 'Optional  = Maybe
-    DTypeRep k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
+type family DTypeRep us (p :: Prod (DType us) us) k (x :: DType us k) :: DKindRep k where
+    DTypeRep us p k                  ('TVar i)                   = DTypeRep us p k (IxProd (DType us) us k p i)
+        -- TL.TypeError ('TL.Text "Free variable in type expression")
+    DTypeRep us p 'Type              ('Pi (u :: SDKind a) t)     = Forall us p a t
+    DTypeRep us p (k ':~> 'Type)     ('Pi (u :: SDKind a) t)     = ForallTC us p k a t
+    DTypeRep us p k                  ((f :: DType us (r ':~> k)) ':$ (x :: DType us r))
+        = DTypeRep us p (r ':~> k) f (DTypeRep us p r x)
+    DTypeRep us p 'Type              (a ':-> b) = DTypeRep us p 'Type a -> DTypeRep us p 'Type b
+    DTypeRep us p 'Type              'Bool      = Bool
+    DTypeRep us p 'Type              'Natural   = Natural
+    DTypeRep us p ('Type ':~> 'Type) 'List      = Seq
+    DTypeRep us p ('Type ':~> 'Type) 'Optional  = Maybe
+    DTypeRep us p k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
 
 type family MaybeVar a b (x :: DType vs a) (i :: Maybe (Index vs b)) :: DType vs b where
     MaybeVar a a x 'Nothing  = x
@@ -322,6 +325,10 @@ kindOfWith vs = \case
     SList -> SType :%~> SType
     SOptional -> SType :%~> SType
 
+type family MapShift (k :: DKind) (us :: [DKind]) (vs :: [DType us 'Type]) :: [DType (k ': us) 'Type] where
+    MapShift k us '[]       = '[]
+    MapShift k us (v ': vs) = Shift us (k ': us) k 'Type 'InsZ v ': MapShift k us vs
+
 -- | Represents the possible terms encountered in Dhall.  A value of type
 --
 -- @
@@ -333,55 +340,56 @@ kindOfWith vs = \case
 --
 -- Something of type @'DTerm' '[] a@ is a term of type @a@ with no free
 -- variables.
-data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
-    Var           :: Index vs a
-                  -> DTerm vs a
-    Lam           :: SDType '[] 'Type a
-                  -> DTerm (a ': vs) b
-                  -> DTerm vs (a ':-> b)
-    App           :: DTerm vs (a ':-> b)
-                  -> DTerm vs a
-                  -> DTerm vs b
-    Let           :: Bindings (DType '[] 'Type) DTerm vs us
-                  -> DTerm us a
-                  -> DTerm vs a
-    -- it would be very nice if we could have this not be a function, for
-    -- Show and Eq instances
+data DTerm (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
+    Var           :: Index    vs a
+                  -> DTerm us vs a
+    Lam           :: SDType us 'Type     a
+                  -> DTerm  us (a ': vs) b
+                  -> DTerm  us vs        (a ':-> b)
+    App           :: DTerm  us vs (a ':-> b)
+                  -> DTerm  us vs a
+                  -> DTerm  us vs b
+    -- Let           :: Bindings (DType us 'Type) DTerm vs qs
+    --               -> DTerm us qs a
+    --               -> DTerm us vs a
+    -- -- it would be very nice if we could have this not be a function, for
+    -- -- Show and Eq instances
     TLam          :: SDKind k
-                  -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b))
-                  -> DTerm vs ('Pi (SDKindOf k) b)
-    TApp          :: DTerm vs ('Pi (SDKindOf k) b)
-                  -> SDType '[] k a
-                  -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)
+                  -> DTerm (k ': us) (MapShift k us vs) b
+                  -> DTerm  us       vs                 ('Pi (SDKindOf k) b)
+    TApp          :: DTerm  us       vs ('Pi (SDKindOf k) b)
+                  -> SDType us       k  a
+                  -> DTerm  us       vs (Sub (k ': us) us k 'Type 'DZ a b)
     BoolLit       :: Bool
-                  -> DTerm vs 'Bool
+                  -> DTerm us vs 'Bool
     NaturalLit    :: Natural
-                  -> DTerm vs 'Natural
-    NaturalFold   :: DTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
-    NaturalBuild  :: DTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
-    NaturalPlus   :: DTerm vs 'Natural
-                  -> DTerm vs 'Natural
-                  -> DTerm vs 'Natural
-    NaturalTimes  :: DTerm vs 'Natural
-                  -> DTerm vs 'Natural
-                  -> DTerm vs 'Natural
-    NaturalIsZero :: DTerm vs ('Natural ':-> 'Bool)
-    ListLit       :: SDType '[] 'Type a
-                  -> Seq (DTerm vs a)
-                  -> DTerm vs ('List ':$ a)         -- we should force evaluation to list a
-    ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
-    ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
-    ListAppend    :: DTerm vs ('List ':$ a)
-                  -> DTerm vs ('List ':$ a)
-                  -> DTerm vs ('List ':$ a)
-    ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
-    ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
-    ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
-    OptionalLit   :: SDType '[] 'Type a
-                  -> Maybe (DTerm vs a)
-                  -> DTerm vs ('Optional ':$ a)
-    Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
-    None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
+                  -> DTerm us vs 'Natural
+    NaturalFold   :: DTerm us vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))
+    NaturalBuild  :: DTerm us vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
+    NaturalPlus   :: DTerm us vs 'Natural
+                  -> DTerm us vs 'Natural
+                  -> DTerm us vs 'Natural
+    NaturalTimes  :: DTerm us vs 'Natural
+                  -> DTerm us vs 'Natural
+                  -> DTerm us vs 'Natural
+    NaturalIsZero :: DTerm us vs ('Natural ':-> 'Bool)
+    ListLit       :: SDType us 'Type a
+                  -> Seq (DTerm us vs a)
+                  -> DTerm us vs ('List ':$ a)         -- we should force evaluation to list a
+    ListFold      :: DTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
+    ListBuild     :: DTerm us vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+    ListAppend    :: DTerm us vs ('List ':$ a)
+                  -> DTerm us vs ('List ':$ a)
+                  -> DTerm us vs ('List ':$ a)
+    ListHead      :: DTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    ListLast      :: DTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
+    ListReverse   :: DTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
+    OptionalLit   :: SDType us 'Type a
+                  -> Maybe (DTerm us vs a)
+                  -> DTerm us vs ('Optional ':$ a)
+    Some          :: DTerm us vs a
+                  -> DTerm us vs ('Optional ':$ a)
+    None          :: DTerm us vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
 
 -- data DTypeWith :: DKind -> Type where
 --     DTW :: Prod SDKind us -> DType us k -> DTypeWith k
@@ -390,81 +398,76 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
 --         TyVarProd '[]       = 'Ø
 --         TyVarProd (k ': ks) = SDKindOf k ':< TyVarProd ks
 
-type family MapShift (k :: DKind) (us :: [DKind]) (vs :: [DType us 'Type]) :: [DType (k ': us) 'Type] where
-    MapShift k us '[]       = '[]
-    MapShift k us (v ': vs) = Shift us (k ': us) k 'Type 'InsZ v ': MapShift k us vs
-    -- MapShift (v ': vs) =
-
 -- type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType bs b where
 
--- data DTerm2 (us :: [DKind]) :: [DTypeWith 'Type] -> DType us 'Type -> Type where
-data DTerm2 (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
-    Var2          :: Index vs a
-                  -> DTerm2 us vs a
-    Lam2          :: SDType us 'Type a
-                  -> DTerm2 us (a ': vs) b
-                  -> DTerm2 us vs        (a ':-> b)
-    App2          :: DTerm2 us vs (a ':-> b)
-                  -> DTerm2 us vs a
-                  -> DTerm2 us vs b
-    TLam2         :: SDKind k
-                  -> DTerm2 (k ': us) (MapShift k us vs) b
-                  -> DTerm2 us        vs ('Pi (SDKindOf k) b)
-    TApp2         :: DTerm2 us        vs ('Pi (SDKindOf k) b)
-                  -> SDType us        k  a
-                  -> DTerm2 us        vs (Sub (k ': us) us k 'Type 'DZ a b)
-    NaturalLit2   :: Natural -> DTerm2 uv vs 'Natural
-    NaturalPlus2  :: DTerm2 us vs 'Natural
-                  -> DTerm2 us vs 'Natural
-                  -> DTerm2 us vs 'Natural
-    ListLit2      :: SDType us 'Type a
-                  -> Seq (DTerm2 us vs a)
-                  -> DTerm2 us vs ('List ':$ a)
-    ListAppend2   :: DTerm2 us vs ('List ':$ a)
-                  -> DTerm2 us vs ('List ':$ a)
-                  -> DTerm2 us vs ('List ':$ a)
+-- -- data DTerm2 (us :: [DKind]) :: [DTypeWith 'Type] -> DType us 'Type -> Type where
+-- data DTerm2 (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
+--     Var2          :: Index vs a
+--                   -> DTerm2 us vs a
+--     Lam2          :: SDType us 'Type a
+--                   -> DTerm2 us (a ': vs) b
+--                   -> DTerm2 us vs        (a ':-> b)
+--     App2          :: DTerm2 us vs (a ':-> b)
+--                   -> DTerm2 us vs a
+--                   -> DTerm2 us vs b
+--     TLam2         :: SDKind k
+--                   -> DTerm2 (k ': us) (MapShift k us vs) b
+--                   -> DTerm2 us        vs ('Pi (SDKindOf k) b)
+--     TApp2         :: DTerm2 us        vs ('Pi (SDKindOf k) b)
+--                   -> SDType us        k  a
+--                   -> DTerm2 us        vs (Sub (k ': us) us k 'Type 'DZ a b)
+--     NaturalLit2   :: Natural -> DTerm2 uv vs 'Natural
+--     NaturalPlus2  :: DTerm2 us vs 'Natural
+--                   -> DTerm2 us vs 'Natural
+--                   -> DTerm2 us vs 'Natural
+--     ListLit2      :: SDType us 'Type a
+--                   -> Seq (DTerm2 us vs a)
+--                   -> DTerm2 us vs ('List ':$ a)
+--     ListAppend2   :: DTerm2 us vs ('List ':$ a)
+--                   -> DTerm2 us vs ('List ':$ a)
+--                   -> DTerm2 us vs ('List ':$ a)
 
-infixl 3 `App2`
-infixl 3 `TApp2`
+-- infixl 3 `App2`
+-- infixl 3 `TApp2`
 
-ident :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
-ident = TLam2 SType $ Lam2 (STVar SIZ) (Var2 IZ)
+-- ident :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
+-- ident = TLam2 SType $ Lam2 (STVar SIZ) (Var2 IZ)
 
-konst :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst = TLam2 SType $
-          TLam2 SType $
-            Lam2 (STVar (SIS SIZ)) $
-              Lam2 (STVar SIZ) $
-                Var2 (IS IZ)
+-- konst :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst = TLam2 SType $
+--           TLam2 SType $
+--             Lam2 (STVar (SIS SIZ)) $
+--               Lam2 (STVar SIZ) $
+--                 Var2 (IS IZ)
 
-konst' :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
-konst' = TLam2 SType $
-           Lam2 (STVar SIZ) $
-             TLam2 SType $
-               Lam2 (STVar SIZ) $
-                 Var2 (IS IZ)
+-- konst' :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst' = TLam2 SType $
+--            Lam2 (STVar SIZ) $
+--              TLam2 SType $
+--                Lam2 (STVar SIZ) $
+--                  Var2 (IS IZ)
 
-natBuild
-    :: DTerm2 '[] '[] ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
-natBuild = Lam2 (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
-           Var2 IZ
-   `TApp2` SNatural
-    `App2` Lam2 SNatural (NaturalPlus2 (Var2 IZ) (NaturalLit2 1))
-    `App2` NaturalLit2 0
+-- natBuild
+--     :: DTerm2 '[] '[] ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural)
+-- natBuild = Lam2 (SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+--            Var2 IZ
+--    `TApp2` SNatural
+--     `App2` Lam2 SNatural (NaturalPlus2 (Var2 IZ) (NaturalLit2 1))
+--     `App2` NaturalLit2 0
 
-listBuild
-    :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
-listBuild = TLam2 SType $
-    Lam2 (SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
-              Var2 IZ
-      `TApp2` (SList :%$ STVar SIZ)
-       `App2` Lam2 (STVar SIZ)
-                    ( Lam2 (SList :%$ STVar SIZ)
-                        (ListAppend2 (ListLit2 (STVar SIZ)
-                                     (Seq.singleton (Var2 (IS IZ)))) (Var2 IZ)
-                        )
-                    )
-       `App2` ListLit2 (STVar SIZ) Seq.empty
+-- listBuild
+--     :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
+-- listBuild = TLam2 SType $
+--     Lam2 (SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)) $
+--               Var2 IZ
+--       `TApp2` (SList :%$ STVar SIZ)
+--        `App2` Lam2 (STVar SIZ)
+--                     ( Lam2 (SList :%$ STVar SIZ)
+--                         (ListAppend2 (ListLit2 (STVar SIZ)
+--                                      (Seq.singleton (Var2 (IS IZ)))) (Var2 IZ)
+--                         )
+--                     )
+--        `App2` ListLit2 (STVar SIZ) Seq.empty
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
@@ -522,65 +525,75 @@ listBuild = TLam2 SType $
 -- Note that there is currently no singleton implemented for the 'TLam'
 -- constructor.
 
--- TODO: TLam
-data SDTerm vs t :: DTerm vs t -> Type where
-    SVar           :: SIndex vs a i
-                   -> SDTerm vs a ('Var i)
-    SLam           :: SDType '[] 'Type a
-                   -> SDTerm (a ': vs) b x
-                   -> SDTerm vs (a ':-> b) ('Lam (SDTypeOf '[] 'Type a) x)
-    SApp           :: SDTerm vs (a ':-> b) f
-                   -> SDTerm vs a x
-                   -> SDTerm vs b ('App f x)
-    -- STLam          :: SDKind k
-    --                -> SDTerm vs ('Pi (u :: SDKind k) b) ('TLam (u :: SDKind k) (f :: forall (a :: DType '[] k). SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type 'DZ a b)))
+    -- -- Let           :: Bindings (DType us 'Type) DTerm vs qs
+    -- --               -> DTerm us qs a
+    -- --               -> DTerm us vs a
+    -- -- -- it would be very nice if we could have this not be a function, for
+    -- -- -- Show and Eq instances
     -- TLam          :: SDKind k
-    --               -> (forall a. SDType '[] k a -> DTerm vs (Sub '[k] '[] k 'Type k 'DZ a b))
-    --               -> DTerm vs ('Pi (u :: SDKind k) b)
-    STApp          :: SDTerm vs ('Pi (SDKindOf k) b) x
-                   -> SDType '[] k a
-                   -> SDTerm vs (Sub '[k] '[] k 'Type 'DZ a b) ('TApp x (q :: SDType '[] k a))
-    SBoolLit       :: Sing b
-                   -> SDTerm vs 'Bool ('BoolLit b)
-    SNaturalLit    :: Sing n
-                   -> SDTerm vs 'Natural ('NaturalLit n)
-    SNaturalFold   :: SDTerm vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)) 'NaturalFold
-    SNaturalBuild  :: SDTerm vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural) 'NaturalBuild
-    SNaturalPlus   :: SDTerm vs 'Natural x
-                   -> SDTerm vs 'Natural y
-                   -> SDTerm vs 'Natural ('NaturalPlus x y)
-    SNaturalTimes  :: SDTerm vs 'Natural x
-                   -> SDTerm vs 'Natural y
-                   -> SDTerm vs 'Natural ('NaturalTimes x y)
-    SNaturalIsZero :: SDTerm vs ('Natural ':-> 'Bool) 'NaturalIsZero
-    SListLit       :: SeqListEq xs xs'
-                   -> SDType '[] 'Type a
-                   -> Prod (SDTerm vs a) xs'
-                   -> SDTerm vs ('List ':$ a) ('ListLit (SDTypeOf '[] 'Type a) xs)
-    SListFold      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))) 'ListFold
-    SListBuild     :: SDTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ)) 'ListBuild
-    SListAppend    :: SDTerm vs ('List ':$ a) xs
-                   -> SDTerm vs ('List ':$ a) ys
-                   -> SDTerm vs ('List ':$ a) ('ListAppend xs ys)
-    SListHead      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListHead
-    SListLast      :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListLast
-    SListReverse   :: SDTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ)) 'ListReverse
-    SOptionalLit   :: SDType '[] 'Type a
-                   -> Option (SDTerm vs a) o
-                   -> SDTerm vs ('Optional ':$ a) ('OptionalLit (SDTypeOf '[] 'Type a) o)
-    SSome          :: SDTerm vs a x -> SDTerm vs ('Optional ':$ a) ('Some x)
-    SNone          :: SDTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ)) 'None
+    --               -> DTerm (k ': us) (MapShift k us vs) b
+    --               -> DTerm  us        vs ('Pi (SDKindOf k) b)
+    -- TApp          :: DTerm  us        vs ('Pi (SDKindOf k) b)
+    --               -> SDType us        k  a
+    --               -> DTerm  us        vs (Sub (k ': us) us k 'Type 'DZ a b)
 
-data instance Sing (x :: DTerm vs a) where
-    SDTe :: SDTerm vs a x -> Sing x
+-- TODO: TLam
+data SDTerm us (vs :: [DType us 'Type]) a :: DTerm us vs a -> Type where
+    SVar           :: SIndex vs a i
+                   -> SDTerm us vs a ('Var i)
+    SLam           :: SDType us 'Type a
+                   -> SDTerm us (a ': vs) b x
+                   -> SDTerm us vs (a ':-> b) ('Lam (SDTypeOf us 'Type a) x)
+    SApp           :: SDTerm us vs (a ':-> b) f
+                   -> SDTerm us vs a x
+                   -> SDTerm us vs b ('App f x)
+    STLam          :: SDKind k
+                   -> SDTerm (k ': us) (MapShift k us vs) b                    x
+                   -> SDTerm us        vs                 ('Pi (SDKindOf k) b) ('TLam (SDKindOf k) x)
+    STApp          :: SDTerm us        vs ('Pi (SDKindOf k) b)               f
+                   -> SDType us        k  a
+                   -> SDTerm us        vs (Sub (k ': us) us k 'Type 'DZ a b) ('TApp f (SDTypeOf us k a))
+    SBoolLit       :: Sing b
+                   -> SDTerm us vs 'Bool ('BoolLit b)
+    SNaturalLit    :: Sing n
+                   -> SDTerm us vs 'Natural ('NaturalLit n)
+    SNaturalFold   :: SDTerm us vs ('Natural ':-> 'Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)) 'NaturalFold
+    SNaturalBuild  :: SDTerm us vs ('Pi 'SType (('TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'Natural) 'NaturalBuild
+    SNaturalPlus   :: SDTerm us vs 'Natural x
+                   -> SDTerm us vs 'Natural y
+                   -> SDTerm us vs 'Natural ('NaturalPlus x y)
+    SNaturalTimes  :: SDTerm us vs 'Natural x
+                   -> SDTerm us vs 'Natural y
+                   -> SDTerm us vs 'Natural ('NaturalTimes x y)
+    SNaturalIsZero :: SDTerm us vs ('Natural ':-> 'Bool) 'NaturalIsZero
+    SListLit       :: SeqListEq xs xs'
+                   -> SDType us 'Type a
+                   -> Prod (SDTerm us vs a) xs'
+                   -> SDTerm us vs ('List ':$ a) ('ListLit (SDTypeOf us 'Type a) xs)
+    SListFold      :: SDTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ))) 'ListFold
+    SListBuild     :: SDTerm us vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ)) 'ListBuild
+    SListAppend    :: SDTerm us vs ('List ':$ a) xs
+                   -> SDTerm us vs ('List ':$ a) ys
+                   -> SDTerm us vs ('List ':$ a) ('ListAppend xs ys)
+    SListHead      :: SDTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListHead
+    SListLast      :: SDTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ)) 'ListLast
+    SListReverse   :: SDTerm us vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ)) 'ListReverse
+    SOptionalLit   :: SDType us 'Type a
+                   -> Option (SDTerm us vs a) o
+                   -> SDTerm us vs ('Optional ':$ a) ('OptionalLit (SDTypeOf us 'Type a) o)
+    SSome          :: SDTerm us vs a x -> SDTerm us vs ('Optional ':$ a) ('Some x)
+    SNone          :: SDTerm us vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ)) 'None
+
+data instance Sing (x :: DTerm us vs a) where
+    SDTe :: SDTerm us vs a x -> Sing x
 
 -- | Find the type of a term singleton with no free variables.
-typeOf :: SDTerm '[] a x -> SDType '[] 'Type a
+typeOf :: SDTerm '[] '[] a x -> SDType '[] 'Type a
 typeOf = typeOfWith Ø
 
 -- | Find the type of a term singleton with free variables by providing the
 -- type of each free variable.
-typeOfWith :: Prod (SDType '[] 'Type) vs -> SDTerm vs a x -> SDType '[] 'Type a
+typeOfWith :: Prod (SDType us 'Type) vs -> SDTerm us vs a x -> SDType us 'Type a
 typeOfWith vs = \case
     SVar i            -> ixProd vs (fromSIndex i)
     SLam t x          -> t :%-> typeOfWith (t :< vs) x
@@ -607,80 +620,86 @@ typeOfWith vs = \case
     SNone             -> SPi SType (SOptional :%$ STVar SIZ)
 
 -- | Newtype wrapper over a Haskell value of the 'DTypeRep' of that term.
-newtype DTypeRepVal a = DTRV { getDTRV :: DTypeRep 'Type a }
+newtype DTypeRepVal us p (a :: DType us 'Type) = DTRV { getDTRV :: DTypeRep us p 'Type a }
 
--- | Turn a 'DTerm' with no free variables into a Haskell value of the
--- appropriate type.
-fromTerm :: DTerm '[] a -> DTypeRep 'Type a
-fromTerm = fromTermWith Ø
+-- -- | Turn a 'DTerm' with no free variables into a Haskell value of the
+-- -- appropriate type.
+-- fromTerm :: DTerm '[] '[] a -> DTypeRep 'Type a
+-- fromTerm = fromTermWith Ø
 
-fromBindings
-    :: Prod DTypeRepVal vs
-    -> Bindings (DType '[] 'Type) DTerm vs us
-    -> Prod DTypeRepVal us
-fromBindings vs = \case
-    BNil b   -> DTRV (fromTermWith vs b) :< vs
-    b :<? bs -> fromBindings (DTRV (fromTermWith vs b) :< vs) bs
+-- fromBindings
+--     :: Prod DTypeRepVal vs
+--     -> Bindings (DType '[] 'Type) DTerm vs us
+--     -> Prod DTypeRepVal us
+-- fromBindings vs = \case
+--     BNil b   -> DTRV (fromTermWith vs b) :< vs
+--     b :<? bs -> fromBindings (DTRV (fromTermWith vs b) :< vs) bs
 
 -- | Turn a 'DTerm' with free variables into a Haskell value of the
 -- appropriate type by providing values for each free variable.
-fromTermWith :: Prod DTypeRepVal vs -> DTerm vs a -> DTypeRep 'Type a
-fromTermWith vs = \case
+fromTermWith
+    :: forall us p vs a. ()
+    => SProd (DType us) us p
+    -> Prod (DTypeRepVal us p) vs
+    -> DTerm us vs a
+    -> DTypeRep us p 'Type a
+fromTermWith us vs = \case
     Var i            -> getDTRV $ ixProd vs i
-    Lam _ x          -> \y -> fromTermWith (DTRV y :< vs) x
-    Let bs x         -> fromTermWith (fromBindings vs bs) x
-    App f x          -> fromTermWith vs f (fromTermWith vs x)
-    TLam _ f         -> FA (fromTermWith vs . f)
-    TApp f x         -> runForall (fromTermWith vs f) x
+    Lam _ x          -> \y -> fromTermWith us (DTRV y :< vs) x
+-- --     -- Let bs x         -> fromTermWith (fromBindings vs bs) x
+    App f x          -> fromTermWith us vs f (fromTermWith us vs x)
+    -- TLam _ f         -> FA $ \t -> _ $ fromTermWith _ (_ vs) f
+    -- -- TLam _ f         -> FA $ \t -> _ (fromTermWith vs f)
+    -- -- (fromTermWith vs . f)
+    -- -- TApp f x         -> runForall (fromTermWith vs f) x
     BoolLit b        -> b
     NaturalLit n     -> n
     NaturalFold      -> \n -> FA $ \_ s z -> naturalFold n s z
     NaturalBuild     -> \f -> runForall f SNatural (+ 1) 0
-    NaturalPlus x y  -> fromTermWith vs x + fromTermWith vs y
-    NaturalTimes x y -> fromTermWith vs x * fromTermWith vs y
+    NaturalPlus x y  -> fromTermWith us vs x + fromTermWith us vs y
+    NaturalTimes x y -> fromTermWith us vs x * fromTermWith us vs y
     NaturalIsZero    -> (== 0)
-    ListLit _ xs     -> fromTermWith vs <$> xs
-    ListFold         -> FA $ \a xs -> FA $ \l cons nil -> case subIns a l of
-                          Refl -> foldr cons nil xs
-    -- example of sub-ins living under a type family (DTypeRep
-    ListBuild        -> FA $ \a f -> case subIns a (SList :%$ a) of
-                          Refl -> runForall f (SList :%$ a) (Seq.<|) Seq.empty
-    ListAppend xs ys -> fromTermWith vs xs <> fromTermWith vs ys
-    -- TODO: any way to not require dummy argument?
+    ListLit _ xs     -> fromTermWith us vs <$> xs
+    -- ListFold         -> FA $ \a xs -> FA $ \l cons nil -> case subIns a l of
+    --                       Refl -> foldr cons nil xs
+    -- ListBuild        -> FA $ \a f -> case subIns a (SList :%$ a) of
+    --                       Refl -> runForall f (SList :%$ a) (Seq.<|) Seq.empty
+    ListAppend xs ys -> fromTermWith us vs xs <> fromTermWith us vs ys
+    -- -- TODO: any way to not require dummy argument?
     ListHead         -> FA $ \_ -> \case x Seq.:<| _ -> Just x
                                          Seq.Empty   -> Nothing
     ListLast         -> FA $ \_ -> \case _ Seq.:|> x -> Just x
                                          Seq.Empty   -> Nothing
     ListReverse      -> FA $ \_ -> Seq.reverse
-    OptionalLit _ x  -> fromTermWith vs <$> x
-    Some x           -> Just $ fromTermWith vs x
+    OptionalLit _ x  -> fromTermWith us vs <$> x
+    Some x           -> Just $ fromTermWith us vs x
     None             -> FA $ \_ -> Nothing
 
--- | Attempt to convert a Haskell value into a 'DTerm' with no free
--- variables.  This will fail if you attempt to convert any Haskell
--- functions @a -> b@, since we cannot encode these in general into
--- a finite language like Dhall.
-toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> Maybe (DTerm '[] a)
-toTerm = \case
-    STVar i         -> \_ -> Just $ case i of {}
-    -- SPi u b         -> \f -> Just $ TLam u $ \a -> fromJust $ toTerm (sSub a b) $ runForall f a
-    SPi _ _         -> \_ -> Nothing
-    _ :%-> _        -> \_ -> Nothing
-    SBool           -> Just . BoolLit
-    SNatural        -> Just . NaturalLit
-    f :%$ x         -> toTermT f x
+-- -- | Attempt to convert a Haskell value into a 'DTerm' with no free
+-- -- variables.  This will fail if you attempt to convert any Haskell
+-- -- functions @a -> b@, since we cannot encode these in general into
+-- -- a finite language like Dhall.
+-- toTerm :: SDType '[] 'Type a -> DTypeRep 'Type a -> Maybe (DTerm '[] a)
+-- toTerm = \case
+--     STVar i         -> \_ -> Just $ case i of {}
+--     -- SPi u b         -> \f -> Just $ TLam u $ \a -> fromJust $ toTerm (sSub a b) $ runForall f a
+--     SPi _ _         -> \_ -> Nothing
+--     _ :%-> _        -> \_ -> Nothing
+--     SBool           -> Just . BoolLit
+--     SNatural        -> Just . NaturalLit
+--     f :%$ x         -> toTermT f x
 
-toTermT
-    :: SDType '[] (k ':~> 'Type) f
-    -> SDType '[] k              b
-    -> DTypeRep 'Type (f ':$ b)
-    -> Maybe (DTerm '[] (f ':$ b))
-toTermT = \case
-    STVar i   -> \_ -> const $ Just (case i of {})
-    SPi _ _   -> \_ -> const Nothing
-    SList     -> \a -> fmap (ListLit a) . traverse (toTerm a)
-    SOptional -> \a -> maybe (Just (None `TApp` a)) (fmap Some . toTerm a)
-    _ :%$ _   -> \_ -> const Nothing        -- ??
+-- toTermT
+--     :: SDType '[] (k ':~> 'Type) f
+--     -> SDType '[] k              b
+--     -> DTypeRep 'Type (f ':$ b)
+--     -> Maybe (DTerm '[] (f ':$ b))
+-- toTermT = \case
+--     STVar i   -> \_ -> const $ Just (case i of {})
+--     SPi _ _   -> \_ -> const Nothing
+--     SList     -> \a -> fmap (ListLit a) . traverse (toTerm a)
+--     SOptional -> \a -> maybe (Just (None `TApp` a)) (fmap Some . toTerm a)
+--     _ :%$ _   -> \_ -> const Nothing        -- ??
 
 naturalFold :: Natural -> (a -> a) -> a -> a
 naturalFold n s = go n
