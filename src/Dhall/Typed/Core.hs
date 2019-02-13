@@ -383,6 +383,44 @@ data DTerm :: [DType '[] 'Type] -> DType '[] 'Type -> Type where
     Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
     None          :: DTerm vs ('Pi 'SType ('Optional ':$ 'TVar 'IZ))
 
+data DTypeWith :: DKind -> Type where
+    DTW :: Prod SDKind us -> DType us k -> DTypeWith k
+
+type family TyVarProd (ks :: [DKind]) = (us :: Prod SDKind ks) | us -> ks where
+        TyVarProd '[]       = 'Ø
+        TyVarProd (k ': ks) = SDKindOf k ':< TyVarProd ks
+
+data DTerm2 (us :: [DKind]) :: [DTypeWith 'Type] -> DType us 'Type -> Type where
+    Var2          :: Index vs ('DTW (TyVarProd us) a)
+                  -> DTerm2 us vs a
+    Lam2          :: SDType us 'Type a
+                  -> DTerm2 us ('DTW (TyVarProd us) a ': vs) b
+                  -> DTerm2 us vs                            (a ':-> b)
+    TLam2         :: SDKind k
+                  -> DTerm2 (k ': us) vs b
+                  -> DTerm2 us        vs ('Pi (SDKindOf k) b)
+    TApp2         :: DTerm2 us        vs ('Pi (SDKindOf k) b)
+                  -> SDType us        k  a
+                  -> DTerm2 us        vs (Sub (k ': us) us k 'Type 'DZ a b)
+
+ident :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'TVar 'IZ))
+ident = TLam2 SType $ Lam2 (STVar SIZ) (Var2 IZ)
+
+konst :: DTerm2 '[] '[] ('Pi 'SType ('Pi 'SType ('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+konst = TLam2 SType $
+          TLam2 SType $
+            Lam2 (STVar (SIS SIZ)) $
+              Lam2 (STVar SIZ) $
+                Var2 (IS IZ)
+
+-- konst' :: DTerm2 '[] '[] ('Pi 'SType ('TVar 'IZ ':-> 'Pi 'SType ('TVar 'IZ ':-> 'TVar ('IS 'IZ))))
+-- konst' = TLam2 SType $
+--            Lam2 (STVar SIZ) $
+--              TLam2 SType $
+--                Lam2 (STVar SIZ) $
+--                  Var2 _
+
+
 -- -- | Syntax tree for expressions
 -- data Expr s a
 --     = Const Const
