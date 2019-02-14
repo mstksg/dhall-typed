@@ -11,8 +11,14 @@
 
 module Dhall.Typed (
   -- * Conversion
-    toTypedType, toTypedTerm, toSomeTerm
+  -- ** To
+    toTypedKind, toTypedType, toTypedTerm, toSomeTerm
+  -- ** From
   , fromTypedKind, fromTypedType, fromTypedTerm
+  -- ** Typechecking
+  , typeOfExpr
+  -- ** Context
+  , TermCtx(..), ctxKinds, ctxTypes, toContext, TermCtxItem(..), lookupCtx
   -- * Convenience
   , kindcheckType, typecheckTerm
   -- * Samples
