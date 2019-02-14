@@ -1,4 +1,5 @@
-# dhall-typed
+dhall-typed
+===========
 
 A statically typed version of the Dhall AST.  This means that
 
@@ -39,3 +40,19 @@ Some notes:
     type annotations; however, type annotations are removed during
     normalization, so they cannot be a reliable attachment).  Embeds may one
     day be supported, but it is not a particularly high priority at the moment.
+
+Todo
+----
+
+### Before completion
+
+*   Implement all term and type constructors.
+*   Finish conversion functions between typed and untyped
+*   Implement kind variables.  Maybe think of a system to generalize the
+    hierarchy instead of making it ad-hoc as it is now.
+
+### Would be nice
+
+*   Add notes and embeds.
+*   Use hybrid indices like Morte/Dhall, instead of pure De Bruijn ones.
+

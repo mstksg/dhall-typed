@@ -19,6 +19,7 @@ module Dhall.Typed.N (
   , toNatural
   , ZSym0, SSym0, SSym1
   , IsLength(..)
+  , Fin(..)
   ) where
 
 import           Data.Kind
@@ -42,3 +43,7 @@ toNatural (S n) = 1 + toNatural n
 data IsLength :: [k] -> N -> Type where
     ILZ :: IsLength '[] 'Z
     ILS :: IsLength as n -> IsLength (a ': as) ('S n)
+
+data Fin :: N -> Type where
+    FZ :: Fin ('S n)
+    FS :: Fin n -> Fin ('S n)
