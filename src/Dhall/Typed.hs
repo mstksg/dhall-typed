@@ -52,14 +52,42 @@ fromTypedTerm
     -> D.Expr s D.X
 fromTypedTerm = undefined
 
--- | Convert an untyped Dhall expression into a typed one with no free
--- variables representing a Dhall type of a desired kind.
+-- | Convert an untyped Dhall expression representing a kind into a 'DKind'.
+--
+-- Will fail if:
+--
+-- *  The Dhall expression does not represent a kind
+-- *  Any kind variables are involved.  Kind variables are not yet
+--    supported!  But there is no fundamental reason why they wouldn't be;
+--    they just have not been implemented yet.
+--
+-- Will behave unpredictably if the Dhall expression does not typecheck
+-- within Dhall itself.
+toTypedKind
+    :: TermCtx us vs
+    -> D.Expr () D.X
+    -> Maybe DKind
+toTypedKind ctx = \case
+    D.Const D.Type -> Just Type
+    D.Pi v t y     -> (:~>) <$> toTypedKind ctx t
+                            <*> toTypedKind (ConsSort v t ctx) y
+--     | Let (NonEmpty (Binding s a)) (Expr s a)
+    D.Note _ x -> toTypedKind ctx x
+    D.Embed x  -> D.absurd x
+    _          -> Nothing
+
+
+
+-- | Convert an untyped Dhall expression into a typed one representing
+-- a Dhall type of a desired kind.
 --
 -- Will fail if:
 --
 -- *  The Dhall expression does not represent a type
 -- *  The kind does not match
--- *  There are any free variables
+-- *  Any kind variables are involved.  Kind variables are not yet
+--    supported!  But there is no fundamental reason why they wouldn't be;
+--    they just have not been implemented yet.
 --
 -- Will behave unpredictably if the Dhall expression does not typecheck
 -- within Dhall itself.
@@ -200,6 +228,9 @@ shiftIndex u = \case
 -- Will fail if:
 --
 -- *  The Dhall expression does not represent a term
+-- *  Any kind variables are involved.  Kind variables are not yet
+--    supported!  But there is no fundamental reason why they wouldn't be;
+--    they just have not been implemented yet.
 --
 -- Will behave unpredictably if the Dhall expression does not typecheck
 -- within Dhall itself.
@@ -216,6 +247,9 @@ typeOfExpr ctx = toTypedType SType ctx
 -- Will fail if:
 --
 -- *  The Dhall expression does not represent a term
+-- *  Any kind variables are involved.  Kind variables are not yet
+--    supported!  But there is no fundamental reason why they wouldn't be;
+--    they just have not been implemented yet.
 --
 -- Will behave unpredictably if the Dhall expression does not typecheck.
 toSomeTerm
@@ -235,6 +269,9 @@ toSomeTerm ctx x = do
 --
 -- *  The Dhall expression does not represent a term
 -- *  The type does not match
+-- *  Any kind variables are involved.  Kind variables are not yet
+--    supported!  But there is no fundamental reason why they wouldn't be;
+--    they just have not been implemented yet.
 --
 -- Will behave unpredictably if the Dhall expression does not typecheck
 -- within Dhall itself.
@@ -322,9 +359,9 @@ toTypedTerm a ctx = \case
 --     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
 --     | Field (Expr s a) Text
 --     | Project (Expr s a) (Set Text)
-    D.Note _ x -> toTypedTerm a ctx x   -- note not supported
+    D.Note _ x -> toTypedTerm a ctx x   -- note not yet supported
 --     | ImportAlt (Expr s a) (Expr s a)
---     | Embed a
+    D.Embed x  -> D.absurd x            -- embed not yet supported
     _ -> Nothing
   where
     us = ctxKinds ctx

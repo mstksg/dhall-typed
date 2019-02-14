@@ -28,10 +28,12 @@ module Dhall.Typed.Core (
   -- * Kinds
     DKind(..), SDKind(..), SDKindI(..), sameDKind
   -- * Types
-  , DType(..), SDType(..), SDTypeI(..), sameDType, sameDTypeWith, kindOf, kindOfWith
+  , DType(..), SomeType(..), SDType(..), SDTypeI(..), sameDType, sameDTypeWith, kindOf, kindOfWith
   , Sub, Shift, MapShift
   -- * Terms
   , DTerm(..), Bindings(..), SomeTerm(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
+  -- * Expr
+  , SomeExpr(..)
   -- * Evaluation
   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
   , fromTerm, fromTermWith, toTerm
@@ -299,6 +301,9 @@ instance SingKind (DType us k) where
     -- SNatural  :: SDType us 'Type 'Natural
     -- SList     :: SDType us ('Type ':~> 'Type) 'List
     -- SOptional :: SDType us ('Type ':~> 'Type) 'Optional
+
+data SomeType :: [DKind] -> Type where
+    SomeType :: SDKind k -> DType us k -> SomeType us
 
 -- | Compare two type-level 'DType' with no free variables for equality.
 sameDType
@@ -748,6 +753,11 @@ naturalFold n s = go n
     go 0 !x = x
     go i !x = go (i - 1) (s x)
 
+data SomeExpr us :: [DType us 'Type] -> Type where
+    SEKind :: DKind          -> SomeExpr us vs
+    SEType :: SomeType us    -> SomeExpr us vs
+    SETerm :: SomeTerm us vs -> SomeExpr us vs
+
 -- | Required equality witness for using a type variable under a 'TLam'.
 --
 -- This is automatically resolved if you turn on the typechecker plugin.
@@ -878,7 +888,14 @@ sSub_ del x = \case
 --     | ListBuild
 --     | ListFold
 --     | ListLength
+--     | ListHead
+--     | ListLast
 --     | ListIndexed
+--     | ListReverse
+--     | Optional
+--     | OptionalLit (Expr s a) (Maybe (Expr s a))
+--     | Some (Expr s a)
+--     | None
 --     | OptionalFold
 --     | OptionalBuild
 --     | Record    (Map Text (Expr s a))
@@ -896,6 +913,8 @@ sSub_ del x = \case
 --     | ImportAlt (Expr s a) (Expr s a)
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
+
+
 
 
 
