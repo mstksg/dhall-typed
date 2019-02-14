@@ -1,7 +1,0 @@
-.stack-work/
-.history
-dist/
-dist-newstyle/
-.ghc.environment.*
-dhall-typed.cabal
-*~
