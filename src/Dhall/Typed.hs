@@ -1,6 +1,8 @@
+{-# LANGUAGE EmptyCase                      #-}
 {-# LANGUAGE FlexibleContexts               #-}
 {-# LANGUAGE GADTs                          #-}
 {-# LANGUAGE LambdaCase                     #-}
+{-# LANGUAGE OverloadedStrings              #-}
 {-# LANGUAGE ScopedTypeVariables            #-}
 {-# LANGUAGE TypeApplications               #-}
 {-# LANGUAGE TypeInType                     #-}
@@ -9,13 +11,19 @@
 
 module Dhall.Typed (
   -- * Conversion
-    toTypedType, toTypedTerm
+    toTypedType, toTypedTerm, toSomeTerm
+  , fromTypedKind, fromTypedType, fromTypedTerm
   -- * Convenience
   , kindcheckType, typecheckTerm
   -- * Samples
   , ident, konst, konst', konst3, konst4, natBuild, listBuild
   ) where
 
+import           Control.Monad
+import           Data.Functor
+import           Data.Kind
+import           Data.Sequence      (Seq(..))
+import           Data.Singletons
 import           Data.Text          (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
@@ -23,8 +31,26 @@ import           Dhall.Typed.Index
 import           Dhall.Typed.Prod
 import qualified Data.Sequence      as Seq
 import qualified Data.Text          as T
+import qualified Dhall.Context      as D
 import qualified Dhall.Core         as D
 import qualified Dhall.TypeCheck    as D
+
+fromTypedKind
+    :: DKind
+    -> D.Expr s D.X
+fromTypedKind = \case
+    Type    -> D.Const D.Type
+    a :~> b -> D.Pi "_" (fromTypedKind a) (fromTypedKind b)
+
+fromTypedType
+    :: DType us k
+    -> D.Expr s D.X
+fromTypedType = undefined
+
+fromTypedTerm
+    :: DTerm us vs a
+    -> D.Expr s D.X
+fromTypedTerm = undefined
 
 -- | Convert an untyped Dhall expression into a typed one with no free
 -- variables representing a Dhall type of a desired kind.
@@ -39,7 +65,7 @@ import qualified Dhall.TypeCheck    as D
 -- within Dhall itself.
 toTypedType
     :: SDKind k
-    -> Prod SDKind us     -- kinds of free variables
+    -> TermCtx us vs                -- ^ kinds and types of free variables
     -> D.Expr () D.X
     -> Maybe (DType us k)
 toTypedType k us = \case
@@ -83,53 +109,179 @@ kindcheckType a x = case sameDKind a (sdKind @b) of
     Nothing   -> Nothing
 
 
+data TermCtx us :: [DType us 'Type] -> Type where
+    TCtxNil   :: TermCtx '[] '[]
+    -- | Not supported, but might be one day.
+    ConsSort  :: Text
+              -> D.Expr () D.X    -- ^ we have to keep original sort, since we can't synthesize it
+              -> TermCtx us vs
+              -> TermCtx us vs
+    ConsKind  :: Text
+              -> SDKind u
+              -> TermCtx us vs
+              -> TermCtx (u ': us) (MapShift u us vs)
+    ConsType  :: Text
+              -> SDType us 'Type v
+              -> TermCtx us vs
+              -> TermCtx us (v ': vs)
+
+data TermCtxItem us :: [DType us 'Type] -> Type where
+    TCISort :: D.Expr () D.X -> TermCtxItem us vs
+    TCIKind :: Index us u -> SDKind u          -> TermCtxItem us vs
+    TCIType :: Index vs v -> SDType us 'Type v -> TermCtxItem us vs
+
+ctxKinds :: TermCtx us vs -> Prod SDKind us
+ctxKinds = \case
+    TCtxNil         -> Ø
+    ConsSort _ _ us -> ctxKinds us
+    ConsKind _ u us -> u :< ctxKinds us
+    ConsType _ _ us -> ctxKinds us
+
+ctxTypes :: TermCtx us vs -> Prod (SDType us 'Type) vs
+ctxTypes = \case
+    TCtxNil         -> Ø
+    ConsSort _ _ vs -> ctxTypes vs
+    ConsKind _ _ vs -> shiftProd $ ctxTypes vs
+    ConsType _ v vs -> v :< ctxTypes vs
+
+toContext :: TermCtx us vs -> D.Context (D.Expr () D.X)
+toContext = \case
+    TCtxNil         -> D.empty
+    ConsSort t x vs -> D.insert t x $ toContext vs
+    ConsKind t x vs -> D.insert t (fromTypedKind (fromSing (SDK  x))) $ toContext vs
+    ConsType t x vs -> D.insert t (fromTypedType (fromSing (SDTy x))) $ toContext vs
+
+lookupCtx
+    :: Text
+    -> Integer
+    -> TermCtx us vs
+    -> Maybe (TermCtxItem us vs)
+lookupCtx v = go
+  where
+    go :: Integer -> TermCtx qs rs -> Maybe (TermCtxItem qs rs)
+    go i = \case
+      TCtxNil       -> Nothing
+      ConsSort t e vs ->
+        let descend j = go j vs
+        in  case (v == t, i <= 0) of
+              (False, _    ) -> descend i
+              (True , False) -> descend (i - 1)
+              (True , True ) -> Just (TCISort e)
+      ConsKind t k vs ->
+        let descend j = go j vs <&> \case
+              TCISort e   -> TCISort e
+              TCIKind l a -> TCIKind (IS l)           a
+              TCIType l a -> TCIType (shiftIndex k l) (sShift a)
+        in  case (v == t, i <= 0) of
+              (False, _    ) -> descend i
+              (True , False) -> descend (i - 1)
+              (True , True ) -> Just (TCIKind IZ k)
+      ConsType t x vs ->
+        let descend j = go j vs <&> \case
+              TCISort e   -> TCISort e
+              TCIKind l a -> TCIKind l      a
+              TCIType l a -> TCIType (IS l) a
+        in  case (v == t, i <= 0) of
+              (False, _    ) -> descend i
+              (True , False) -> descend (i - 1)
+              (True , True ) -> Just (TCIType IZ x)
+
+shiftIndex
+    :: SDKind u
+    -> Index vs v
+    -> Index (MapShift u us vs) (Shift us (u ': us) u 'Type 'InsZ v)
+shiftIndex u = \case
+    IZ   -> IZ
+    IS i -> IS (shiftIndex u i)
+
+-- | Find the 'DType' corresponding to the type of the Dhall expression
+-- representing a term.
+--
+-- Will fail if:
+--
+-- *  The Dhall expression does not represent a term
+--
+-- Will behave unpredictably if the Dhall expression does not typecheck
+-- within Dhall itself.
+typeOfExpr
+    :: TermCtx us vs
+    -> D.Expr () D.X
+    -> Maybe (DType us 'Type)
+typeOfExpr ctx = toTypedType SType ctx
+             <=< either (const Nothing) Just . D.typeWith (toContext ctx)
+
+-- | Convert an untyped Dhall expression representing a term into a typed
+-- one, also determining the type in the process.
+--
+-- Will fail if:
+--
+-- *  The Dhall expression does not represent a term
+--
+-- Will behave unpredictably if the Dhall expression does not typecheck.
+toSomeTerm
+    :: TermCtx us vs
+    -> D.Expr () D.X
+    -> Maybe (SomeTerm us vs)
+toSomeTerm ctx x = do
+    FromSing (SDTy a) <- typeOfExpr ctx x
+    x'                <- toTypedTerm a ctx x
+    pure $ SomeTerm a x'
 
 
--- | Convert an untyped dhall expression into a typed one representing
+-- | Convert an untyped Dhall expression into a typed one representing
 -- a Dhall term of a desired type.
 --
 -- Will fail if:
 --
 -- *  The Dhall expression does not represent a term
 -- *  The type does not match
--- *  There are any free variables
 --
 -- Will behave unpredictably if the Dhall expression does not typecheck
 -- within Dhall itself.
+
+-- TODO: make this work with unnormalized types.  Maybe we need types to
+-- fill in for type variables?
 toTypedTerm
-    :: SDType '[] 'Type a
-    -> Prod (SDType '[] 'Type) vs     -- ^ types of free variables, and original names
+    :: SDType us 'Type a
+    -> TermCtx us vs                -- ^ kinds and types of free variables
     -> D.Expr () D.X
-    -> Maybe (DTerm '[] vs a)
-toTypedTerm a vs = \case
---     | Var Var
+    -> Maybe (DTerm us vs a)
+toTypedTerm a ctx = \case
+    D.Var (D.V v i) -> lookupCtx v i ctx >>= \case
+      TCISort _   -> Nothing    -- kind variables not yet supported
+      TCIKind _ _ -> Nothing    -- we want a term, not a type
+      TCIType j x -> sameDTypeWith us a x <&> \case
+        Refl -> Var j
 --     | Lam Text (Expr s a) (Expr s a)
---     | App (Expr s a) (Expr s a)
+    D.App f x -> do
+      SomeTerm b x' <- toSomeTerm ctx x
+      f'            <- toTypedTerm (b :%-> a) ctx f
+      pure $ App f' x'
 --     | Let (NonEmpty (Binding s a)) (Expr s a)
-    D.Annot x _  -> toTypedTerm a vs x
-    D.BoolLit b  -> typecheckTerm a $ BoolLit b
+    D.Annot x _  -> toTypedTerm a ctx x
+    D.BoolLit b  -> typecheckTerm us a $ BoolLit b
 --     | BoolAnd (Expr s a) (Expr s a)
 --     | BoolOr  (Expr s a) (Expr s a)
 --     | BoolEQ  (Expr s a) (Expr s a)
 --     | BoolNE  (Expr s a) (Expr s a)
 --     | BoolIf (Expr s a) (Expr s a) (Expr s a)
-    D.NaturalLit n  -> typecheckTerm a $ NaturalLit n
-    D.NaturalFold   -> typecheckTerm a $ NaturalFold
-    D.NaturalBuild  -> typecheckTerm a $ NaturalBuild
-    D.NaturalIsZero -> typecheckTerm a $ NaturalIsZero
+    D.NaturalLit n  -> typecheckTerm us a $ NaturalLit n
+    D.NaturalFold   -> typecheckTerm us a $ NaturalFold
+    D.NaturalBuild  -> typecheckTerm us a $ NaturalBuild
+    D.NaturalIsZero -> typecheckTerm us a $ NaturalIsZero
 --     | NaturalEven
 --     | NaturalOdd
 --     | NaturalToInteger
 --     | NaturalShow
     D.NaturalPlus x y -> do
-      Refl <- a `sameDType` SNatural
-      x'   <- toTypedTerm SNatural vs x
-      y'   <- toTypedTerm SNatural vs y
+      Refl <- sameDTypeWith us a SNatural
+      x'   <- toTypedTerm SNatural ctx x
+      y'   <- toTypedTerm SNatural ctx y
       pure $ NaturalPlus x' y'
     D.NaturalTimes x y -> do
-      Refl <- a `sameDType` SNatural
-      x'   <- toTypedTerm SNatural vs x
-      y'   <- toTypedTerm SNatural vs y
+      Refl <- sameDTypeWith us a SNatural
+      x'   <- toTypedTerm SNatural ctx x
+      y'   <- toTypedTerm SNatural ctx y
       pure $ NaturalTimes x' y'
 --     | IntegerLit Integer
 --     | IntegerShow
@@ -138,16 +290,31 @@ toTypedTerm a vs = \case
 --     | DoubleShow
 --     | TextLit (Chunks s a)
 --     | TextAppend (Expr s a) (Expr s a)
---     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
---     | ListAppend (Expr s a) (Expr s a)
---     | ListBuild
---     | ListFold
---     | ListLength
---     | ListIndexed
---     | OptionalLit (Expr s a) (Maybe (Expr s a))
+    D.ListLit _ xs -> do
+      SList :%$ b <- Just a
+      xs' <- traverse (toTypedTerm b ctx) xs
+      pure $ ListLit b xs'
+    D.ListAppend xs ys -> do
+      SList :%$ _ <- Just a
+      xs' <- toTypedTerm a ctx xs
+      ys' <- toTypedTerm a ctx ys
+      pure $ ListAppend xs' ys'
+    D.ListBuild   -> typecheckTerm us a $ ListBuild
+    D.ListFold    -> typecheckTerm us a $ ListFold
+    D.ListHead    -> typecheckTerm us a $ ListHead
+    D.ListLast    -> typecheckTerm us a $ ListLast
+    D.ListReverse -> typecheckTerm  us a $ ListReverse
+    D.OptionalLit _ xs -> do
+      SOptional :%$ b <- Just a
+      xs' <- traverse (toTypedTerm b ctx) xs
+      pure $ OptionalLit b xs'
 --     | OptionalFold
 --     | OptionalBuild
-    D.None -> typecheckTerm a None
+    D.Some x -> do
+      SOptional :%$ b <- Just a
+      x'   <- toTypedTerm b ctx x
+      pure $ Some x'
+    D.None -> typecheckTerm us a None
 --     | RecordLit (Map Text (Expr s a))
 --     | UnionLit Text (Expr s a) (Map Text (Expr s a))
 --     | Combine (Expr s a) (Expr s a)
@@ -155,32 +322,21 @@ toTypedTerm a vs = \case
 --     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
 --     | Field (Expr s a) Text
 --     | Project (Expr s a) (Set Text)
---     | Note s (Expr s a)
+    D.Note _ x -> toTypedTerm a ctx x   -- note not supported
 --     | ImportAlt (Expr s a) (Expr s a)
 --     | Embed a
     _ -> Nothing
-    -- ListLit       :: SDType '[] 'Type a
-    --               -> Seq (DTerm vs a)
-    --               -> DTerm vs ('List ':$ a)
-    -- ListFold      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ)))
-    -- ListBuild     :: DTerm vs ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'TVar 'IZ ':-> 'TVar 'IZ) ':-> 'List ':$ 'TVar 'IZ))
-    -- ListAppend    :: DTerm vs ('List ':$ a)
-    --               -> DTerm vs ('List ':$ a)
-    --               -> DTerm vs ('List ':$ a)
-    -- ListHead      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
-    -- ListLast      :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'Optional ':$ 'TVar 'IZ))
-    -- ListReverse   :: DTerm vs ('Pi 'SType ('List ':$ 'TVar 'IZ ':-> 'List     ':$ 'TVar 'IZ))
-    -- OptionalLit   :: SDType '[] 'Type a
-    --               -> Maybe (DTerm vs a)
-    --               -> DTerm vs ('Optional ':$ a)
-    -- Some          :: DTerm vs a -> DTerm vs ('Optional ':$ a)
+  where
+    us = ctxKinds ctx
+    -- vs = ctxTypes ctx
 
 typecheckTerm
-    :: forall a b vs. SDTypeI '[] 'Type b
-    => SDType '[] 'Type a
-    -> DTerm '[] vs b
-    -> Maybe (DTerm '[] vs a)
-typecheckTerm a x = case sameDType a (sdType @_ @_ @b) of
+    :: forall us vs a b. SDTypeI us 'Type b
+    => Prod SDKind us
+    -> SDType us 'Type a
+    -> DTerm us vs b
+    -> Maybe (DTerm us vs a)
+typecheckTerm us a x = case sameDTypeWith us a (sdType :: SDType us 'Type b) of
     Just Refl -> Just x
     Nothing   -> Nothing
 

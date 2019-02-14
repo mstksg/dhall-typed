@@ -29,14 +29,14 @@ module Dhall.Typed.Core (
     DKind(..), SDKind(..), SDKindI(..), sameDKind
   -- * Types
   , DType(..), SDType(..), SDTypeI(..), sameDType, sameDTypeWith, kindOf, kindOfWith
-  , Sub, Shift
+  , Sub, Shift, MapShift
   -- * Terms
-  , DTerm(..), Bindings(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
+  , DTerm(..), Bindings(..), SomeTerm(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
   -- * Evaluation
   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
   , fromTerm, fromTermWith, toTerm
   -- * Manipulation
-  , sShift, sShift_, subIns, subIns2, sSub, sSub_
+  , sShift, sShift_, subIns, subIns2, sSub, sSub_, shiftProd
   -- * Singletons
   , Sing(SDK, getSDK, SDTy, getSDTy, SDTe, getSDTe)
   ) where
@@ -85,6 +85,22 @@ instance SDKindI 'Type where
     sdKind = SType
 instance (SDKindI a, SDKindI b) => SDKindI (a ':~> b) where
     sdKind = sdKind :%~> sdKind
+
+instance SingKind DKind where
+    type Demote DKind = DKind
+
+    fromSing (SDK k) = go k
+      where
+        go :: SDKind k -> DKind
+        go = \case
+          SType    -> Type
+          a :%~> b -> go a :~> go b
+
+    toSing = \case
+      Type    -> SomeSing $ SDK SType
+      a :~> b -> withSomeSing a $ \(SDK x) ->
+                   withSomeSing b $ \(SDK y) ->
+                     SomeSing $ SDK (x :%~> y)
 
 -- | Compare two type-level 'DKind' for equality.
 sameDKind :: SDKind k -> SDKind j -> Maybe (k :~: j)
@@ -267,6 +283,23 @@ instance SDTypeI us ('Type ':~> 'Type) 'List where
 instance SDTypeI us ('Type ':~> 'Type) 'Optional where
     sdType = SOptional
 
+instance SingKind (DType us k) where
+    type Demote (DType us k) = DType us k
+
+    fromSing (SDTy t) = go t
+      where
+        go :: SDType us k t -> DType us k
+        go = \case
+          STVar i -> TVar (fromSing (SIx i))
+    -- STVar     :: SIndex us a i -> SDType us a ('TVar i)
+    -- SPi       :: SDKind a -> SDType (a ': us) b x -> SDType us b ('Pi (SDKindOf a) x)
+    -- (:%$)     :: SDType us (a ':~> b) f -> SDType us a x -> SDType us b (f ':$ x)
+    -- (:%->)    :: SDType us 'Type x -> SDType us 'Type y -> SDType us 'Type (x ':-> y)
+    -- SBool     :: SDType us 'Type 'Bool
+    -- SNatural  :: SDType us 'Type 'Natural
+    -- SList     :: SDType us ('Type ':~> 'Type) 'List
+    -- SOptional :: SDType us ('Type ':~> 'Type) 'Optional
+
 -- | Compare two type-level 'DType' with no free variables for equality.
 sameDType
     :: SDType '[] k a
@@ -439,6 +472,10 @@ data DTerm (us :: [DKind]) :: [DType us 'Type] -> DType us 'Type -> Type where
 --     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
+data SomeTerm us :: [DType us 'Type] -> Type where
+    SomeTerm :: SDType us 'Type a
+             -> DTerm us vs a
+             -> SomeTerm us vs
 
 -- | Singletons for 'DTerm'.  These are defined independently of 'Sing'
 -- mostly to move the kind parameters to the front, to make them more easy

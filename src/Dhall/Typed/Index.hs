@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# OPTIONS_GHC -fno-warn-orphans  #-}
 
 module Dhall.Typed.Index (
   -- * Index
@@ -19,12 +20,15 @@ module Dhall.Typed.Index (
   , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, GetDeleted(..)
   -- * Insert
   , Insert(..), insert, Ins, sInsert, SInsert(..)
+  -- * Singletons
+  , Sing(SIx, getSIx)
   ) where
 
 import           Data.Kind
+import           Data.Singletons
 import           Data.Type.Equality
 import           Data.Type.Universe
-import qualified GHC.TypeLits        as TL
+import qualified GHC.TypeLits       as TL
 
 data SIndex as a :: Index as a -> Type where
     SIZ :: SIndex (a ': as) a 'IZ
@@ -39,6 +43,23 @@ instance SIndexI (a ': as) a 'IZ where
     sIndex = SIZ
 instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
     sIndex = SIS sIndex
+
+data instance Sing (i :: Index as a) where
+    SIx  :: { getSIx  :: SIndex as a i } -> Sing i
+
+instance SingKind (Index as a) where
+    type Demote (Index as a) = Index as a
+
+    fromSing (SIx i) = go i
+      where
+        go :: SIndex bs b i -> Index bs b
+        go = \case
+          SIZ   -> IZ
+          SIS j -> IS (go j)
+
+    toSing = \case
+      IZ   -> SomeSing (SIx SIZ)
+      IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined
