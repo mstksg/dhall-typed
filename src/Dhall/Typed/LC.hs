@@ -72,9 +72,10 @@
 --    primitives, but Dhall has no sort primitives.
 --
 -- *  n = 2: Kind has variables, so it has Var, Lam, and App.  It has
---    a constant (it is n >= 2) and a function type constructor and a Pi
+--    a constant (they are n >= 2) and a function type constructor and a Pi
 --    constructor (it is n >= 1 and has variables).  It could also
---    potentially have primitives, but Dhall has no kind primitives.
+--    potentially have primitives; Dhall has only record and union kinds as
+--    primitives.
 --
 -- *  n = 1: Type has variables, so it has Var, Lam, and App.  It has
 --    a function type constructor and a Pi constructor (it is n >= 1 and
@@ -167,7 +168,8 @@ data DSort = Kind | DSort :*> DSort
 -- *  n = 2: Kind has variables, so it has Var, Lam, and App.  It has
 --    a constant (they are n >= 2) and a function type constructor and a Pi
 --    constructor (it is n >= 1 and has variables).  It could also
---    potentially have primitives, but Dhall has no kind primitives.
+--    potentially have primitives; Dhall has only record and union kinds as
+--    primitives.
 --
 -- Because Sort has no variables, it has no Poly and Inst.
 data DKind :: [DSort] -> DSort -> Type where
@@ -175,7 +177,6 @@ data DKind :: [DSort] -> DSort -> Type where
     KVar  :: Index ts a -> DKind ts a
     KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
     KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
-    -- Dhall has no kind primitives
     -- KP    :: KPrim as a -> Prod (DKind ts) as -> DKind ts a
 
     -- From being a type of something

@@ -67,9 +67,81 @@ toTyped
     -> D.Expr () D.X
     -> Maybe (SomeDExpr ts us vs)
 toTyped ctx = \case
-    D.Const D.Sort -> Just $ SomeDExpr sf4 DEMeta
-    D.Const D.Kind -> Just $ SomeDExpr sf3 $ DESort Kind
-    D.Const D.Type -> Just $ SomeDExpr sf2 $ DEKind (SomeKind SKind Type)
+    D.Const D.Sort -> Just . SomeDExpr sf4 $ DEMeta
+    D.Const D.Kind -> Just . SomeDExpr sf3 . DESort $ Kind
+    D.Const D.Type -> Just . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
+    D.Bool         -> Just . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
+    D.BoolLit b    -> Just . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
+    D.Natural      -> Just . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
+    D.NaturalLit n -> Just . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
+-- -- | Syntax tree for expressions
+-- data Expr s a
+--     | Var Var
+--     | Lam Text (Expr s a) (Expr s a)
+--     | Pi  Text (Expr s a) (Expr s a)
+--     | App (Expr s a) (Expr s a)
+--     | Let (NonEmpty (Binding s a)) (Expr s a)
+--     | Annot (Expr s a) (Expr s a)
+--     | BoolAnd (Expr s a) (Expr s a)
+--     | BoolOr  (Expr s a) (Expr s a)
+--     | BoolEQ  (Expr s a) (Expr s a)
+--     | BoolNE  (Expr s a) (Expr s a)
+--     | BoolIf (Expr s a) (Expr s a) (Expr s a)
+--     | NaturalFold
+--     | NaturalBuild
+--     | NaturalIsZero
+--     | NaturalEven
+--     | NaturalOdd
+--     | NaturalToInteger
+--     | NaturalShow
+--     | NaturalPlus (Expr s a) (Expr s a)
+--     | NaturalTimes (Expr s a) (Expr s a)
+--     | Integer
+--     | IntegerLit Integer
+--     | IntegerShow
+--     | IntegerToDouble
+--     | Double
+--     | DoubleLit Double
+--     | DoubleShow
+--     | Text
+--     | TextLit (Chunks s a)
+--     | TextAppend (Expr s a) (Expr s a)
+--     | List
+--     | ListLit (Maybe (Expr s a)) (Seq (Expr s a))
+--     | ListAppend (Expr s a) (Expr s a)
+--     | ListBuild
+--     | ListFold
+--     | ListLength
+--     | ListHead
+--     | ListLast
+--     | ListIndexed
+--     | ListReverse
+--     | Optional
+--     | OptionalLit (Expr s a) (Maybe (Expr s a))
+--     | Some (Expr s a)
+--     | None
+--     | OptionalFold
+--     | OptionalBuild
+--     | Record    (Map Text (Expr s a))
+--     | RecordLit (Map Text (Expr s a))
+--     | Union     (Map Text (Expr s a))
+--     | UnionLit Text (Expr s a) (Map Text (Expr s a))
+--     | Combine (Expr s a) (Expr s a)
+--     | CombineTypes (Expr s a) (Expr s a)
+--     | Prefer (Expr s a) (Expr s a)
+--     | Merge (Expr s a) (Expr s a) (Maybe (Expr s a))
+--     | Constructors (Expr s a)
+--     | Field (Expr s a) Text
+--     | Project (Expr s a) (Set Text)
+--     | Note s (Expr s a)
+--     | ImportAlt (Expr s a) (Expr s a)
+--     | Embed a
+--     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
+
+
+
+
+
 
 --fromTypedKind
 --    :: DKind

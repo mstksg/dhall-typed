@@ -64,17 +64,21 @@ module Dhall.Typed.Core (
 --   , Sing(SDK, getSDK, SDTy, getSDTy, SDTe, getSDTe)
 --   ) where
 
+import           Control.Applicative
+import           Data.Functor.Compose
 import           Data.Kind
 import           Data.Sequence                (Seq(..))
 import           Data.Singletons.Prelude.List (Sing(..))
 import           Data.Singletons.TH hiding    (Sum)
+import           Data.Singletons.TypeLits     (SSymbol)
+import           Data.Text                    (Text)
 import           Data.Type.Equality
 import           Data.Type.Universe
-import           Data.Functor.Compose
 import           Dhall.Typed.Index
 import           Dhall.Typed.N
 import           Dhall.Typed.Option
 import           Dhall.Typed.Prod
+import           GHC.TypeLits                 (Symbol)
 import           Numeric.Natural
 import           Unsafe.Coerce                (unsafeCoerce)
 import qualified Data.Sequence                as Seq
@@ -181,11 +185,17 @@ infixr 1 :~>
 -- ---------
 
 -- | Primitives of Dhall types, built into the language.
+--
+-- TODO: if we realize that none of the constructors need arguments, we can
+-- take out the list parameter.
 data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     Bool     :: TPrim ts '[] 'Type
     Natural  :: TPrim ts '[] 'Type
+    Record   :: Prod (Const Symbol) as -> TPrim ts as 'Type
     List     :: TPrim ts '[] ('Type ':~> 'Type)
     Optional :: TPrim ts '[] ('Type ':~> 'Type)
+
+type Floop = 'Record ('Const "hello" ':< 'Ø)
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -424,8 +434,10 @@ instance SingKind (DKind ts a) where
 -- ---------
 
 data STPrim ts as a :: TPrim ts as a -> Type where
-    SBool :: STPrim ts '[] 'Type              'Bool
-    SList :: STPrim ts '[] ('Type ':~> 'Type) 'List
+    SBool     :: STPrim ts '[] 'Type              'Bool
+    SNatural  :: STPrim ts '[] 'Type              'Natural
+    SList     :: STPrim ts '[] ('Type ':~> 'Type) 'List
+    SOptional :: STPrim ts '[] ('Type ':~> 'Type) 'Optional
 
 data SDType ts us a :: DType ts us a -> Type where
     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
