@@ -13,7 +13,7 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# OPTIONS_GHC -fno-warn-orphans  #-}
 
-module Dhall.Typed.Index (
+module Dhall.Typed.Type.Index (
   -- * Index
     Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex, SIndexOf
   -- * Delete

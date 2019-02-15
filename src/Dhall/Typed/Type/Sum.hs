@@ -9,7 +9,7 @@
 {-# LANGUAGE TypeOperators         #-}
 
 
-module Dhall.Typed.Sum (
+module Dhall.Typed.Type.Sum (
     Sum(..)
   , anySum
   , sumAny

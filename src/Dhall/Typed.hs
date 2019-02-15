@@ -36,9 +36,9 @@ import           Data.Singletons
 import           Data.Text          (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
-import           Dhall.Typed.Index
-import           Dhall.Typed.Prod
-import           Dhall.Typed.N
+import           Dhall.Typed.Type.Index
+import           Dhall.Typed.Type.Prod
+import           Dhall.Typed.Type.N
 import qualified Data.Sequence      as Seq
 import qualified Data.Text          as T
 import qualified Dhall.Context      as D

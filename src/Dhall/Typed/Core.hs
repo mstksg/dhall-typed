@@ -74,10 +74,10 @@ import           Data.Singletons.TypeLits     (SSymbol)
 import           Data.Text                    (Text)
 import           Data.Type.Equality
 import           Data.Type.Universe
-import           Dhall.Typed.Index
-import           Dhall.Typed.N
-import           Dhall.Typed.Option
-import           Dhall.Typed.Prod
+import           Dhall.Typed.Type.Index
+import           Dhall.Typed.Type.N
+import           Dhall.Typed.Type.Option
+import           Dhall.Typed.Type.Prod
 import           GHC.TypeLits                 (Symbol)
 import           Numeric.Natural
 import           Unsafe.Coerce                (unsafeCoerce)

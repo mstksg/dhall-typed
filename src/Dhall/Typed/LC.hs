@@ -92,9 +92,9 @@ module Dhall.Typed.LC () where
 --   ) where
 
 import           Data.Kind
-import           Dhall.Typed.Prod
-import           Dhall.Typed.Index
-import           Dhall.Typed.N
+import           Dhall.Typed.Type.Prod
+import           Dhall.Typed.Type.Index
+import           Dhall.Typed.Type.N
 import           Data.Singletons
 
 type family Map (f :: a ~> b) (xs :: [a]) :: [b] where

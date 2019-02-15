@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE TypeOperators         #-}
 
-module Dhall.Typed.Prod (
+module Dhall.Typed.Type.Prod (
     Prod(..)
   , traverseProd
   , mapProd
@@ -31,7 +31,7 @@ import           Data.Sequence                (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Type.Universe
-import           Dhall.Typed.Index
+import           Dhall.Typed.Type.Index
 import           GHC.Generics
 
 data Prod :: (k -> Type) -> [k] -> Type where

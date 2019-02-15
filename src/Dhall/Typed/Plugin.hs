@@ -17,7 +17,7 @@ import           Control.Applicative
 import           Control.Monad
 import           Data.Maybe
 import           DataCon
-import           Dhall.Typed.N
+import           Dhall.Typed.Type.N
 import           GHC.TcPluginM.Extra
 import           Module
 import           OccName

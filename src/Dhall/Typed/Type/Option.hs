@@ -2,7 +2,7 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE TypeInType     #-}
 
-module Dhall.Typed.Option (
+module Dhall.Typed.Type.Option (
     Option(..)
   ) where
 

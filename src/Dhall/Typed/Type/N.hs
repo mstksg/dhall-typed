@@ -13,7 +13,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Dhall.Typed.N (
+module Dhall.Typed.Type.N (
     N(..), Sing(SZ, SS, SFin_, getSFin_), SN
   , fromNatural
   , toNatural
