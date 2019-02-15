@@ -83,7 +83,7 @@
 --    "type" has variables, it has Poly and Inst.  In Dhall, it has
 --    multitudes of primitives.
 
-module Dhall.Typed.LC where
+module Dhall.Typed.LC () where
 
 -- module Dhall.Typed.LC (
 --   ) where
