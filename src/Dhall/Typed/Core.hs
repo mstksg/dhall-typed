@@ -58,15 +58,6 @@ import           Unsafe.Coerce                (unsafeCoerce)
 import qualified Data.Sequence                as Seq
 import qualified GHC.TypeLits                 as TL
 
-data DSort = Kind | DSort :*> DSort
-
-data DKind2 :: [DSort] -> DSort -> Type where
-    Type2  :: DKind2 ts 'Kind
-    (:~>>) :: DKind2 ts 'Kind -> DKind2 ts 'Kind -> DKind2 ts 'Kind
-    KVar   :: Index ts a -> DKind2 ts a
-    KLam   :: DKind2 (t ': ts) a   -> DKind2 ts (t ':*> a)
-    KApp   :: DKind2 ts (a ':*> b) -> DKind2 ts a -> DKind2 ts b
-
 -- | Represents the possible kinds encountered in Dhall.
 data DKind = Type | DKind :~> DKind
   deriving (Eq, Ord, Show)

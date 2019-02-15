@@ -7,7 +7,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType            #-}
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -15,7 +15,7 @@
 
 module Dhall.Typed.Index (
   -- * Index
-    Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex
+    Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex, SIndexOf
   -- * Delete
   , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, GetDeleted(..)
   -- * Insert
@@ -60,6 +60,10 @@ instance SingKind (Index as a) where
     toSing = \case
       IZ   -> SomeSing (SIx SIZ)
       IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
+
+type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
+    SIndexOf (a ': as) a 'IZ     = 'SIZ
+    SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined
