@@ -144,14 +144,12 @@ instance forall k (f :: k -> *) (as :: [k]). (forall (a :: k). GHC.Show.Show (f 
 --   are built-in types and type functions. Dhall has no kind- or
 --   sort-level primitives.</li>
 --   <li>If a level has variables (Terms, Types, Kinds), we gain some
---   constructors:</li>
---   <li>Var, the variable constructor</li>
---   <li>Lam, the function abstraction</li>
---   <li>App, the function application</li>
+--   constructors:<ul><li>Var, the variable constructor j Lam, the function
+--   abstraction</li><li>App, the function application</li></ul></li>
 --   <li>If a level has variables and its "type" also has variables (Terms,
---   Types), we gain some constructors:</li>
---   <li>Poly, the type abstraction</li>
---   <li>Inst (instantiation), the type application</li>
+--   Types), we gain some constructors:<ul><li>Poly, the type
+--   abstraction</li><li>Inst (instantiation), the type
+--   application</li></ul></li>
 --   <li>If a level is the "type" of something (n &gt;= 1), we gain a
 --   function type constructor, the type of function abstractions in the
 --   immediately lower level.</li>
@@ -190,9 +188,7 @@ instance forall k (f :: k -> *) (as :: [k]). (forall (a :: k). GHC.Show.Show (f 
 module Dhall.Typed.LC
 type family Map (f :: a ~> b) (xs :: [a]) :: [b]
 
--- | Sorts ---------
---   
---   Level 3:
+-- | Level 3:
 --   
 --   <ul>
 --   <li>Only "primitives", essentially. And the "downward axiom".</li>
@@ -202,9 +198,7 @@ data DSort
 Kind :: DSort
 (:*>) :: DSort -> DSort -> DSort
 
--- | Kinds ---------
---   
---   Level 2
+-- | Level 2
 --   
 --   Just has a single Pi constructor for kind polymorphism, since we don't
 --   have sort polymorphism.
@@ -217,8 +211,6 @@ data DKind :: [DSort] -> DSort -> Type
 [Type] :: DKind ts  'Kind
 type family KShift ts t a (x :: DKind ts a) :: DKind (t : ts) a
 type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b
-
--- | Types ---------
 data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type
 [Bool] :: TPrim ts '[]  'Type
 [List] :: TPrim ts '[ 'Type]  'Type
@@ -234,8 +226,6 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type
 [:->] :: DType ts us  'Type -> DType ts us  'Type -> DType ts us  'Type
 [Pi] :: SDKind ts  'Kind u -> DType ts (u : us) a -> DType ts us a
 type TBool =  'TP  'Bool  'Ø
-
--- | Terms ---------
 data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type
 [BoolLit] :: Bool -> Prim ts us '[] TBool
 [BoolAnd] :: Prim ts us '[TBool, TBool] TBool
@@ -253,8 +243,6 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
 [P] :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
 [Poly] :: SDKind ts  'Kind u -> DTerm ts (u : us) (Map (ShiftSym ts us u  'Type) vs) a -> DTerm ts us vs ( 'Pi (SDKindOf ts  'Kind u) a)
 [Inst] :: DTerm ts us vs ( 'Pi (SDKindOf ts  'Kind u) b) -> SDType ts us u a -> DTerm ts us vs (Sub ts (u : us) us u  'Type  'DZ a b)
-
--- | Multiple Level ----------------
 data SomeKind :: [DSort] -> Type
 [SomeKind] :: SDSort a -> DKind ts a -> SomeKind ts
 data SomeType ts :: [DKind ts 'Kind] -> Type
@@ -267,8 +255,6 @@ data DExpr ts us :: [DType ts us 'Type] -> N -> Type
 [DEType] :: SomeType ts us -> DExpr ts us vs ( 'S  'Z)
 [DETerm] :: SomeTerm ts us vs -> DExpr ts us vs  'Z
 dExprType :: DExpr ts us vs n -> DExpr ts us vs ( 'S n)
-
--- | Boring singleton shenanigans ---------
 data SDSort :: DSort -> Type
 [SKind] :: SDSort  'Kind
 [:%*>] :: SDSort s -> SDSort t -> SDSort (s :*> t)
