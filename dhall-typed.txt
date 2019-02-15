@@ -158,8 +158,8 @@ instance forall k (f :: k -> *) (as :: [k]). (forall (a :: k). GHC.Show.Show (f 
 --   together. Examples are the Kind sort that links Kinds to Types (all
 --   types have kinds of sort Kind), and the Type kind that links types to
 --   values (all terms have types of kind Type)</li>
---   <li>If a type is the "type" of something (n &gt;= 1), *and* it has
---   variables, we have a Pi type constructor, the type of type
+--   <li>If a type is the "type" of something (n &gt;= 1), <i>and</i> it
+--   has variables, we have a Pi type constructor, the type of type
 --   abstractions (type-polymorphic values) in the lower level.</li>
 --   </ul>
 --   
@@ -174,7 +174,7 @@ instance forall k (f :: k -> *) (as :: [k]). (forall (a :: k). GHC.Show.Show (f 
 --   constructor (it is n &gt;= 1). It could also potentially have
 --   primitives, but Dhall has no sort primitives.</li>
 --   <li>n = 2: Kind has variables, so it has Var, Lam, and App. It has a
---   constant (they are n &gt;= 2) and a function type constructor and a Pi
+--   constant (it is n &gt;= 2) and a function type constructor and a Pi
 --   constructor (it is n &gt;= 1 and has variables). It could also
 --   potentially have primitives, but Dhall has no kind primitives.</li>
 --   <li>n = 1: Type has variables, so it has Var, Lam, and App. It has a

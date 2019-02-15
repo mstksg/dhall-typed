@@ -16,14 +16,14 @@ j  Lam, the function abstraction</li><li>App, the function application</li></ul>
     an &quot;constant&quot; constructor that links the two layers below it
     together. Examples are the Kind sort that links Kinds to Types (all
     types have kinds of sort Kind), and the Type kind that links types to
-    values (all terms have types of kind Type)</li><li>If a type is the &quot;type&quot; of something (n &gt;= 1), *and* it has
+    values (all terms have types of kind Type)</li><li>If a type is the &quot;type&quot; of something (n &gt;= 1), <em>and</em> it has
     variables, we have a Pi type constructor, the type of type
     abstractions (type-polymorphic values) in the lower level.</li></ul><p>We actually gain a Pi type for our current level, and each level
     above our current level (that has variables).  So for the Type level,
     we have Type-Pi and Kind-Pi, and for the Kind level, we have Kind-Pi.</p><p>So to summarize:</p><ul><li>n = 3: Sort has a constant (it is n &gt;= 2) and a function
     type constructor (it is n &gt;= 1).  It could also potentially have
     primitives, but Dhall has no sort primitives.</li><li>n = 2: Kind has variables, so it has Var, Lam, and App.  It has
-    a constant (they are n &gt;= 2) and a function type constructor and a Pi
+    a constant (it is n &gt;= 2) and a function type constructor and a Pi
     constructor (it is n &gt;= 1 and has variables).  It could also
     potentially have primitives, but Dhall has no kind primitives.</li><li>n = 1: Type has variables, so it has Var, Lam, and App.  It has
     a function type constructor and a Pi constructor (it is n &gt;= 1 and

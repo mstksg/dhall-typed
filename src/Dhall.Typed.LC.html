@@ -54,7 +54,7 @@
 </span><a name="line-54"></a><span class="hs-comment">--    types have kinds of sort Kind), and the Type kind that links types to</span><span>
 </span><a name="line-55"></a><span class="hs-comment">--    values (all terms have types of kind Type)</span><span>
 </span><a name="line-56"></a><span class="hs-comment">--</span><span>
-</span><a name="line-57"></a><span class="hs-comment">-- *  If a type is the &quot;type&quot; of something (n &gt;= 1), *and* it has</span><span>
+</span><a name="line-57"></a><span class="hs-comment">-- *  If a type is the &quot;type&quot; of something (n &gt;= 1), /and/ it has</span><span>
 </span><a name="line-58"></a><span class="hs-comment">--    variables, we have a Pi type constructor, the type of type</span><span>
 </span><a name="line-59"></a><span class="hs-comment">--    abstractions (type-polymorphic values) in the lower level.</span><span>
 </span><a name="line-60"></a><span class="hs-comment">--</span><span>
@@ -70,7 +70,7 @@
 </span><a name="line-70"></a><span class="hs-comment">--    primitives, but Dhall has no sort primitives.</span><span>
 </span><a name="line-71"></a><span class="hs-comment">--</span><span>
 </span><a name="line-72"></a><span class="hs-comment">-- *  n = 2: Kind has variables, so it has Var, Lam, and App.  It has</span><span>
-</span><a name="line-73"></a><span class="hs-comment">--    a constant (they are n &gt;= 2) and a function type constructor and a Pi</span><span>
+</span><a name="line-73"></a><span class="hs-comment">--    a constant (it is n &gt;= 2) and a function type constructor and a Pi</span><span>
 </span><a name="line-74"></a><span class="hs-comment">--    constructor (it is n &gt;= 1 and has variables).  It could also</span><span>
 </span><a name="line-75"></a><span class="hs-comment">--    potentially have primitives, but Dhall has no kind primitives.</span><span>
 </span><a name="line-76"></a><span class="hs-comment">--</span><span>
