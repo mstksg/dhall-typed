@@ -54,7 +54,7 @@
 --    types have kinds of sort Kind), and the Type kind that links types to
 --    values (all terms have types of kind Type)
 --
--- *  If a type is the "type" of something (n >= 1), *and* it has
+-- *  If a type is the "type" of something (n >= 1), /and/ it has
 --    variables, we have a Pi type constructor, the type of type
 --    abstractions (type-polymorphic values) in the lower level.
 --
@@ -70,7 +70,7 @@
 --    primitives, but Dhall has no sort primitives.
 --
 -- *  n = 2: Kind has variables, so it has Var, Lam, and App.  It has
---    a constant (they are n >= 2) and a function type constructor and a Pi
+--    a constant (it is n >= 2) and a function type constructor and a Pi
 --    constructor (it is n >= 1 and has variables).  It could also
 --    potentially have primitives, but Dhall has no kind primitives.
 --
@@ -152,8 +152,9 @@ type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
 
 -- | Level 3:
 --
--- * Only "primitives", essentially.  And the "downward axiom".
--- * No Var, Lam, Pi
+-- *  n = 3: Sort has a constant (it is n >= 2) and a function
+--    type constructor (it is n >= 1).  It could also potentially have
+--    primitives, but Dhall has no sort primitives.
 data DSort = Kind | DSort :*> DSort
 
 -- ---------
@@ -162,8 +163,12 @@ data DSort = Kind | DSort :*> DSort
 
 -- | Level 2
 --
--- Just has a single Pi constructor for kind polymorphism, since we don't
--- have sort polymorphism.
+-- *  n = 2: Kind has variables, so it has Var, Lam, and App.  It has
+--    a constant (they are n >= 2) and a function type constructor and a Pi
+--    constructor (it is n >= 1 and has variables).  It could also
+--    potentially have primitives, but Dhall has no kind primitives.
+--
+-- Because Sort has no variables, it has no Poly and Inst.
 data DKind :: [DSort] -> DSort -> Type where
     -- Standard value stuff
     KVar  :: Index ts a -> DKind ts a
@@ -194,6 +199,13 @@ data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     List :: TPrim ts '[ 'Type ] 'Type
 
 -- | Level 1
+--
+-- *  n = 1: Type has variables, so it has Var, Lam, and App.  It has
+--    a function type constructor and a Pi constructor (it is n >= 1 and
+--    has variables).  Because its "type" has variables (Kind), it also has
+--    Poly and Inst.  It has primitives, and in Dhall ther are several.
+--
+-- Because it is not n >= 2, it has no constant.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     -- Standard value stuff
     TVar  :: Index us a -> DType ts us a
@@ -235,7 +247,12 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 
 -- | Level 0
 --
--- Distinguished from the others by having no Pi constructor.
+-- *  n = 0: Term has variables, so it has Var, Lam, and App.  Because its
+--    "type" has variables, it has Poly and Inst.  In Dhall, it has
+--    multitudes of primitives.
+--
+-- Because it is not n >= 2 or n >= 1, it has no Pi or Function constructor
+-- or constant.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     -- Standard value stuff
     Var  :: Index vs a -> DTerm ts us vs a
