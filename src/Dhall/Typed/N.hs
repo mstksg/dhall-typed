@@ -20,6 +20,8 @@ module Dhall.Typed.N (
   , ZSym0, SSym0, SSym1
   , IsLength(..)
   , Fin(..)
+  , LTE(..)
+  , N0, N1, N2, N3, N4, N5
   ) where
 
 import           Data.Kind
@@ -47,3 +49,14 @@ data IsLength :: [k] -> N -> Type where
 data Fin :: N -> Type where
     FZ :: Fin ('S n)
     FS :: Fin n -> Fin ('S n)
+
+data LTE :: N -> N -> Type where
+    LTEZ :: LTE 'Z m
+    LTES :: LTE n  m -> LTE ('S n) ('S m)
+
+type N0 = 'Z
+type N1 = 'S N0
+type N2 = 'S N1
+type N3 = 'S N2
+type N4 = 'S N3
+type N5 = 'S N4

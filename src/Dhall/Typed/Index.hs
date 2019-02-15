@@ -74,12 +74,12 @@ fromSIndex = \case
     SIS i -> IS (fromSIndex i)
 
 data Delete :: [k] -> [k] -> k -> Type where
-    DZ :: Delete (a ': as) as a
-    DS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
+    DelZ :: Delete (a ': as) as a
+    DelS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
 
 data SDelete as bs a :: Delete as bs a -> Type where
-    SDZ :: SDelete (a ': as) as a 'DZ
-    SDS :: SDelete as bs c del -> SDelete (a ': as) (a ': bs) c ('DS del)
+    SDelZ :: SDelete (a ': as) as a 'DelZ
+    SDelS :: SDelete as bs c del -> SDelete (a ': as) (a ': bs) c ('DelS del)
 
 type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
     ISMaybe 'Nothing = 'Nothing
@@ -87,18 +87,18 @@ type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
     ISMaybe i = TL.TypeError ('TL.Text "No ISMaybe: " 'TL.:<>: 'TL.ShowType i)
 
 type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Index bs b) where
-    Del (a ': as) as        a a 'DZ     'IZ     = 'Nothing
-    Del (a ': as) (a ': bs) b a ('DS d) 'IZ     = 'Just 'IZ
-    Del (a ': as) as        a b 'DZ     ('IS i) = 'Just i
-    Del (a ': as) (a ': bs) b c ('DS d) ('IS i) = ISMaybe (Del as bs b c d i)
+    Del (a ': as) as        a a 'DelZ     'IZ     = 'Nothing
+    Del (a ': as) (a ': bs) b a ('DelS d) 'IZ     = 'Just 'IZ
+    Del (a ': as) as        a b 'DelZ     ('IS i) = 'Just i
+    Del (a ': as) (a ': bs) b c ('DelS d) ('IS i) = ISMaybe (Del as bs b c d i)
     Del as bs a b d i = TL.TypeError ('TL.Text "No Del: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, i))
 
 delete :: Delete as bs a -> Index as b -> Maybe (Index bs b)
 delete = \case
-    DZ -> \case
+    DelZ -> \case
       IZ   -> Nothing
       IS i -> Just i
-    DS d -> \case
+    DelS d -> \case
       IZ   -> Just IZ
       IS i -> IS <$> delete d i
 
@@ -111,10 +111,10 @@ sDelete
     -> SIndex as b i
     -> GetDeleted as bs a b del i
 sDelete = \case
-    SDZ -> \case
+    SDelZ -> \case
       SIZ   -> GotDeleted Refl
       SIS i -> ThatsToxic i
-    SDS d -> \case
+    SDelS d -> \case
       SIZ   -> ThatsToxic SIZ
       SIS i -> case sDelete d i of
         GotDeleted Refl -> GotDeleted Refl

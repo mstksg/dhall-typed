@@ -196,7 +196,7 @@ type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind
 
 data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     Bool :: TPrim ts '[] 'Type
-    List :: TPrim ts '[ 'Type ] 'Type
+    List :: TPrim ts '[] ('Type ':~> 'Type)
 
 -- | Level 1
 --
@@ -219,7 +219,7 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts        us                              ('KPi (SDSortOf t) a)
     TInst :: DType ts us ('KPi (SDSortOf t) b)
           -> SDKind ts t a
-          -> DType ts us (KSub (t ': ts) ts t 'Kind 'DZ a b)
+          -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     -- From being a type of something
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
@@ -266,7 +266,7 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
          -> DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) a)
     Inst :: DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) b)
          -> SDType ts us u a
-         -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DZ a b)
+         -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
 -- ----------------
 -- > Multiple Level
@@ -333,7 +333,7 @@ instance SingKind (DKind ts a) where
 
 data STPrim ts as a :: TPrim ts as a -> Type where
     SBool :: STPrim ts '[] 'Type 'Bool
-    SList :: STPrim ts '[ 'Type ] 'Type 'List
+    SList :: STPrim ts '[] ('Type ':~> 'Type) 'List
 
 data SDType ts us a :: DType ts us a -> Type where
     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
