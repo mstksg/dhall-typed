@@ -14,25 +14,26 @@
 {-# LANGUAGE UndecidableInstances #-}
 
 module Dhall.Typed.N (
-    N(..), Sing(SZ, SS), SN
+    N(..), Sing(SZ, SS, SFin_, getSFin_), SN
   , fromNatural
   , toNatural
   , ZSym0, SSym0, SSym1
   , IsLength(..)
-  , Fin(..)
+  , Fin(..), SFin(..)
   , ShiftFin
   , LTE(..)
   , N0, N1, N2, N3, N4, N5
   , F0, F1, F2, F3, F4, F5
+  , sf0, sf1, sf2, sf3, sf4, sf5
   ) where
 
 import           Data.Kind
 import           Data.Singletons
-import           Data.Singletons.TH
-import           Data.Singletons.Prelude.Maybe
 import           Data.Singletons.Prelude.Functor
-import qualified GHC.TypeLits as TL
+import           Data.Singletons.Prelude.Maybe
+import           Data.Singletons.TH
 import           Numeric.Natural
+import qualified GHC.TypeLits                    as TL
 
 $(singletons [d|
   data N = Z | S N
@@ -54,6 +55,13 @@ data IsLength :: [k] -> N -> Type where
 data Fin :: N -> Type where
     FZ :: Fin ('S n)
     FS :: Fin n -> Fin ('S n)
+
+data SFin n :: Fin n -> Type where
+    SFZ :: SFin ('S n) 'FZ
+    SFS :: SFin n x -> SFin ('S n) ('FS x)
+
+data instance Sing (i :: Fin n) where
+    SFin_ :: { getSFin_ :: SFin n i } -> Sing i
 
 type family ShiftFinMaybe n (i :: Fin n) :: Maybe (Fin n) where
     ShiftFinMaybe ('S 'Z)     'FZ     = 'Nothing
@@ -89,3 +97,21 @@ type F2 = 'FS F1
 type F3 = 'FS F2
 type F4 = 'FS F3
 type F5 = 'FS F4
+
+sf0 :: SFin ('S n) F0
+sf0 = SFZ
+
+sf1 :: SFin ('S ('S n)) F1
+sf1 = SFS sf0
+
+sf2 :: SFin ('S ('S ('S n))) F2
+sf2 = SFS sf1
+
+sf3 :: SFin ('S ('S ('S ('S n)))) F3
+sf3 = SFS sf2
+
+sf4 :: SFin ('S ('S ('S ('S ('S n))))) F4
+sf4 = SFS sf3
+
+sf5 :: SFin ('S ('S ('S ('S ('S ('S n)))))) F5
+sf5 = SFS sf4

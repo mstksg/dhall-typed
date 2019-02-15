@@ -1,9 +1,11 @@
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE KindSignatures         #-}
-{-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeInType             #-}
-{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE GADTs                    #-}
+{-# LANGUAGE KindSignatures           #-}
+{-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE TypeFamilyDependencies   #-}
+{-# LANGUAGE TypeInType               #-}
+{-# LANGUAGE TypeOperators            #-}
+{-# OPTIONS_GHC -Wno-missing-methods  #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 -- |
 -- Module      : Dhall.Typed.LC
@@ -90,8 +92,7 @@ module Dhall.Typed.LC () where
 
 import           Data.Kind
 import           Dhall.Typed.Prod
-import           Dhall.Typed.Index hiding (SDS)
-import qualified Dhall.Typed.Index as I
+import           Dhall.Typed.Index
 import           Dhall.Typed.N
 import           Data.Singletons
 

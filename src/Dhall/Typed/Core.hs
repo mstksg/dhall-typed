@@ -36,13 +36,13 @@ module Dhall.Typed.Core (
   -- ** Terms
   , Prim(..), PrimF(..), DTerm(..), SomeTerm(..)
   -- ** Mixed
-  , DExpr(..), dExprType
+  , DExpr(..), SomeDExpr(..), dExprType
   -- * Singletons
   , SDSort(..), SDKind(..), STPrim(..), SDType(..), SPrim(..), SPrimF(..), SDTerm(..)
   , KShiftSym, ShiftSym
   , Sing(SDS, getSDS, SDK, getSDK, STPr, getSTPr, SDTy, getSDTy, SPr, getSPr, SPrF, getSPrF, SDTe, getSDTe)
   -- * Util
-  , Map
+  , Map, MapSym
   ) where
 
 -- module Dhall.Typed.Core (
@@ -83,6 +83,9 @@ import qualified GHC.TypeLits                 as TL
 type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
     Map f '[]       = '[]
     Map f (x ': xs) = f @@ x ': Map f xs
+
+data MapSym (f :: a ~> b) :: [a] ~> [b]
+type instance Apply (MapSym f) xs = Map f xs
 
 -- Implementing the rule pairings:
 --
@@ -348,6 +351,12 @@ data DExpr ts us :: [DType ts us 'Type] -> Fin N5 -> Type where
     DEType :: SomeType ts us    -> DExpr ts us vs F1
     DETerm :: SomeTerm ts us vs -> DExpr ts us vs F0
 
+-- | Hides the "level" of a 'DExpr'.  Pattern match to find it.  Can be
+-- useful when returning a 'DExpr' of level unknown until runtime, or
+-- storing 'DExpr' of multiple levels in a container.
+data SomeDExpr ts us :: [DType ts us 'Type] -> Type where
+    SomeDExpr :: SFin N5 l -> DExpr ts us vs l -> SomeDExpr ts us vs
+
 -- | Get the meta-level "type" of a 'DExpr'.  If it's a term, this will
 -- return its type.  If it's a type, this returns its type, etc.  It
 -- essentially goes up one "level" of the Dhall type hierarchy.
@@ -401,7 +410,8 @@ instance SingKind DSort where
 type family SDKindOf ts k (x :: DKind ts k) = (y :: SDKind ts k x) | y -> x where
     SDKindOf ts k          ('KVar i  ) = 'SKVar (SIndexOf ts k i)
 
-data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind (t ': ts) b
+data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
+type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
 
 data instance Sing (x :: DKind ts a) where
     SDK :: { getSDK :: SDKind ts a x } -> Sing x
@@ -431,6 +441,7 @@ data SDType ts us a :: DType ts us a -> Type where
     STP    :: STPrim ts as a x -> SProd (DType ts us) as p -> SDType ts us a ('TP x p)
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
+type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 
 data instance Sing (x :: TPrim ts as a) where
     STPr :: { getSTPr :: STPrim ts as a x } -> Sing x

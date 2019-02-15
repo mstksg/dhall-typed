@@ -28,21 +28,48 @@ module Dhall.Typed (
 --   , ident, konst, konst', konst3, konst4, natBuild, listBuild
 --   ) where
 
---import           Control.Monad
---import           Data.Functor
---import           Data.Kind
---import           Data.Sequence      (Seq(..))
---import           Data.Singletons
---import           Data.Text          (Text)
---import           Data.Type.Equality
---import           Dhall.Typed.Core
---import           Dhall.Typed.Index
---import           Dhall.Typed.Prod
---import qualified Data.Sequence      as Seq
---import qualified Data.Text          as T
---import qualified Dhall.Context      as D
---import qualified Dhall.Core         as D
---import qualified Dhall.TypeCheck    as D
+import           Control.Monad
+import           Data.Functor
+import           Data.Kind
+import           Data.Sequence      (Seq(..))
+import           Data.Singletons
+import           Data.Text          (Text)
+import           Data.Type.Equality
+import           Dhall.Typed.Core
+import           Dhall.Typed.Index
+import           Dhall.Typed.Prod
+import           Dhall.Typed.N
+import qualified Data.Sequence      as Seq
+import qualified Data.Text          as T
+import qualified Dhall.Context      as D
+import qualified Dhall.Core         as D
+import qualified Dhall.TypeCheck    as D
+
+data Context ts us :: [DType ts us 'Type] -> Type where
+    CtxNil    :: Context '[] '[] '[]
+    -- ConsSort  :: Text
+    --           -> SDSort t
+    --           -> Context ts        us vs
+    --           -> Context (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
+    --                                (Map _ vs)
+    ConsKind  :: Text
+              -> SDKind ts 'Kind u
+              -> Context ts us vs
+              -> Context ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs)
+    ConsType  :: Text
+              -> SDType ts us 'Type v
+              -> Context ts us vs
+              -> Context ts us (v ': vs)
+
+
+toTyped
+    :: Context ts us vs
+    -> D.Expr () D.X
+    -> Maybe (SomeDExpr ts us vs)
+toTyped ctx = \case
+    D.Const D.Sort -> Just $ SomeDExpr sf4 DEMeta
+    D.Const D.Kind -> Just $ SomeDExpr sf3 $ DESort Kind
+    D.Const D.Type -> Just $ SomeDExpr sf2 $ DEKind (SomeKind SKind Type)
 
 --fromTypedKind
 --    :: DKind
