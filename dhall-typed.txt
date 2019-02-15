@@ -191,8 +191,9 @@ type family Map (f :: a ~> b) (xs :: [a]) :: [b]
 -- | Level 3:
 --   
 --   <ul>
---   <li>Only "primitives", essentially. And the "downward axiom".</li>
---   <li>No Var, Lam, Pi</li>
+--   <li>n = 3: Sort has a constant (it is n &gt;= 2) and a function type
+--   constructor (it is n &gt;= 1). It could also potentially have
+--   primitives, but Dhall has no sort primitives.</li>
 --   </ul>
 data DSort
 Kind :: DSort
@@ -200,8 +201,14 @@ Kind :: DSort
 
 -- | Level 2
 --   
---   Just has a single Pi constructor for kind polymorphism, since we don't
---   have sort polymorphism.
+--   <ul>
+--   <li>n = 2: Kind has variables, so it has Var, Lam, and App. It has a
+--   constant (they are n &gt;= 2) and a function type constructor and a Pi
+--   constructor (it is n &gt;= 1 and has variables). It could also
+--   potentially have primitives, but Dhall has no kind primitives.</li>
+--   </ul>
+--   
+--   Because Sort has no variables, it has no Poly and Inst.
 data DKind :: [DSort] -> DSort -> Type
 [KVar] :: Index ts a -> DKind ts a
 [KLam] :: SDSort t -> DKind (t : ts) a -> DKind ts (t :*> a)
@@ -216,6 +223,15 @@ data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type
 [List] :: TPrim ts '[ 'Type]  'Type
 
 -- | Level 1
+--   
+--   <ul>
+--   <li>n = 1: Type has variables, so it has Var, Lam, and App. It has a
+--   function type constructor and a Pi constructor (it is n &gt;= 1 and
+--   has variables). Because its "type" has variables (Kind), it also has
+--   Poly and Inst. It has primitives, and in Dhall ther are several.</li>
+--   </ul>
+--   
+--   Because it is not n &gt;= 2, it has no constant.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type
 [TVar] :: Index us a -> DType ts us a
 [TLam] :: SDKind ts  'Kind u -> DType ts (u : us) a -> DType ts us (u :~> a)
@@ -235,7 +251,14 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 
 -- | Level 0
 --   
---   Distinguished from the others by having no Pi constructor.
+--   <ul>
+--   <li>n = 0: Term has variables, so it has Var, Lam, and App. Because
+--   its "type" has variables, it has Poly and Inst. In Dhall, it has
+--   multitudes of primitives.</li>
+--   </ul>
+--   
+--   Because it is not n &gt;= 2 or n &gt;= 1, it has no Pi or Function
+--   constructor or constant.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type
 [Var] :: Index vs a -> DTerm ts us vs a
 [Lam] :: SDType ts us  'Type v -> DTerm ts us (v : vs) a -> DTerm ts us vs (v :-> a)
