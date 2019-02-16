@@ -69,11 +69,12 @@ module Dhall.Typed.Core (
 import           Control.Applicative
 import           Data.Functor.Compose
 import           Data.Kind
-import           Data.Sequence                (Seq(..))
-import           Data.Singletons.Prelude.List (Sing(..))
-import           Data.Singletons.TH hiding    (Sum)
-import           Data.Singletons.TypeLits     (SSymbol, Sing(SSym))
-import           Data.Text                    (Text)
+import           Data.Sequence                 (Seq(..))
+import           Data.Singletons.Prelude.Const
+import           Data.Singletons.Prelude.List  (Sing(..))
+import           Data.Singletons.TH hiding     (Sum)
+import           Data.Singletons.TypeLits      (SSymbol, Sing(SSym))
+import           Data.Text                     (Text)
 import           Data.Type.Equality
 import           Data.Type.Predicate
 import           Data.Type.Universe
@@ -82,11 +83,11 @@ import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Option
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Symbol
-import           GHC.TypeLits                 (Symbol)
+import           GHC.TypeLits                  (Symbol)
 import           Numeric.Natural
-import           Unsafe.Coerce                (unsafeCoerce)
-import qualified Data.Sequence                as Seq
-import qualified GHC.TypeLits                 as TL
+import           Unsafe.Coerce                 (unsafeCoerce)
+import qualified Data.Sequence                 as Seq
+import qualified GHC.TypeLits                  as TL
 
 type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
     Map f '[]       = '[]
@@ -159,13 +160,16 @@ type family ATCons l (x :: AggType k r ls as) :: AggType k r (l ': ls) (r ': as)
     ATCons l x = 'ATS x
 
 -- | GADT for specifying a record value matching an 'AggType'.
+--
+-- Basically you just need to stack as many 'RVS' 'RVZ' as there are fields
+-- in the record.
 data RecordVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
         :: AggType k r ls ks
         -> Prod j ks
         -> [j r]
         -> Type
       where
-    RVZ :: RecordVal k j r '[] '[] 'ATZ 'Ø '[]
+    RVZ :: RecordVal k j r      '[]       '[]   'ATZ            'Ø       '[]
     RVS :: RecordVal k j r       ls        ks        at         bs        as
         -> RecordVal k j r (l ': ls) (r ': ks) ('ATS at) (b ':< bs) (a ': as)
 
@@ -183,15 +187,31 @@ data UnionVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
 -- ---------
 
 -- | Represents the possible sorts encountered in Dhall.
-data DSort = Kind | DSort :*> DSort
+--
+-- Note that this implementation allows records of kinds with sorts other
+-- than 'Kind', so @{ foo : Kind -> Kind }@ would typecheck, even though
+-- normal Dhall forbids this.
+data DSort :: Type where
+    Kind    :: DSort
+    (:*>)   :: DSort -> DSort -> DSort
+    SRecord :: AggType () '() ls as
+            -> Prod (Const DSort) as
+            -> DSort
+    SUnion  :: AggType () '() ls as
+            -> Prod (Const DSort) as
+            -> DSort
 
 -- ---------
 -- > Kinds
 -- ---------
 
 data KPrim :: [DSort] -> DSort -> Type where
-    KRecord   :: AggType DSort 'Kind ls as -> KPrim as 'Kind
-    KUnion    :: AggType DSort 'Kind ls as -> KPrim as 'Kind
+    KRecord    :: AggType DSort 'Kind ls as -> KPrim as 'Kind
+    KUnion     :: AggType DSort 'Kind ls as -> KPrim as 'Kind
+    KRecordLit :: RecordVal () (Const DSort) '() ls ks at bs as
+               -> KPrim (Map GetConstSym0 as) ('SRecord at bs)
+    KUnionLit  :: UnionVal () (Const DSort) '() ls ks at bs ('Const a)
+               -> KPrim '[a] ('SRecord at bs)
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --

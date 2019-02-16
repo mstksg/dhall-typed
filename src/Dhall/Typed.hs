@@ -45,13 +45,19 @@ import qualified Dhall.Context      as D
 import qualified Dhall.Core         as D
 import qualified Dhall.TypeCheck    as D
 
+-- type family ShiftSort
+
+data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
+                  :: DType ts us 'Type
+                  ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
+
 data Context ts us :: [DType ts us 'Type] -> Type where
     CtxNil    :: Context '[] '[] '[]
-    -- ConsSort  :: Text
-    --           -> SDSort t
-    --           -> Context ts        us vs
-    --           -> Context (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
-    --                                (Map _ vs)
+    ConsSort  :: Text
+              -> SDSort t
+              -> Context ts        us vs
+              -> Context (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
+                                   (Map (ShiftSortSym ts (t ': ts) us t 'InsZ) vs)
     ConsKind  :: Text
               -> SDKind ts 'Kind u
               -> Context ts us vs
@@ -60,6 +66,47 @@ data Context ts us :: [DType ts us 'Type] -> Type where
               -> SDType ts us 'Type v
               -> Context ts us vs
               -> Context ts us (v ': vs)
+
+data ContextItem ts us :: [DType ts us 'Type] -> Type where
+    TCISort :: Index ts t -> SDSort t             -> ContextItem ts us vs
+    TCIKind :: Index us u -> SDKind ts 'Kind u    -> ContextItem ts us vs
+    TCIType :: Index vs v -> SDType ts us 'Type v -> ContextItem ts us vs
+
+lookupCtx
+    :: Text
+    -> Integer
+    -> Context ts us vs
+    -> Maybe (ContextItem ts us vs)
+lookupCtx v = go
+  where
+    go :: Integer -> Context ps qs rs -> Maybe (ContextItem ps qs rs)
+    go i = \case
+      CtxNil       -> Nothing
+      -- ConsSort t e vs ->
+      --   let descend j = go j vs
+      --   in  case (v == t, i <= 0) of
+      --         (False, _    ) -> descend i
+      --         (True , False) -> descend (i - 1)
+      --         (True , True ) -> Just (TCISort e)
+      -- ConsKind t k vs ->
+      --   let descend j = go j vs <&> \case
+      --         TCISort e   -> TCISort e
+      --         TCIKind l a -> TCIKind (IS l)           a
+      --         TCIType l a -> TCIType (shiftIndex k l) (sShift a)
+      --   in  case (v == t, i <= 0) of
+      --         (False, _    ) -> descend i
+      --         (True , False) -> descend (i - 1)
+      --         (True , True ) -> Just (TCIKind IZ k)
+      ConsType t x vs ->
+        let descend j = go j vs <&> \case
+              TCISort l a -> TCISort l      a
+              TCIKind l a -> TCIKind l      a
+              TCIType l a -> TCIType (IS l) a
+        in  case (v == t, i <= 0) of
+              (False, _    ) -> descend i
+              (True , False) -> descend (i - 1)
+              (True , True ) -> Just (TCIType IZ x)
+
 
 
 toTyped
