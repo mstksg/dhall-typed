@@ -30,13 +30,15 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift
+  , KPrim(..), DKind(..), SomeKind(..), type (:~>), KShift
   -- ** Types
-  , TPrim(..), DType(..), SomeType(..), TBool, TNatural, TList, TOptional, type (:$), type (:->), Shift
+  , TPrim(..), DType(..), SomeType(..), Type, TBool, TNatural, TList, TOptional, type (:$), type (:->), Shift
   -- ** Terms
   , Prim(..), PrimF(..), DTerm(..), SomeTerm(..)
   -- ** Mixed
   , DExpr(..), SomeDExpr(..), dExprType
+  -- ** Shared
+  , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
   , SDSort(..), SDKind(..), STPrim(..), SDType(..), SPrim(..), SPrimF(..), SDTerm(..)
   , KShiftSym, ShiftSym
@@ -70,14 +72,16 @@ import           Data.Kind
 import           Data.Sequence                (Seq(..))
 import           Data.Singletons.Prelude.List (Sing(..))
 import           Data.Singletons.TH hiding    (Sum)
-import           Data.Singletons.TypeLits     (SSymbol)
+import           Data.Singletons.TypeLits     (SSymbol, Sing(SSym))
 import           Data.Text                    (Text)
 import           Data.Type.Equality
+import           Data.Type.Predicate
 import           Data.Type.Universe
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Option
 import           Dhall.Typed.Type.Prod
+import           Dhall.Typed.Type.Symbol
 import           GHC.TypeLits                 (Symbol)
 import           Numeric.Natural
 import           Unsafe.Coerce                (unsafeCoerce)
@@ -139,6 +143,42 @@ type instance Apply (MapSym f) xs = Map f xs
 --    * Eliminated by:       KApp
 
 -- ---------
+-- > Shared
+-- ---------
+
+-- | Meta-level type describing a collection or aggregation of types.  Used
+-- for specifying records and unions.
+data AggType k :: k -> [Symbol] -> [k] -> Type where
+    ATZ :: AggType k r '[] '[]
+    ATS :: AggType k r ls as      -- TODO: add witness of none-ness
+        -> AggType k r (l ': ls) (r ': as)
+
+-- | Convenient synonym for ''ATS' alowing for explicit specification of
+-- the label.
+type family ATCons l (x :: AggType k r ls as) :: AggType k r (l ': ls) (r ': as) where
+    ATCons l x = 'ATS x
+
+-- | GADT for specifying a record value matching an 'AggType'.
+data RecordVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
+        :: AggType k r ls ks
+        -> Prod j ks
+        -> [j r]
+        -> Type
+      where
+    RVZ :: RecordVal k j r '[] '[] 'ATZ 'Ø '[]
+    RVS :: RecordVal k j r       ls        ks        at         bs        as
+        -> RecordVal k j r (l ': ls) (r ': ks) ('ATS at) (b ':< bs) (a ': as)
+
+-- | GADT for specifying a union value matching an 'AggType'.
+data UnionVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
+        :: AggType k r ls ks
+        -> Prod j ks
+        -> j r
+        -> Type
+      where
+    UnionVal :: SIndex ks r i -> UnionVal k j r ls ks at bs (IxProd j ks r bs i)
+
+-- ---------
 -- > Sorts
 -- ---------
 
@@ -148,6 +188,10 @@ data DSort = Kind | DSort :*> DSort
 -- ---------
 -- > Kinds
 -- ---------
+
+data KPrim :: [DSort] -> DSort -> Type where
+    KRecord   :: AggType DSort 'Kind ls as -> KPrim as 'Kind
+    KUnion    :: AggType DSort 'Kind ls as -> KPrim as 'Kind
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -167,6 +211,7 @@ data DKind :: [DSort] -> DSort -> Type where
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
     KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
     Type  :: DKind ts 'Kind
+    KP    :: KPrim as a -> Prod (DKind ts) as -> DKind ts a
 
 -- | Shift all kind variables in a kind expression of sort @b@ to account
 -- for a new bound variable of sort @a@, to be inserted at the position
@@ -185,17 +230,16 @@ infixr 1 :~>
 -- ---------
 
 -- | Primitives of Dhall types, built into the language.
---
--- TODO: if we realize that none of the constructors need arguments, we can
--- take out the list parameter.
 data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
-    Bool     :: TPrim ts '[] 'Type
-    Natural  :: TPrim ts '[] 'Type
-    Record   :: Prod (Const Symbol) as -> TPrim ts as 'Type
-    List     :: TPrim ts '[] ('Type ':~> 'Type)
-    Optional :: TPrim ts '[] ('Type ':~> 'Type)
-
-type Floop = 'Record ('Const "hello" ':< 'Ø)
+    Bool       :: TPrim ts '[] 'Type
+    Natural    :: TPrim ts '[] 'Type
+    Record     :: AggType (DKind ts 'Kind) 'Type ls as -> TPrim ts as 'Type
+    List       :: TPrim ts '[] ('Type ':~> 'Type)
+    Optional   :: TPrim ts '[] ('Type ':~> 'Type)
+    TRecordLit :: RecordVal DSort (DKind ts) 'Kind ls ks at bs as
+               -> TPrim ts as ('KP ('KRecord at) bs)
+    TUnionLit  :: UnionVal DSort (DKind ts) 'Kind ls ks at bs a
+               -> TPrim ts '[a] ('KP ('KRecord at) bs)
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -262,6 +306,10 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     ListReverse   :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TList     :$ 'TVar 'IZ))
     Some          :: Prim ts us '[ a ] (TOptional :$ a)
     None          :: Prim ts us '[]    ('Pi 'SType (TOptional :$ 'TVar 'IZ))
+    RecordLit     :: RecordVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs as
+                  -> Prim ts us as ('TP ('Record at) bs)
+    UnionLit      :: UnionVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs a
+                  -> Prim ts us '[a] ('TP ('Record at) bs)
 
 -- | Primitive functors of Dhall terms, built into the language.
 data PrimF ts us :: (Type -> Type) -> DType ts us ('Type :~> 'Type) -> Type where
