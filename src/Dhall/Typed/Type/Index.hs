@@ -34,10 +34,6 @@ import qualified GHC.TypeLits            as TL
 
 genPolySing ''Index
 
--- data SIndex as a :: Index as a -> Type where
---     SIZ :: SIndex (a ': as) a 'IZ
---     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
-
 deriving instance Show (SIndex as a i)
 
 class SIndexI as a (i :: Index as a) where
@@ -65,9 +61,13 @@ instance SingKind (Index as a) where
       IZ   -> SomeSing (SIx SIZ)
       IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
 
-type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
-    SIndexOf (a ': as) a 'IZ     = 'SIZ
-    SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
+-- data SIndex as a :: Index as a -> Type where
+--     SIZ :: SIndex (a ': as) a 'IZ
+--     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
+
+-- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
+--     SIndexOf (a ': as) a 'IZ     = 'SIZ
+--     SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined

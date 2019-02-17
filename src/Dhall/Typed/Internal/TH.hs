@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections       #-}
 
 module Dhall.Typed.Internal.TH (
     inspector
@@ -10,12 +11,15 @@ module Dhall.Typed.Internal.TH (
 import           Control.Monad
 import           Control.Monad.Trans.Writer
 import           Data.Bifunctor
+import           Data.Char
+import           Data.Either
 import           Data.List
 import           Data.Traversable
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Desugar.Sweeten
 import           Language.Haskell.TH.Lift
+import           Language.Haskell.TH.Syntax
 
 -- Here we will generate singletons for GADTs in the "leading kind
 -- variable" style.  Something like:
@@ -77,7 +81,22 @@ genPolySing
     -> q [Dec]
 genPolySing name = do
     DTyConI (DDataD nod ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
-    decToTH <$> polySing nod ctx nm bndrs dk cons dervs
+    decsToTH <$> polySing nod ctx nm bndrs dk cons dervs
+
+-- data DKind ts k where
+-- type family SDKindOf ts k (x :: DKind ts k) = (y :: SDKind ts k x) | y -> x where
+--     SDKindOf ts k          ('KVar i  ) = 'SKVar (SIndexOf ts k i)
+
+-- type family SDSortOf (k :: DSort) = (s :: SDSort k) | s -> k where
+--     SDSortOf 'Kind = 'SKind
+--     SDSortOf (a ':*> b) = SDSortOf a ':%*> SDSortOf b
+
+-- data Index :: [k] -> k -> Type where
+--     IZ :: Index (a ': as) a
+--     IS :: Index bs a -> Index (b ': bs) a
+-- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
+--     SIndexOf (a ': as) a 'IZ     = 'SIZ
+--     SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
 
 polySing
     :: forall q. ()
@@ -89,45 +108,87 @@ polySing
     -> Maybe DKind      -- ^ What is this?
     -> [DCon]
     -> [DDerivClause]
-    -> q DDec
+    -> q [DDec]
 polySing nod ctx nm bndrs dk cons _dervs = do
-    bndr  <- (`DKindedTV` bndrKind) <$> newUniqueName "x"
-    cons' <- traverse singCons cons
-    pure $ DDataD nod ctx nm' (bndrs ++ [bndr]) dk cons' []
+    bndr  <- (`DKindedTV` bndrKind) <$> qNewName "x"
+    dd  <- mkDataDec bndr
+    ofa <- ofFam bndr
+    pure [dd, ofa]
   where
+    mkDataDec :: DTyVarBndr -> q DDec
+    mkDataDec bndr = do
+      cons' <- traverse singCons cons
+      pure $ DDataD nod ctx nm' (bndrs ++ [bndr]) dk cons' []
+    ofFam :: DTyVarBndr -> q DDec
+    ofFam bndr = do
+        let newBndrs = bndrs ++ [bndr]
+        y <- qNewName "y"
+        let k'  = applyDType (DConT nm') (dTyVarBndrToDType <$> newBndrs)
+            tfh = DTypeFamilyHead (mapNameBase ofSingle nm')
+                    newBndrs
+                    (DTyVarSig $ DKindedTV y k')
+                    (Just (InjectivityAnn y [x]))
+        eqns <- for cons $ \c@(DCon _ _ cnm _ cTy) -> do
+          (sat, vs) <- saturate c
+          let (_, newArgs) = unApply cTy
+              res = applyDType (DConT (mapNameBase singleConstr cnm)) $
+                      flip map vs $ \(anm, t) ->
+                        let (DConT tC, tA) = unApply t
+                            tC' = mapNameBase (ofSingle . singleConstr) tC
+                        in  applyDType (DConT tC') $ tA ++ [DVarT anm]
+          pure $ DTySynEqn (newArgs ++ [sat]) res
+        pure $ DClosedTypeFamilyD tfh eqns
+      where
+        x = case bndr of
+          DKindedTV y _ -> y
+          DPlainTV y    -> y
     nm' :: Name
-    nm' = mkName . singleConstr . nameBase $ nm
+    nm' = mapNameBase singleConstr nm
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
     -- what do we do about cctx?
     singCons :: DCon -> q DCon
     singCons (DCon cbndrs cctx cnm cfs ctype) = do
-      (cfs', newBndrs) <- runWriterT $ refield cfs
+      (cfs', newArgs) <- runWriterT $ refield cfs
       (DConT _, targs) <- pure $ unApply ctype
-      let ctype' = applyDType (DConT nm') $
-            targs ++ [applyDType (DConT cnm) (dTyVarBndrToDType <$> newBndrs)]
-      pure $ DCon (cbndrs ++ newBndrs)
+      let ctype' = applyDType (DConT nm') $     -- no DPromotedT
+            targs ++ [applyDType (DConT cnm) (either id dTyVarBndrToDType <$> newArgs)]
+      pure $ DCon (cbndrs ++ rights newArgs)
                   cctx
-                  (mkName (singleConstr (nameBase cnm)))
+                  (mapNameBase singleConstr cnm)
                   cfs'
                   ctype'
-    refield :: DConFields -> WriterT [DTyVarBndr] q DConFields
+    refield :: DConFields -> WriterT [Either DType DTyVarBndr] q DConFields
     refield = \case
         DNormalC i bt -> DNormalC i <$> (traverse . traverse) go bt
-        DRecC vbt     -> error "Singling records not yet implemented. But it's not that hard tbh."
+        DRecC vbt     -> fmap DRecC
+                       . traverse (\(n,b,t) -> (mapNameBase singleValue n,b,) <$> go t)
+                       $ vbt
       where
-        go :: DType -> WriterT [DTyVarBndr] q DType
+        go :: DType -> WriterT [Either DType DTyVarBndr] q DType
         go t = do
-          n <- newUniqueName "x"
-          tell [DPlainTV n]     -- ???
           (DConT fnm, targs) <- pure $ unApply t
-          -- TODO: handle cases from different module?
-          -- pure $ applyDType (DConT (mapName singleConstr fnm)) $
-          pure $ applyDType (DConT (mkName (singleConstr (nameBase fnm)))) $
-            targs ++ [DVarT n]
-            
+          if isSingleConstr fnm
+            then t <$ tell [ Left $ applyDType (DConT (mapName ofSingle fnm)) targs ]
+            else do
+              n <- qNewName "x"
+              tell [Right $ DPlainTV n]     -- ???
+              -- TODO: handle cases from different module?
+              -- pure $ applyDType (DConT (mapName singleConstr fnm)) $
+              pure $ applyDType (DConT (mapNameBase singleConstr fnm)) $
+                targs ++ [DVarT n]
 
-
+saturate :: Quasi q => DCon -> q (DType, [(Name, DType)])
+saturate (DCon _ _ nm fs _) = do
+    bndrs <- for fs' $ \f -> (, f) <$> qNewName "x"
+    pure ( applyDType (DConT nm) $
+             map (dTyVarBndrToDType . uncurry DKindedTV) bndrs
+         , bndrs
+         )
+  where
+    fs' = case fs of
+      DNormalC _ xs -> map snd xs
+      DRecC xs      -> map (\(_,_,t) -> t) xs
 
 -- | Descend down the left hand side of applications until you reach
 -- a non-application.
@@ -137,20 +198,31 @@ unApply = second ($ []) . go
     go (DAppT x y) = second (. (y:)) $ go x
     go x           = (x, id)
 
+singleConstr :: String -> String
+singleConstr (':':cs) = ":%" ++ cs
+singleConstr cs       = "S" ++ cs
+
+singleValue :: String -> String
+singleValue ds@(c:cs)
+  | all isSymbol ds = '%' : ds
+  | otherwise       = 's' : toUpper c : cs
+singleValue _ = error "Invalid value name"
+
+-- | Will give a false positive for a type that is called "SXyyyy".
+isSingleConstr :: Name -> Bool
+isSingleConstr = check . nameBase
+  where
+    check ('S':c:_) = isUpper c
+    check _         = False
+
 mapName :: (String -> String) -> Name -> Name
 mapName f n = mkName
             . maybe id (\m x -> m ++ "." ++ x) (nameModule n)
             . f
             $ nameBase n
 
-singleConstr :: String -> String
-singleConstr (':':cs) = ":%" ++ cs
-singleConstr cs       = "S" ++ cs
+mapNameBase :: (String -> String) -> Name -> Name
+mapNameBase f = mkName . f . nameBase
 
-
-    -- _ i
-    -- pure []
-    
-    -- checkForRep names
-    -- ddecs <- concatMapM (singInfo <=< dsInfo <=< reifyWithLocals) names
-    -- return $ decsToTH ddecs
+ofSingle :: String -> String
+ofSingle = (++ "Of")
