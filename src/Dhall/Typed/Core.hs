@@ -40,7 +40,7 @@ module Dhall.Typed.Core (
   -- ** Shared
   , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
-  , SDSort(..), SDKind(..), STPrim(..), SDType(..), SPrim(..), SPrimF(..), SDTerm(..)
+  , SDSort(..), SDKind(..), STPrim(..), SDType(..), SPrim(..), SPrimF(..), SDTerm(..), SAggType(..)
   , KShiftSym, ShiftSym
   , Sing(SDS, getSDS, SDK, getSDK, STPr, getSTPr, SDTy, getSDTy, SPr, getSPr, SPrF, getSPrF, SDTe, getSDTe)
   -- * Util
@@ -151,7 +151,7 @@ type instance Apply (MapSym f) xs = Map f xs
 -- for specifying records and unions.
 data AggType k :: k -> [Symbol] -> [k] -> Type where
     ATZ :: AggType k r '[] '[]
-    ATS :: AggType k r ls as      -- TODO: add witness of none-ness
+    ATS :: AggType k r ls as      -- TODO: add witness of uniqueness
         -> AggType k r (l ': ls) (r ': as)
 
 -- | Convenient synonym for ''ATS' alowing for explicit specification of
@@ -194,10 +194,10 @@ data UnionVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
 data DSort :: Type where
     Kind    :: DSort
     (:*>)   :: DSort -> DSort -> DSort
-    SRecord :: AggType () '() ls as
+    SoRecord :: AggType () '() ls as
             -> Prod (Const DSort) as
             -> DSort
-    SUnion  :: AggType () '() ls as
+    SoUnion  :: AggType () '() ls as
             -> Prod (Const DSort) as
             -> DSort
 
@@ -209,9 +209,9 @@ data KPrim :: [DSort] -> DSort -> Type where
     KRecord    :: AggType DSort 'Kind ls as -> KPrim as 'Kind
     KUnion     :: AggType DSort 'Kind ls as -> KPrim as 'Kind
     KRecordLit :: RecordVal () (Const DSort) '() ls ks at bs as
-               -> KPrim (Map GetConstSym0 as) ('SRecord at bs)
+               -> KPrim (Map GetConstSym0 as) ('SoRecord at bs)
     KUnionLit  :: UnionVal () (Const DSort) '() ls ks at bs ('Const a)
-               -> KPrim '[a] ('SRecord at bs)
+               -> KPrim '[a] ('SoUnion at bs)
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -274,6 +274,9 @@ data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
 --
 -- Something of type @'DType' '[] '[] a@ is a type of kind @a@ with no free
 -- variables.
+--
+-- Note that the type of "kind-polymorphic values" (functions from kinds to
+-- terms) is not yet supported.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
     TLam  :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us (u ':~> a)
@@ -359,6 +362,9 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 --
 -- Something of type @'DTerm' '[] '[] '[] a@ is a term of type @a@ with no
 -- free variables.
+--
+-- Note that "kind-polymorphic values" (functions from kinds to
+-- terms) are not yet supported.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Var  :: Index vs a -> DTerm ts us vs a
     Lam  :: SDType ts us 'Type v -> DTerm ts us (v ': vs) a -> DTerm ts us vs (v ':-> a)
@@ -455,6 +461,14 @@ dExprType = \case
 -- > Boring singleton shenanigans
 -- ---------
 
+-- ---------
+-- > Shared
+-- ---------
+
+data SAggType k r ls as :: AggType k r ls as -> Type where
+    SATZ :: SAggType k r '[] '[] 'ATZ
+    SATS :: SAggType k r ls as at
+         -> SAggType k r (l ': ls) (r ': as) ('ATS at)
 
 -- ---------
 -- > Sorts
@@ -463,10 +477,49 @@ dExprType = \case
 data SDSort :: DSort -> Type where
     SKind :: SDSort 'Kind
     (:%*>) :: SDSort s -> SDSort t -> SDSort (s ':*> t)
-
+    SSoRecord :: SAggType () '() ls as at
+              -> SProd (Const DSort) as p
+              -> SDSort ('SoRecord at p)
+    SSoUnion  :: SAggType () '() ls as at
+              -> SProd (Const DSort) as p
+              -> SDSort ('SoUnion at p)
+        
 type family SDSortOf (k :: DSort) = (s :: SDSort k) | s -> k where
     SDSortOf 'Kind = 'SKind
     SDSortOf (a ':*> b) = SDSortOf a ':%*> SDSortOf b
+
+data instance Sing (x :: DSort) where
+    SDS :: { getSDS :: SDSort x } -> Sing x
+
+instance SingKind DSort where
+    type Demote DSort = DSort
+
+class SDSortI a where
+    sdSort :: SDSort a
+
+instance SDSortI 'Kind where
+    sdSort = SKind
+instance (SDSortI a, SDSortI b) => SDSortI (a ':*> b) where
+    sdSort = sdSort :%*> sdSort
+
+-- Algo:
+--  1. Add S before every constructor, and a variable after, and final
+--     constructor add the name of constructor
+--          Record     :: AggType (DKind ts 'Kind) 'Type ls as -> TPrim ts as 'Type
+--          SRecord    :: SAggType (DKind ts 'Kind) 'Type ls as x -> STPrim ts as 'Type ('Record x)
+--
+--          (:*>) :: DSort -> DSort -> DSort
+--          (:%*>) :: SDSort x -> SDSort y -> SDSort ('(:%*>) x y)
+--
+-- data DSort :: Type where
+--     Kind    :: DSort
+--     (:*>)   :: DSort -> DSort -> DSort
+--     SRecord :: AggType () '() ls as
+--             -> Prod (Const DSort) as
+--             -> DSort
+--     SUnion  :: AggType () '() ls as
+--             -> Prod (Const DSort) as
+--             -> DSort
 
 -- ---------
 -- > Kinds
@@ -478,12 +531,6 @@ data SDKind ts a :: DKind ts a -> Type where
     SKApp  :: SDKind ts (a ':*> b) f -> SDKind ts a x -> SDKind ts b ('KApp f x)
     (:%~>) :: SDKind ts 'Kind x -> SDKind ts 'Kind y -> SDKind ts 'Kind (x ':~> y)
     SType  :: SDKind ts 'Kind 'Type
-
-data instance Sing (x :: DSort) where
-    SDS :: { getSDS :: SDSort x } -> Sing x
-
-instance SingKind DSort where
-    type Demote DSort = DSort
 
 type family SDKindOf ts k (x :: DKind ts k) = (y :: SDKind ts k x) | y -> x where
     SDKindOf ts k          ('KVar i  ) = 'SKVar (SIndexOf ts k i)
@@ -519,6 +566,13 @@ data SDType ts us a :: DType ts us a -> Type where
            -> SDType ts us 'Type y
            -> SDType ts us 'Type (x ':-> y)
     STP    :: STPrim ts as a x -> SProd (DType ts us) as p -> SDType ts us a ('TP x p)
+
+    STPoly :: SDSort t
+           -> SDType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x
+           -> SDType ts us ('KPi (SDSortOf t) a) ('TPoly (SDSortOf t) x)
+    STInst :: SDType ts us ('KPi (SDSortOf t) b) x
+           -> SDKind ts t a
+           -> SDType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b) ('TInst x (SDKindOf ts t a))
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x

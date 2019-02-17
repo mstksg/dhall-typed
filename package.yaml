@@ -40,6 +40,10 @@ library:
   - profunctors
   - singletons
   - text
+  - template-haskell
+  - th-desugar
+  - th-lift
+  - transformers
 
 # executables:
 #   dhall-typed-exe:

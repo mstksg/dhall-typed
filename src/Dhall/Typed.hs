@@ -1,15 +1,17 @@
-{-# LANGUAGE EmptyCase                      #-}
-{-# LANGUAGE FlexibleContexts               #-}
-{-# LANGUAGE GADTs                          #-}
-{-# LANGUAGE LambdaCase                     #-}
-{-# LANGUAGE OverloadedStrings              #-}
-{-# LANGUAGE ScopedTypeVariables            #-}
-{-# LANGUAGE TypeApplications               #-}
-{-# LANGUAGE TypeInType                     #-}
-{-# LANGUAGE TypeOperators                  #-}
 -- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
+{-# LANGUAGE EmptyCase                         #-}
+{-# LANGUAGE FlexibleContexts                  #-}
+{-# LANGUAGE GADTs                             #-}
+{-# LANGUAGE LambdaCase                        #-}
+{-# LANGUAGE OverloadedStrings                 #-}
+{-# LANGUAGE ScopedTypeVariables               #-}
+{-# LANGUAGE TemplateHaskell                   #-}
+{-# LANGUAGE TypeApplications                  #-}
+{-# LANGUAGE TypeInType                        #-}
+{-# LANGUAGE TypeOperators                     #-}
 
 module Dhall.Typed (
+    foo
   ) where
 
 -- module Dhall.Typed (
@@ -31,19 +33,20 @@ module Dhall.Typed (
 import           Control.Monad
 import           Data.Functor
 import           Data.Kind
-import           Data.Sequence      (Seq(..))
+import           Data.Sequence           (Seq(..))
 import           Data.Singletons
-import           Data.Text          (Text)
+import           Data.Text               (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
+import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
-import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.N
-import qualified Data.Sequence      as Seq
-import qualified Data.Text          as T
-import qualified Dhall.Context      as D
-import qualified Dhall.Core         as D
-import qualified Dhall.TypeCheck    as D
+import           Dhall.Typed.Type.Prod
+import qualified Data.Sequence           as Seq
+import qualified Data.Text               as T
+import qualified Dhall.Context           as D
+import qualified Dhall.Core              as D
+import qualified Dhall.TypeCheck         as D
 
 -- type family ShiftSort
 
@@ -108,19 +111,40 @@ lookupCtx v = go
               (True , True ) -> Just (TCIType IZ x)
 
 
-
 toTyped
     :: Context ts us vs
     -> D.Expr () D.X
     -> Maybe (SomeDExpr ts us vs)
 toTyped ctx = \case
-    D.Const D.Sort -> Just . SomeDExpr sf4 $ DEMeta
-    D.Const D.Kind -> Just . SomeDExpr sf3 . DESort $ Kind
-    D.Const D.Type -> Just . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
-    D.Bool         -> Just . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
-    D.BoolLit b    -> Just . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
-    D.Natural      -> Just . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
-    D.NaturalLit n -> Just . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
+    D.Const D.Sort -> pure . SomeDExpr sf4 $ DEMeta
+    D.Const D.Kind -> pure . SomeDExpr sf3 . DESort $ Kind
+    D.Const D.Type -> pure . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
+    D.Bool         -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
+    D.BoolLit b    -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
+    D.Natural      -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
+    D.NaturalLit n -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
+    -- D.NaturalFold  -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalFold Ø)
+    -- D.NaturalBuild -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalBuild Ø)
+    D.NaturalPlus x y -> do
+      SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) x')) <- toTyped ctx x
+      SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) y')) <- toTyped ctx y
+      pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P NaturalPlus (x' :< y' :< Ø))
+
+    -- NaturalPlus   :: Prim ts us '[ TNatural, TNatural ] TNatural
+    -- NaturalTimes  :: Prim ts us '[ TNatural, TNatural ] TNatural
+    -- NaturalIsZero :: Prim ts us '[] (TNatural :-> TBool)
+    -- ListFold      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
+    -- ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TList :$ 'TVar 'IZ))
+    -- ListAppend    :: Prim ts us '[ TList :$ a, TList :$ a ] (TList :$ a)
+    -- ListHead      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
+    -- ListLast      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
+    -- ListReverse   :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TList     :$ 'TVar 'IZ))
+    -- Some          :: Prim ts us '[ a ] (TOptional :$ a)
+    -- None          :: Prim ts us '[]    ('Pi 'SType (TOptional :$ 'TVar 'IZ))
+    -- RecordLit     :: RecordVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs as
+    --               -> Prim ts us as ('TP ('Record at) bs)
+    -- UnionLit      :: UnionVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs a
+    --               -> Prim ts us '[a] ('TP ('Record at) bs)
 -- -- | Syntax tree for expressions
 -- data Expr s a
 --     | Var Var
@@ -604,3 +628,7 @@ toTyped ctx = \case
 --              )
 --            )
 --      `App` ListLit (STVar SIZ) Seq.empty
+
+foo :: String
+foo = $(inspector '(:~>))
+

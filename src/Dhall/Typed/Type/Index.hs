@@ -1,17 +1,18 @@
-{-# LANGUAGE EmptyCase             #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE PartialTypeSignatures  #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeInType            #-}
-{-# LANGUAGE TypeOperators         #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# OPTIONS_GHC -fno-warn-orphans  #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# OPTIONS_GHC -fno-warn-orphans   #-}
 
 module Dhall.Typed.Type.Index (
   -- * Index
@@ -28,11 +29,14 @@ import           Data.Kind
 import           Data.Singletons
 import           Data.Type.Equality
 import           Data.Type.Universe
-import qualified GHC.TypeLits       as TL
+import           Dhall.Typed.Internal.TH
+import qualified GHC.TypeLits            as TL
 
-data SIndex as a :: Index as a -> Type where
-    SIZ :: SIndex (a ': as) a 'IZ
-    SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
+genPolySing ''Index
+
+-- data SIndex as a :: Index as a -> Type where
+--     SIZ :: SIndex (a ': as) a 'IZ
+--     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
 
 deriving instance Show (SIndex as a i)
 
