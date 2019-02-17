@@ -1,5 +1,6 @@
 {-# LANGUAGE EmptyCase              #-}
 {-# LANGUAGE FlexibleInstances      #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE LambdaCase             #-}
@@ -36,14 +37,6 @@ genPolySing ''Index
 
 deriving instance Show (SIndex as a i)
 
-class SIndexI as a (i :: Index as a) where
-    sIndex :: SIndex as a i
-
-instance SIndexI (a ': as) a 'IZ where
-    sIndex = SIZ
-instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
-    sIndex = SIS sIndex
-
 data instance Sing (i :: Index as a) where
     SIx  :: { getSIx  :: SIndex as a i } -> Sing i
 
@@ -60,6 +53,14 @@ instance SingKind (Index as a) where
     toSing = \case
       IZ   -> SomeSing (SIx SIZ)
       IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
+
+-- class SIndexI as a (i :: Index as a) | i -> as a where
+--     sIndex :: SIndex as a i
+
+-- instance SIndexI (a ': as) a 'IZ where
+--     sIndex = SIZ
+-- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
+--     sIndex = SIS sIndex
 
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ

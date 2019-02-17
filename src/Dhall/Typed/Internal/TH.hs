@@ -8,6 +8,7 @@ module Dhall.Typed.Internal.TH (
   , genPolySing
   ) where
 
+import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Trans.Writer
 import           Data.Bifunctor
@@ -110,38 +111,18 @@ polySing
     -> [DDerivClause]
     -> q [DDec]
 polySing nod ctx nm bndrs dk cons _dervs = do
-    bndr  <- (`DKindedTV` bndrKind) <$> qNewName "x"
-    dd  <- mkDataDec bndr
-    ofa <- ofFam bndr
-    pure [dd, ofa]
+    bndr <- (`DKindedTV` bndrKind) <$> qNewName "x"
+    dd   <- mkDataDec bndr
+    ofa  <- ofFam bndr
+    si   <- singI bndr
+    -- runQ . reportError $ pprint (sweeten si)
+    pure $ [dd, ofa] ++ si
   where
+    -- TODO: fixity
     mkDataDec :: DTyVarBndr -> q DDec
     mkDataDec bndr = do
       cons' <- traverse singCons cons
       pure $ DDataD nod ctx nm' (bndrs ++ [bndr]) dk cons' []
-    ofFam :: DTyVarBndr -> q DDec
-    ofFam bndr = do
-        let newBndrs = bndrs ++ [bndr]
-        y <- qNewName "y"
-        let k'  = applyDType (DConT nm') (dTyVarBndrToDType <$> newBndrs)
-            tfh = DTypeFamilyHead (mapNameBase ofSingle nm')
-                    newBndrs
-                    (DTyVarSig $ DKindedTV y k')
-                    (Just (InjectivityAnn y [x]))
-        eqns <- for cons $ \c@(DCon _ _ cnm _ cTy) -> do
-          (sat, vs) <- saturate c
-          let (_, newArgs) = unApply cTy
-              res = applyDType (DConT (mapNameBase singleConstr cnm)) $
-                      flip map vs $ \(anm, t) ->
-                        let (DConT tC, tA) = unApply t
-                            tC' = mapNameBase (ofSingle . singleConstr) tC
-                        in  applyDType (DConT tC') $ tA ++ [DVarT anm]
-          pure $ DTySynEqn (newArgs ++ [sat]) res
-        pure $ DClosedTypeFamilyD tfh eqns
-      where
-        x = case bndr of
-          DKindedTV y _ -> y
-          DPlainTV y    -> y
     nm' :: Name
     nm' = mapNameBase singleConstr nm
     bndrKind :: DKind
@@ -177,6 +158,73 @@ polySing nod ctx nm bndrs dk cons _dervs = do
               -- pure $ applyDType (DConT (mapName singleConstr fnm)) $
               pure $ applyDType (DConT (mapNameBase singleConstr fnm)) $
                 targs ++ [DVarT n]
+    ofFam :: DTyVarBndr -> q DDec
+    ofFam bndr = do
+        let newBndrs = bndrs ++ [bndr]
+        y <- qNewName "y"
+        let k'  = applyDType (DConT nm') (dTyVarBndrToDType <$> newBndrs)
+            tfh = DTypeFamilyHead (mapNameBase ofSingle nm')
+                    newBndrs
+                    (DTyVarSig $ DKindedTV y k')
+                    (Just (InjectivityAnn y [bndrName bndr]))
+        eqns <- for cons $ \c@(DCon _ _ cnm _ cTy) -> do
+          (sat, vs) <- saturate c
+          let (_, newArgs) = unApply cTy
+              res = applyDType (DConT (mapNameBase singleConstr cnm)) $
+                      flip map vs $ \(anm, t) ->
+                        let (DConT tC, tA) = unApply t
+                            tC' = mapNameBase (ofSingle . singleConstr) tC
+                        in  applyDType (DConT tC') $ tA ++ [DVarT anm]
+          pure $ DTySynEqn (newArgs ++ [sat]) res
+        pure $ DClosedTypeFamilyD tfh eqns
+    singI :: DTyVarBndr -> q [DDec]
+    singI bndr = do
+        insts <- for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
+          (sat, vs) <- saturate c
+          let (_, newArgs) = unApply cTy
+          cctx <- for vs $ \(aN, aT) -> do
+            (DConT atc, atarg) <- pure $ unApply aT
+            pure . foldl' DAppPr (DConPr (mapNameBase iSingleConstr atc)) $
+                    atarg ++ [DVarT aN]
+          valArgs <- maybe (fail "Bad val arg") pure $ case cfs of
+             DNormalC _ xs -> traverse (typeSingI . snd) xs
+             DRecC xs      -> traverse (\(_,_,t) -> typeSingI t) xs
+          pure $ DInstanceD Nothing cctx
+            (applyDType (DConT clsNm) $ newArgs ++ [sat])
+            [DLetDec . DFunD mthdNm $
+               [ DClause [] . applyDExp (DConE (mapNameBase singleConstr cnm)) $
+                   map DVarE valArgs
+                  
+               ]
+            ]
+        pure $ cls : insts
+      where
+        clsNm  = mapNameBase iSingleConstr nm
+        mthdNm = mapNameBase iSingleValue nm
+        cls = DClassD ctx clsNm
+          (bndrs ++ [bndr])
+          [FunDep [bndrName bndr] (bndrName <$> bndrs)]
+          [DLetDec . DSigD mthdNm . applyDType (DConT nm')
+             $ dTyVarBndrToDType <$> (bndrs ++ [bndr])
+          ]
+
+bndrName :: DTyVarBndr -> Name
+bndrName (DKindedTV x _) = x
+bndrName (DPlainTV x   ) = x
+
+typeSingI :: DType -> Maybe Name
+typeSingI t
+  | (DConT c, _) <- unApply t = Just $ mapNameBase iSingleValue c
+  | otherwise                 = Nothing
+
+
+-- class SIndexI as a (i :: Index as a) where
+--     sIndex :: SIndex as a i
+
+-- instance SIndexI (a ': as) a 'IZ where
+--     sIndex = SIZ
+-- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
+--     sIndex = SIS sIndex
 
 saturate :: Quasi q => DCon -> q (DType, [(Name, DType)])
 saturate (DCon _ _ nm fs _) = do
@@ -200,7 +248,7 @@ unApply = second ($ []) . go
 
 singleConstr :: String -> String
 singleConstr (':':cs) = ":%" ++ cs
-singleConstr cs       = "S" ++ cs
+singleConstr cs       = 'S' : cs
 
 singleValue :: String -> String
 singleValue ds@(c:cs)
@@ -226,3 +274,13 @@ mapNameBase f = mkName . f . nameBase
 
 ofSingle :: String -> String
 ofSingle = (++ "Of")
+
+iSingleConstr :: String -> String
+iSingleConstr (':':cs) = ":%" ++ cs ++ "?"
+iSingleConstr cs = 'S' : cs ++ "I"
+
+-- | Turn a type constructor into the "SingI" method name
+iSingleValue :: String -> String
+iSingleValue (':':cs) = '?':cs
+iSingleValue cs       = 's':cs
+  
