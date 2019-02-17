@@ -51,10 +51,10 @@ deriving instance Show (SIndex as a i)
 
 
 
-instance PolySingI 'IZ where
-    polySing = SIZ
-instance PolySingI i => PolySingI ('IS i) where
-    polySing = SIS polySing
+-- instance PolySingI 'IZ where
+--     polySing = SIZ
+-- instance PolySingI i => PolySingI ('IS i) where
+--     polySing = SIS polySing
 
 newtype instance Sing (i :: Index as a) where
     SIx  :: { getSIx  :: SIndex as a i } -> Sing i

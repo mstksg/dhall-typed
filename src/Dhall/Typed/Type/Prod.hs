@@ -46,16 +46,16 @@ data Prod :: (k -> Type) -> [k] -> Type where
 
 infixr 5 :<
 
--- genPolySing ''Prod
+genPolySing ''Prod
 
-data SProd f as :: Prod f as -> Type where
-    SØ    :: SProd f '[] 'Ø
-    (:%<) :: PolySing (f a) x
-          -> SProd f as xs
-          -> SProd f (a ': as) (x ':< xs)
+-- data SProd f as :: Prod f as -> Type where
+--     SØ    :: SProd f '[] 'Ø
+--     (:%<) :: PolySing (f a) x
+--           -> SProd f as xs
+--           -> SProd f (a ': as) (x ':< xs)
 
-type instance PolySingOf (SProd f '[]      ) 'Ø         = 'SØ
-type instance PolySingOf (SProd f (a ': as)) (x ':< xs) = PolySingOf (PolySing (f a)) x ':%< PolySingOf (SProd f as) xs
+-- type instance PolySingOf (SProd f '[]      ) 'Ø         = 'SØ
+-- type instance PolySingOf (SProd f (a ': as)) (x ':< xs) = PolySingOf (PolySing (f a)) x ':%< PolySingOf (SProd f as) xs
 
 -- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
 

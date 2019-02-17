@@ -3,6 +3,7 @@
 {-# LANGUAGE EmptyCase               #-}
 {-# LANGUAGE FlexibleContexts        #-}
 {-# LANGUAGE FlexibleInstances       #-}
+{-# LANGUAGE FunctionalDependencies  #-}
 {-# LANGUAGE GADTs                   #-}
 {-# LANGUAGE InstanceSigs            #-}
 {-# LANGUAGE KindSignatures          #-}
@@ -78,6 +79,7 @@ import           Data.Text                     (Text)
 import           Data.Type.Equality
 import           Data.Type.Predicate
 import           Data.Type.Universe
+import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Option
@@ -154,6 +156,8 @@ data AggType k :: k -> [Symbol] -> [k] -> Type where
     ATS :: AggType k r ls as      -- TODO: add witness of uniqueness
         -> AggType k r (l ': ls) (r ': as)
 
+genPolySing ''AggType
+
 -- | Convenient synonym for ''ATS' alowing for explicit specification of
 -- the label.
 type family ATCons l (x :: AggType k r ls as) :: AggType k r (l ': ls) (r ': as) where
@@ -173,6 +177,8 @@ data RecordVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
     RVS :: RecordVal k j r       ls        ks        at         bs        as
         -> RecordVal k j r (l ': ls) (r ': ks) ('ATS at) (b ':< bs) (a ': as)
 
+-- genPolySing ''RecordVal
+
 -- | GADT for specifying a union value matching an 'AggType'.
 data UnionVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
         :: AggType k r ls ks
@@ -181,6 +187,8 @@ data UnionVal k (j :: k -> Type) (r :: k) (ls :: [Symbol]) (ks :: [k])
         -> Type
       where
     UnionVal :: SIndex ks r i -> UnionVal k j r ls ks at bs (IxProd j ks r bs i)
+
+-- genPolySing ''UnionVal
 
 -- ---------
 -- > Sorts
@@ -201,6 +209,8 @@ data DSort :: Type where
             -> Prod (Const DSort) as
             -> DSort
 
+genPolySing ''DSort
+
 -- ---------
 -- > Kinds
 -- ---------
@@ -212,6 +222,8 @@ data KPrim :: [DSort] -> DSort -> Type where
                -> KPrim (Map GetConstSym0 as) ('SoRecord at bs)
     KUnionLit  :: UnionVal () (Const DSort) '() ls ks at bs ('Const a)
                -> KPrim '[a] ('SoUnion at bs)
+
+-- genPolySing ''KPrim
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -465,61 +477,15 @@ dExprType = \case
 -- > Shared
 -- ---------
 
-data SAggType k r ls as :: AggType k r ls as -> Type where
-    SATZ :: SAggType k r '[] '[] 'ATZ
-    SATS :: SAggType k r ls as at
-         -> SAggType k r (l ': ls) (r ': as) ('ATS at)
-
 -- ---------
 -- > Sorts
 -- ---------
-
-data SDSort :: DSort -> Type where
-    SKind :: SDSort 'Kind
-    (:%*>) :: SDSort s -> SDSort t -> SDSort (s ':*> t)
-    SSoRecord :: SAggType () '() ls as at
-              -> SProd (Const DSort) as p
-              -> SDSort ('SoRecord at p)
-    SSoUnion  :: SAggType () '() ls as at
-              -> SProd (Const DSort) as p
-              -> SDSort ('SoUnion at p)
-        
-type family SDSortOf (k :: DSort) = (s :: SDSort k) | s -> k where
-    SDSortOf 'Kind = 'SKind
-    SDSortOf (a ':*> b) = SDSortOf a ':%*> SDSortOf b
 
 data instance Sing (x :: DSort) where
     SDS :: { getSDS :: SDSort x } -> Sing x
 
 instance SingKind DSort where
     type Demote DSort = DSort
-
-class SDSortI a where
-    sdSort :: SDSort a
-
-instance SDSortI 'Kind where
-    sdSort = SKind
-instance (SDSortI a, SDSortI b) => SDSortI (a ':*> b) where
-    sdSort = sdSort :%*> sdSort
-
--- Algo:
---  1. Add S before every constructor, and a variable after, and final
---     constructor add the name of constructor
---          Record     :: AggType (DKind ts 'Kind) 'Type ls as -> TPrim ts as 'Type
---          SRecord    :: SAggType (DKind ts 'Kind) 'Type ls as x -> STPrim ts as 'Type ('Record x)
---
---          (:*>) :: DSort -> DSort -> DSort
---          (:%*>) :: SDSort x -> SDSort y -> SDSort ('(:%*>) x y)
---
--- data DSort :: Type where
---     Kind    :: DSort
---     (:*>)   :: DSort -> DSort -> DSort
---     SRecord :: AggType () '() ls as
---             -> Prod (Const DSort) as
---             -> DSort
---     SUnion  :: AggType () '() ls as
---             -> Prod (Const DSort) as
---             -> DSort
 
 -- ---------
 -- > Kinds
