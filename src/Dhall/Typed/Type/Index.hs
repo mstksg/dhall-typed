@@ -19,9 +19,9 @@ module Dhall.Typed.Type.Index (
   -- * Index
     Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex, SIndexOf
   -- * Delete
-  , Delete(..), delete, ISMaybe, Del, SDelete(..), sDelete, GetDeleted(..)
+  , Delete(..), del, ISMaybe, Del, SDelete(..), sDel, GetDeleted(..)
   -- * Insert
-  , Insert(..), insert, Ins, sInsert, SInsert(..)
+  , Insert(..), insert, Ins, sIns, SInsert(..)
   -- * Singletons
   , Sing(SIx, getSIx)
   ) where
@@ -82,9 +82,7 @@ data Delete :: [k] -> [k] -> k -> Type where
     DelZ :: Delete (a ': as) as a
     DelS :: Delete as bs c -> Delete (a ': as) (a ': bs) c
 
-data SDelete as bs a :: Delete as bs a -> Type where
-    SDelZ :: SDelete (a ': as) as a 'DelZ
-    SDelS :: SDelete as bs c del -> SDelete (a ': as) (a ': bs) c ('DelS del)
+genPolySing ''Delete
 
 type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b ': as) a) where
     ISMaybe 'Nothing = 'Nothing
@@ -98,30 +96,30 @@ type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Inde
     Del (a ': as) (a ': bs) b c ('DelS d) ('IS i) = ISMaybe (Del as bs b c d i)
     Del as bs a b d i = TL.TypeError ('TL.Text "No Del: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, i))
 
-delete :: Delete as bs a -> Index as b -> Maybe (Index bs b)
-delete = \case
+del :: Delete as bs a -> Index as b -> Maybe (Index bs b)
+del = \case
     DelZ -> \case
       IZ   -> Nothing
       IS i -> Just i
     DelS d -> \case
       IZ   -> Just IZ
-      IS i -> IS <$> delete d i
+      IS i -> IS <$> del d i
 
 data GetDeleted as bs a b :: Delete as bs a -> Index as b -> Type where
     GotDeleted :: (Del as bs a b del i ~ 'Nothing) => a :~: b -> GetDeleted as bs a b del i
     ThatsToxic :: (Del as bs a b del i ~ 'Just j ) => SIndex bs b j -> GetDeleted as bs a b del i
 
-sDelete
+sDel
     :: SDelete as bs a del
     -> SIndex as b i
     -> GetDeleted as bs a b del i
-sDelete = \case
+sDel = \case
     SDelZ -> \case
       SIZ   -> GotDeleted Refl
       SIS i -> ThatsToxic i
     SDelS d -> \case
       SIZ   -> ThatsToxic SIZ
-      SIS i -> case sDelete d i of
+      SIS i -> case sDel d i of
         GotDeleted Refl -> GotDeleted Refl
         ThatsToxic j    -> ThatsToxic (SIS j)
 
@@ -131,9 +129,7 @@ data Insert :: [k] -> [k] -> k -> Type where
     InsZ :: Insert as (a ': as) a
     InsS :: Insert as bs c -> Insert (a ': as) (a ': bs) c
 
-data SInsert as bs a :: Insert as bs a -> Type where
-    SInsZ :: SInsert as (a ': as) a 'InsZ
-    SInsS :: SInsert as bs c ins -> SInsert (a ': as) (a ': bs) c ('InsS ins)
+genPolySing ''Insert
 
 insert :: Insert as bs a -> Index as b -> Index bs b
 insert = \case
@@ -147,14 +143,14 @@ type family Ins as bs a b (ins :: Insert as bs a) (i :: Index as b) :: Index bs 
     Ins (b ': as) (b ': bs) a b ('InsS ins) 'IZ     = 'IZ
     Ins (c ': as) (c ': bs) a b ('InsS ins) ('IS i) = 'IS (Ins as bs a b ins i)
 
-sInsert
+sIns
     :: forall as bs a b ins i. ()
     => SInsert as bs a ins
     -> SIndex as b i
     -> SIndex bs b (Ins as bs a b ins i)
-sInsert = \case
+sIns = \case
     SInsZ     -> SIS
     SInsS ins -> \case
       SIZ   -> SIZ
-      SIS i -> SIS (sInsert ins i)
+      SIS i -> SIS (sIns ins i)
 
