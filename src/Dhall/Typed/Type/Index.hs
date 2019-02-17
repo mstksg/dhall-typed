@@ -17,7 +17,7 @@
 
 module Dhall.Typed.Type.Index (
   -- * Index
-    Index(..), SIndex(..), SIndexI(..), sSameIx, fromSIndex, SIndexOf
+    Index(..), SIndex(..), sSameIx, fromSIndex, SIndexOf
   -- * Delete
   , Delete(..), del, ISMaybe, Del, SDelete(..), sDel, GetDeleted(..)
   -- * Insert
@@ -31,41 +31,57 @@ import           Data.Singletons
 import           Data.Type.Equality
 import           Data.Type.Universe
 import           Dhall.Typed.Internal.TH
-import qualified GHC.TypeLits            as TL
+import           Dhall.Typed.Type.Singletons
+import qualified GHC.TypeLits                as TL
 
 genPolySing ''Index
 
+-- data SIndex as a :: Index as a -> Type where
+--     SIZ :: SIndex (a ': as) a 'IZ
+--     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
+
 deriving instance Show (SIndex as a i)
 
-data instance Sing (i :: Index as a) where
+-- type instance PolySing (Index as a) = SIndex as a
+
+-- type instance PolySingOf (SIndex (a ': as) a) 'IZ     = 'SIZ
+-- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
+
+-- type SIndexOf as a (i :: Index as a) = (PolySingOf (SIndex as a) i :: SIndex as a i)
+
+
+
+instance PolySingI 'IZ where
+    polySing = SIZ
+instance PolySingI i => PolySingI ('IS i) where
+    polySing = SIS polySing
+
+newtype instance Sing (i :: Index as a) where
     SIx  :: { getSIx  :: SIndex as a i } -> Sing i
 
 instance SingKind (Index as a) where
     type Demote (Index as a) = Index as a
 
-    fromSing (SIx i) = go i
-      where
-        go :: SIndex bs b i -> Index bs b
-        go = \case
-          SIZ   -> IZ
-          SIS j -> IS (go j)
+    fromSing (SIx i) = case i of
+      SIZ   -> IZ
+      SIS j -> IS (fromSing (SIx j))
 
     toSing = \case
       IZ   -> SomeSing (SIx SIZ)
-      IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
+      IS i -> case toSing i of
+        SomeSing (SIx j) -> SomeSing (SIx (SIS j))
 
 -- class SIndexI as a (i :: Index as a) | i -> as a where
 --     sIndex :: SIndex as a i
 
 -- instance SIndexI (a ': as) a 'IZ where
 --     sIndex = SIZ
+
 -- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
 --     sIndex = SIS sIndex
 
--- data SIndex as a :: Index as a -> Type where
---     SIZ :: SIndex (a ': as) a 'IZ
---     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
-
+-- type instance SIndexOf 
+-- type family PolySingOf k (x :: k) = (y :: PolySing k x) | y -> x
 -- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
 --     SIndexOf (a ': as) a 'IZ     = 'SIZ
 --     SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)

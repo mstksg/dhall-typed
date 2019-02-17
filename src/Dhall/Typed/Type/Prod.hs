@@ -1,14 +1,18 @@
-{-# LANGUAGE EmptyCase             #-}
-{-# LANGUAGE GADTs                 #-}
-{-# LANGUAGE KindSignatures        #-}
-{-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE QuantifiedConstraints #-}
-{-# LANGUAGE RankNTypes            #-}
-{-# LANGUAGE ScopedTypeVariables   #-}
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE TypeInType            #-}
-{-# LANGUAGE TypeOperators         #-}
+{-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE KindSignatures         #-}
+{-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE QuantifiedConstraints  #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE TypeFamilyDependencies #-}
+{-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE UndecidableInstances   #-}
 
 module Dhall.Typed.Type.Prod (
     Prod(..)
@@ -31,7 +35,9 @@ import           Data.Sequence                (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Prelude.List
 import           Data.Type.Universe
+import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
+import           Dhall.Typed.Type.Singletons
 import           GHC.Generics
 
 data Prod :: (k -> Type) -> [k] -> Type where
@@ -40,11 +46,23 @@ data Prod :: (k -> Type) -> [k] -> Type where
 
 infixr 5 :<
 
+-- genPolySing ''Prod
+
 data SProd f as :: Prod f as -> Type where
     SØ    :: SProd f '[] 'Ø
-    (:%<) :: Sing (x :: f a)
+    (:%<) :: PolySing (f a) x
           -> SProd f as xs
           -> SProd f (a ': as) (x ':< xs)
+
+type instance PolySingOf (SProd f '[]      ) 'Ø         = 'SØ
+type instance PolySingOf (SProd f (a ': as)) (x ':< xs) = PolySingOf (PolySing (f a)) x ':%< PolySingOf (SProd f as) xs
+
+-- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
+
+-- type family SProdOf f as (xs :: Prod f as) = (ys :: SProd f as xs) | ys -> xs where
+--     SProdOf f '[]       'Ø         = SØ
+--     SProdOf f (a ': as) (x ':< xs) = x :%< SProdOf f as xs
+
 
 -- this Show instance is not general enough
 deriving instance (forall a. Show (f a)) => Show (Prod f as)
@@ -126,7 +144,7 @@ type family IxProd f as b (p :: Prod f as) (i :: Index as b) :: f b where
 sIxProd
     :: SProd f as xs
     -> SIndex as a i
-    -> Sing (IxProd f as a xs i)
+    -> PolySing (f a) (IxProd f as a xs i)
 sIxProd = \case
     SØ -> \case {}
     x :%< xs -> \case

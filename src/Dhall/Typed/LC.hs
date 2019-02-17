@@ -4,6 +4,7 @@
 {-# LANGUAGE TypeFamilyDependencies   #-}
 {-# LANGUAGE TypeInType               #-}
 {-# LANGUAGE TypeOperators            #-}
+{-# LANGUAGE UndecidableInstances     #-}
 {-# OPTIONS_GHC -Wno-missing-methods  #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 

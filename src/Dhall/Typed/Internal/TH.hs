@@ -1,6 +1,8 @@
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 module Dhall.Typed.Internal.TH (
     inspector
@@ -11,11 +13,14 @@ module Dhall.Typed.Internal.TH (
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Trans.Writer
+import           Dhall.Typed.Type.Singletons
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Either
 import           Data.List
+import           Data.Singletons
 import           Data.Traversable
+import           Debug.Trace
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Desugar.Sweeten
@@ -82,13 +87,13 @@ genPolySing
     -> q [Dec]
 genPolySing name = do
     DTyConI (DDataD nod ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
-    decsToTH <$> polySing nod ctx nm bndrs dk cons dervs
+    decsToTH <$> polySingDecs nod ctx nm bndrs dk cons dervs
 
 -- data Index :: [k] -> k -> Type where
 --     IZ :: Index (a ': as) a
 --     IS :: Index bs a -> Index (b ': bs) a
 
-polySing
+polySingDecs
     :: forall q. ()
     => DsMonad q
     => NewOrData
@@ -99,13 +104,13 @@ polySing
     -> [DCon]
     -> [DDerivClause]
     -> q [DDec]
-polySing nod ctx nm bndrs dk cons _dervs = do
+polySingDecs nod ctx nm bndrs dk cons _dervs = do
     bndr <- (`DKindedTV` bndrKind) <$> qNewName "x"
     dd   <- polySingDataDec nod ctx nm bndrs dk cons bndr
     ofa  <- polySingOfFam nm bndrs cons bndr
     si   <- polySingSingI ctx nm bndrs cons bndr
-    -- runQ . reportError $ pprint (sweeten si)
-    pure $ [dd, ofa] ++ si
+    -- runQ . reportError $ pprint (sweeten ofa)
+    pure . concat $ [ dd, si, ofa ]
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
@@ -113,6 +118,8 @@ polySing nod ctx nm bndrs dk cons _dervs = do
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ
 --     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
+--
+-- type instance PolySing (Index as a) = SIndex as a
 
 -- TODO: fixity
 polySingDataDec
@@ -125,11 +132,16 @@ polySingDataDec
     -> Maybe DKind      -- ^ What is this?
     -> [DCon]
     -> DTyVarBndr
-    -> q DDec
+    -> q [DDec]
 polySingDataDec nod ctx nm bndrs dk cons bndr = do
     cons' <- traverse singCons cons
-    pure $ DDataD nod ctx nm' (bndrs ++ [bndr]) dk cons' []
+    pure [ DDataD nod ctx nm' (bndrs ++ [bndr]) dk cons' []
+         , DTySynInstD ''PolySing $
+             DTySynEqn [applyDType (DConT nm ) bndrAsTypes]
+                       (applyDType (DConT nm') bndrAsTypes)
+         ]
   where
+    bndrAsTypes = map dTyVarBndrToDType bndrs
     nm' :: Name
     nm' = mapNameBase singleConstr nm
     -- what do we do about cctx?
@@ -152,45 +164,74 @@ polySingDataDec nod ctx nm bndrs dk cons bndr = do
                        $ vbt
       where
         go :: DType -> WriterT [Either DType DTyVarBndr] q DType
-        go t = do
-          (DConT fnm, targs) <- pure $ unApply t
-          if isSingleConstr fnm
-            then t <$ tell [ Left $ applyDType (DConT (mapName ofSingle fnm)) targs ]
-            else do
-              n <- qNewName "x"
-              tell [Right $ DPlainTV n]     -- ???
-              -- TODO: handle cases from different module?
-              -- pure $ applyDType (DConT (mapName singleConstr fnm)) $
-              pure $ applyDType (DConT (mapNameBase singleConstr fnm)) $
-                targs ++ [DVarT n]
+        go t = case unApply t of
+          (DConT fnm, targs)
+            | isSingleConstr fnm -> t <$
+                tell [ Left $ applyDType (DConT (mapName ofSingle fnm)) targs ]
+            | otherwise          -> do
+                n <- qNewName "x"
+                tell [Right $ DPlainTV n]     -- ???
+                -- TODO: handle cases from different module?
+                pure . applyDType (DConT (mapNameBase singleConstr fnm)) $
+                  targs ++ [DVarT n]
+          (_, targs) -> do
+            n <- qNewName "x"
+            tell [Right $ DPlainTV n ]
+            pure . applyDType (DConT ''Sing) $ [DVarT n `DSigT` t]
+
 
 -- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
 --     SIndexOf (a ': as) a 'IZ     = 'SIZ
 --     SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
 
-polySingOfFam :: DsMonad q => Name -> [DTyVarBndr] -> [DCon] -> DTyVarBndr -> q DDec
+-- type SIndexOf as a (i :: Index as a) = PolySingOf (SIndex as a) i
+--
+-- type instance PolySingOf (SIndex (a ': as) a) 'IZ     = 'SIZ
+-- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
+
+-- type instance PolySingOf (SProd f '[]      ) 'Ø         = 'SØ
+-- type instance PolySingOf (SProd f (a ': as)) (x ':< xs) = PolySingOf (PolySing (f a)) x ':%< PolySingOf (SProd f as) xs
+
+polySingOfFam
+    :: DsMonad q
+    => Name
+    -> [DTyVarBndr]
+    -> [DCon]
+    -> DTyVarBndr
+    -> q [DDec]
 polySingOfFam nm bndrs cons bndr = do
-    y <- qNewName "y"
-    let k'  = applyDType (DConT nm') (dTyVarBndrToDType <$> newBndrs)
-        tfh = DTypeFamilyHead (mapNameBase ofSingle nm')
-                newBndrs
-                (DTyVarSig $ DKindedTV y k')
-                (Just (InjectivityAnn y [bndrName bndr]))
+    -- y <- qNewName "y"
     eqns <- for cons $ \c@(DCon _ _ cnm _ cTy) -> do
       (sat, vs) <- saturate c
       let (_, newArgs) = unApply cTy
           res = applyDType (DConT (mapNameBase singleConstr cnm)) $
                   flip map vs $ \(anm, t) ->
-                    let (DConT tC, tA) = unApply t
-                        tC' = mapNameBase (ofSingle . singleConstr) tC
-                    in  applyDType (DConT tC') $ tA ++ [DVarT anm]
-      pure $ DTySynEqn (newArgs ++ [sat]) res
-    pure $ DClosedTypeFamilyD tfh eqns
+                    let (topcon, tA) = unApply t
+                        f = case topcon of
+                          DConT q -> applyDType (DConT (mapNameBase singleConstr q)) tA
+                          _       -> DConT ''PolySing `DAppT` t
+                    in  applyDType (DConT ''PolySingOf)
+                          [ f, DVarT anm  ]
+      pure $ DTySynInstD ''PolySingOf $
+                DTySynEqn [ applyDType (DConT nm') newArgs
+                          , sat
+                          ] res
+    pure $ eqns ++ [tysyn]
   where
     nm' :: Name
     nm' = mapNameBase singleConstr nm
     newBndrs :: [DTyVarBndr]
     newBndrs = bndrs ++ [bndr]
+    tysyn = DTySynD (mapNameBase ofSingle nm')
+                    newBndrs
+                    (applyDType (DConT ''PolySingOf)
+                        [ singType
+                        , dTyVarBndrToDType bndr
+                        ] `DSigT` (singType `DAppT` dTyVarBndrToDType bndr)
+                    )
+    singType = applyDType (DConT nm') (dTyVarBndrToDType <$> bndrs)
+
+-- type SIndexOf as a (i :: Index as a) = PolySingOf (SIndex as a) i :: SIndex as a i
 
 -- class SIndexI as a (i :: Index as a) | i -> as a where
 --     sIndex :: SIndex as a i
@@ -205,8 +246,12 @@ polySingSingI ctx nm bndrs cons bndr = do
       (sat, vs) <- saturate c
       let (_, newArgs) = unApply cTy
       cctx <- for vs $ \(aN, aT) -> do
-        (DConT atc, atarg) <- pure $ unApply aT
-        pure . foldl' DAppPr (DConPr (mapNameBase iSingleConstr atc)) $
+        (atc, atarg) <- pure $ unApply aT
+        atc' <- case atc of
+          DConT q -> pure $ mapNameBase iSingleConstr q
+          DVarT _ -> pure ''SingI
+          _       -> fail "polySingSingI: Bad SingI parameter?"
+        pure . foldl' DAppPr (DConPr atc') $
                 atarg ++ [DVarT aN]
       valArgs <- maybe (fail "Bad val arg") pure $ case cfs of
          DNormalC _ xs -> traverse (typeSingI . snd) xs
@@ -216,7 +261,7 @@ polySingSingI ctx nm bndrs cons bndr = do
         [DLetDec . DFunD mthdNm $
            [ DClause [] . applyDExp (DConE (mapNameBase singleConstr cnm)) $
                map DVarE valArgs
-              
+
            ]
         ]
     pure $ cls : insts
@@ -231,28 +276,40 @@ polySingSingI ctx nm bndrs cons bndr = do
          $ dTyVarBndrToDType <$> (bndrs ++ [bndr])
       ]
 
+-- data instance Sing (i :: Index as a) where
+--     SIx  :: { getSIx  :: SIndex as a i } -> Sing i
+
 -- instance SingKind (Index as a) where
 --     type Demote (Index as a) = Index as a
---     fromSing (SIx i) = go i
---       where
---         go :: SIndex bs b i -> Index bs b
---         go = \case
---           SIZ   -> IZ
---           SIS j -> IS (go j)
+--     fromSing (SIx i) = case i of
+--       SIZ   -> IZ
+--       SIS j -> IS (fromSing (SIx j))
 --     toSing = \case
 --       IZ   -> SomeSing (SIx SIZ)
---       IS i -> withSomeSing i (SomeSing . SIx . SIS . getSIx)
+--       IS i -> case toSing i of
+--         SomeSing (SIx j) -> SomeSing (SIx (SIS j))
 
+-- we have a problem here. how to properly fromSing non-Sing's with their
+-- names.  maybe it's just best to detach from singletons.
+-- polySingSingKind
+--     :: DsMonad q
+--     => q [DDec]
+-- polySingSingKind = do
+--     -- => DCxt -> Name -> [DTyVarBndr] -> [DCon] -> DTyVarBndr -> q [DDec]
 
 
 bndrName :: DTyVarBndr -> Name
 bndrName (DKindedTV x _) = x
 bndrName (DPlainTV x   ) = x
 
+mkPlain :: DTyVarBndr -> DTyVarBndr
+mkPlain (DKindedTV x _) = DPlainTV x
+mkPlain (DPlainTV x   ) = DPlainTV x
+
 typeSingI :: DType -> Maybe Name
-typeSingI t
-  | (DConT c, _) <- unApply t = Just $ mapNameBase iSingleValue c
-  | otherwise                 = Nothing
+typeSingI t = case fst (unApply t) of
+    DConT c -> Just $ mapNameBase iSingleValue c
+    DVarT _ -> Just $ 'sing
 
 
 -- class SIndexI as a (i :: Index as a) where
@@ -320,4 +377,4 @@ iSingleConstr cs = 'S' : cs ++ "I"
 iSingleValue :: String -> String
 iSingleValue (':':cs) = '?':cs
 iSingleValue cs       = 's':cs
-  
+
