@@ -6,6 +6,7 @@
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE PartialTypeSignatures  #-}
+{-# LANGUAGE QuantifiedConstraints  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TemplateHaskell        #-}
@@ -65,6 +66,15 @@ deriving instance Show (SIndex as a i)
 -- newtype SSIndex as a i :: SIndex as as i -> Type where
 -- newtype SingSing k x :: PolySing k x -> Type where
 --     SingSing :: forall k (x :: k) (s :: PolySing k x). PolySing k x -> SingSing k x s
+
+-- instance PolySingKind (Index as a) where
+--     fromPolySing = \case
+--       SIZ   -> IZ
+--       SIS i -> IS (fromPolySing i)
+--     toPolySing = \case
+--       IZ   -> SomePS SIZ
+--       IS i -> case toPolySing i of
+--         SomePS j -> SomePS (SIS j)
 
 newtype instance Sing (i :: Index as a) where
     SIx  :: { getSIx  :: SIndex as a i } -> Sing i

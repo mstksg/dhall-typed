@@ -1,31 +1,40 @@
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 
 module Dhall.Typed.Internal.TH (
-    inspector
-  , unApply
-  , genPolySing
+    -- inspector
+  -- , unApply
+    genPolySing
+  , genPolySingWith
+  , GenPolySingOpts(..), defaultGPSO
   ) where
 
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Trans.Writer
-import           Dhall.Typed.Type.Singletons
 import           Data.Bifunctor
+import           Data.Default
 import           Data.Char
+import           Data.Containers.ListUtils
 import           Data.Either
 import           Data.List
+import           Data.Maybe
+import           Data.Ord
+import           Data.Set                            (Set)
 import           Data.Singletons
 import           Data.Traversable
 import           Debug.Trace
+import           Dhall.Typed.Type.Singletons
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Desugar.Sweeten
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
+import qualified Data.Set                            as S
 
 -- Here we will generate singletons for GADTs in the "leading kind
 -- variable" style.  Something like:
@@ -81,13 +90,37 @@ inspector name = do
     i <- dsInfo <=< reifyWithLocals $ name
     lift $ show i
 
+data GenPolySingOpts = GPSO
+    { gpsoSing  :: Bool
+    , gpsoSingI :: Bool
+    , gpsoPSK   :: Bool
+    }
+  deriving (Eq, Show, Ord)
+
+instance Default GenPolySingOpts where
+    def = defaultGPSO
+
+defaultGPSO :: GenPolySingOpts
+defaultGPSO = GPSO
+    { gpsoSing  = True
+    , gpsoSingI = True
+    , gpsoPSK   = True
+    }
+
 genPolySing
     :: DsMonad q
     => Name
     -> q [Dec]
-genPolySing name = do
+genPolySing = genPolySingWith defaultGPSO
+
+genPolySingWith
+    :: DsMonad q
+    => GenPolySingOpts
+    -> Name
+    -> q [Dec]
+genPolySingWith opts name = do
     DTyConI (DDataD _ ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
-    decsToTH <$> polySingDecs ctx nm bndrs dk cons dervs
+    decsToTH <$> polySingDecs opts ctx nm bndrs dk cons dervs
 
 -- data Index :: [k] -> k -> Type where
 --     IZ :: Index (a ': as) a
@@ -95,23 +128,32 @@ genPolySing name = do
 
 polySingDecs
     :: forall q. DsMonad q
-    => DCxt
+    => GenPolySingOpts
+    -> DCxt
     -> Name
     -> [DTyVarBndr]
     -> Maybe DKind      -- ^ What is this?
     -> [DCon]
     -> [DDerivClause]
     -> q [DDec]
-polySingDecs ctx nm bndrs dk cons _dervs = do
+polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
     bndr <- (`DKindedTV` bndrKind) <$> qNewName "x"
-    dd   <- polySingDataDec ctx nm bndrs dk cons bndr
-    -- ofa  <- polySingOfFam nm bndrs cons bndr
-    si   <- polySingSingI ctx nm bndrs cons bndr
-    -- let out = concat [ dd, si, ofa ]
-    let out = concat [ dd, si ]
-    -- runQ . reportWarning $ pprint (sweeten (dd ++ si ++ ofa))
-    -- trace (pprint (sweeten dd)) $ pure out
-    pure out
+    execWriterT $ do
+      when gpsoSing $
+        tell =<< polySingDataDec ctx nm bndrs dk cons bndr
+      when gpsoSingI $
+        tell =<< polySingSingI nm bndrs cons bndr
+      when gpsoPSK $
+        tell . (:[]) =<< polySingKind nm bndrs cons bndr
+    -- dd   <- polySingDataDec ctx nm bndrs dk cons bndr
+    -- si   <- polySingSingI nm bndrs cons bndr
+    -- psk  <- polySingKind nm bndrs cons bndr
+    -- -- let out = concat [ dd, si, ofa ]
+    -- -- ofa  <- polySingOfFam nm bndrs cons bndr
+    -- let out = concat [ dd, si, [psk] ]
+    -- -- runQ . reportWarning $ pprint (sweeten (dd ++ si ++ ofa))
+    -- trace (pprint (sweeten [psk])) $ pure out
+    -- -- pure out
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
@@ -272,8 +314,14 @@ polySingDataDec ctx nm bndrs dk cons bndr = do
 --   where
 --     nm' = mapNameBase singleConstr nm
 
-polySingSingI :: DsMonad q => DCxt -> Name -> [DTyVarBndr] -> [DCon] -> DTyVarBndr -> q [DDec]
-polySingSingI ctx nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
+polySingSingI
+    :: DsMonad q
+    => Name
+    -> [DTyVarBndr]
+    -> [DCon]
+    -> DTyVarBndr
+    -> q [DDec]
+polySingSingI nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
     (_, vs) <- saturate c
     let cnm' = mapNameBase singleConstr cnm
         (_, newArgs) = unApply cTy
@@ -281,15 +329,79 @@ polySingSingI ctx nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> d
     pure $ DInstanceD Nothing cctx
       (DConT ''PolySingI `DAppT` applyDType (DConT cnm) (map (DVarT . fst) vs))
       [ DLetDec . DFunD 'polySing $
-          [ DClause [] . applyDExp (DConE cnm') . flip map vs $ \(n, t) ->
-              DVarE 'polySing
+          [ DClause [] . applyDExp (DConE cnm') $
+              DVarE 'polySing <$ vs
           ]
       ]
   where
     nm' = mapNameBase singleConstr nm
 
---     type PolySingOf ('IS i) = 'SIS (PolySingOf i)
---     type PolySingOf 'IZ = 'SIZ
+-- instance PolySingKind (Index as a) where
+--     fromPolySing = \case
+--       SIZ   -> IZ
+--       SIS i -> IS (fromPolySing i)
+--     toPolySing = \case
+--       IZ   -> SomePS SIZ
+--       IS i -> case toPolySing i of
+--         SomePS j -> SomePS (SIS j)
+
+
+polySingKind
+    :: forall q. DsMonad q
+    => Name
+    -> [DTyVarBndr]
+    -> [DCon]
+    -> DTyVarBndr
+    -> q DDec
+polySingKind nm bndrs cons bndr = do
+    fps <- traverse mkFps cons
+    tps <- traverse mkTps cons
+    n   <- qNewName "x"
+    pure $ DInstanceD Nothing []
+      (DConT ''PolySingKind `DAppT` applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs))
+      [ DLetDec . DFunD 'fromPolySing $
+          [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
+          ]
+      , DLetDec . DFunD 'toPolySing $
+          [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
+          ]
+      ]
+  where
+    mkFps :: DCon -> q DMatch
+    mkFps c@(DCon _ _ cnm cfs cTy) = do
+        (_, vs) <- saturate c
+        pure . DMatch (DConPa cnm' (map (DVarPa . fst) vs)) $
+          applyDExp (DConE cnm) . flip map vs $ \(n, _) ->
+            DVarE 'fromPolySing `DAppE` DVarE n
+      where
+        cnm' = mapNameBase singleConstr cnm
+    mkTps :: DCon -> q DMatch
+    mkTps c@(DCon _ _ cnm cfs cTy) = do
+        (_, vs ) <- saturate c
+        (_, vs') <- saturate c
+        pure . DMatch (DConPa cnm (map (DVarPa . fst) vs)) $
+          foldr (uncurry go)
+                (DConE 'SomePS `DAppE` applyDExp (DConE cnm') (map (DVarE . fst) vs'))
+                (zip vs vs')
+      where
+        go (oldN, _) (newN, _) finalRes =
+            DCaseE (DVarE 'toPolySing `DAppE` DVarE oldN)
+              [ DMatch (DConPa 'SomePS [DVarPa newN]) finalRes
+              ]
+        cnm' = mapNameBase singleConstr cnm
+
+isVar :: Name -> Bool
+isVar (nameBase->(c:_))
+  | isSymbol c = c /= ':'
+  | otherwise  = isLower c
+isVar _ = error "empty name?"
+
+           -- && isLower c ||
+-- polySingSingI nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
+    -- mkFps = undefined
+
+    -- mkTps = undefined
+    --   -- DLetDec . DFunD 'fromPolySing $
 
 -- data instance Sing (i :: Index as a) where
 --     SIx  :: { getSIx  :: SIndex as a i } -> Sing i

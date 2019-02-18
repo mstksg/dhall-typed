@@ -41,9 +41,13 @@ module Dhall.Typed.Core (
   -- ** Shared
   -- , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
-  , SDSort(..), SDKind(..), STPrim(..), SDType(..), SPrim(..), SPrimF(..), SDTerm(..) --, SAggType(..)
+  , SDSort(..), SSDSort(..), SSSDSort(..)
+  , SDKind(..), SSDKind(..), SSSDKind(..)
+  , STPrim(..), SDType(..)
+  , SPrim(..), SPrimF(..), SDTerm(..)
+  --, SAggType(..)
   , KShiftSym, ShiftSym
-  , Sing(SDS, getSDS, SDK, getSDK, STPr, getSTPr, SDTy, getSDTy, SPr, getSPr, SPrF, getSPrF, SDTe, getSDTe)
+  -- , Sing(SDS, getSDS, SDK, getSDK, STPr, getSTPr, SDTy, getSDTy, SPr, getSPr, SPrF, getSPrF, SDTe, getSDTe)
   -- * Util
   , Map, MapSym
   ) where
@@ -280,6 +284,7 @@ infixr 1 :~>
 
 genPolySing ''DKind
 genPolySing ''SDKind
+genPolySing ''SSDKind
 
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
@@ -531,9 +536,9 @@ dExprType = \case
     DEMeta                ->
       errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
     DESort _              -> DEMeta
-    DEKind (SomeKind t _) -> DESort (fromSing (SDS t))
-    DEType (SomeType t _) -> DEKind (SomeKind SKind (fromSing (SDK  t)))
-    DETerm (SomeTerm t _) -> DEType (SomeType SType (fromSing (SDTy t)))
+    DEKind (SomeKind t _) -> DESort (fromPolySing t)
+    DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
+    DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
 
 
 -- ---------
@@ -548,11 +553,11 @@ dExprType = \case
 -- > Sorts
 -- ---------
 
-data instance Sing (x :: DSort) where
-    SDS :: { getSDS :: SDSort x } -> Sing x
+-- data instance Sing (x :: DSort) where
+--     SDS :: { getSDS :: SDSort x } -> Sing x
 
-instance SingKind DSort where
-    type Demote DSort = DSort
+-- instance SingKind DSort where
+--     type Demote DSort = DSort
 
 -- ---------
 -- > Kinds
@@ -570,11 +575,11 @@ instance SingKind DSort where
 
 -- type instance PolySing (DKind ts k) = SDKind ts k
 
-data instance Sing (x :: DKind ts a) where
-    SDK :: { getSDK :: SDKind ts a x } -> Sing x
+-- data instance Sing (x :: DKind ts a) where
+--     SDK :: { getSDK :: SDKind ts a x } -> Sing x
 
-instance SingKind (DKind ts a) where
-    type Demote (DKind ts a) = DKind ts a
+-- instance SingKind (DKind ts a) where
+--     type Demote (DKind ts a) = DKind ts a
 
 -- ---------
 -- > Types
@@ -606,17 +611,17 @@ instance SingKind (DKind ts a) where
     --        -> SDKind ts t a
     --        -> SDType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b) ('TInst x (SDKindOf ts t a))
 
-data instance Sing (x :: TPrim ts as a) where
-    STPr :: { getSTPr :: STPrim ts as a x } -> Sing x
+-- data instance Sing (x :: TPrim ts as a) where
+--     STPr :: { getSTPr :: STPrim ts as a x } -> Sing x
 
-data instance Sing (x :: DType ts us a) where
-    SDTy :: { getSDTy :: SDType ts us a x } -> Sing x
+-- data instance Sing (x :: DType ts us a) where
+--     SDTy :: { getSDTy :: SDType ts us a x } -> Sing x
 
-instance SingKind (TPrim ts as a) where
-    type Demote (TPrim ts as a) = TPrim ts as a
+-- instance SingKind (TPrim ts as a) where
+--     type Demote (TPrim ts as a) = TPrim ts as a
 
-instance SingKind (DType ts us a) where
-    type Demote (DType ts us a) = DType ts us a
+-- instance SingKind (DType ts us a) where
+--     type Demote (DType ts us a) = DType ts us a
 
 -- data SPrim ts us as a :: Prim ts us as a -> Type where
 --     SBoolLit    :: Sing b -> SPrim ts us '[] TBool    ('BoolLit    b)
@@ -657,23 +662,23 @@ instance SingKind (DType ts us a) where
 --     --      -> SDType ts us u a
 --     --      -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
-data instance Sing (x :: Prim ts us as a) where
-    SPr :: { getSPr :: SPrim ts us as a x } -> Sing x
+-- data instance Sing (x :: Prim ts us as a) where
+--     SPr :: { getSPr :: SPrim ts us as a x } -> Sing x
 
-data instance Sing (x :: PrimF ts us f g) where
-    SPrF :: { getSPrF :: SPrimF ts us f g x } -> Sing x
+-- data instance Sing (x :: PrimF ts us f g) where
+--     SPrF :: { getSPrF :: SPrimF ts us f g x } -> Sing x
 
-data instance Sing (x :: DTerm ts us vs a) where
-    SDTe :: { getSDTe :: SDTerm ts us vs a x } -> Sing x
+-- data instance Sing (x :: DTerm ts us vs a) where
+--     SDTe :: { getSDTe :: SDTerm ts us vs a x } -> Sing x
 
-instance SingKind (Prim ts us as a) where
-    type Demote (Prim ts us as a) = Prim ts us as a
+-- instance SingKind (Prim ts us as a) where
+--     type Demote (Prim ts us as a) = Prim ts us as a
 
-instance SingKind (PrimF ts us f g) where
-    type Demote (PrimF ts us f g) = PrimF ts us f g
+-- instance SingKind (PrimF ts us f g) where
+--     type Demote (PrimF ts us f g) = PrimF ts us f g
 
-instance SingKind (DTerm ts us vs a) where
-    type Demote (DTerm ts us vs a) = DTerm ts us vs a
+-- instance SingKind (DTerm ts us vs a) where
+--     type Demote (DTerm ts us vs a) = DTerm ts us vs a
 
 
 

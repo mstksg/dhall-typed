@@ -44,6 +44,7 @@ library:
   - th-desugar
   - th-lift
   - transformers
+  - data-default
 
 # executables:
 #   dhall-typed-exe:

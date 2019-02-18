@@ -51,7 +51,7 @@ data Prod :: (k -> Type) -> [k] -> Type where
 
 infixr 5 :<
 
-genPolySing ''Prod
+genPolySingWith defaultGPSO { gpsoPSK = False } ''Prod
 
 data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type where
     BØ    :: BiProd f g '[] '[]
@@ -59,7 +59,7 @@ data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type where
 
 infixr 5 :<<
 
-genPolySing ''BiProd
+genPolySingWith defaultGPSO { gpsoPSK = False } ''BiProd
 
 -- data SProd f as :: Prod f as -> Type where
 --     SØ    :: SProd f '[] 'Ø
