@@ -17,7 +17,8 @@
 
 module Dhall.Typed.Type.Index (
   -- * Index
-    Index(..), SIndex(..), sSameIx, fromSIndex, SIndexOf
+    Index(..), SIndex(..), sSameIx, fromSIndex -- , SIndexOf
+  , SSIndex(..)
   -- * Delete
   , Delete(..), del, ISMaybe, Del, SDelete(..), sDel, GetDeleted(..)
   -- * Insert
@@ -36,6 +37,8 @@ import qualified GHC.TypeLits                as TL
 
 genPolySing ''Index
 
+genPolySing ''SIndex
+
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ
 --     SIS :: SIndex as b i -> SIndex (a ': as) b ('IS i)
@@ -47,14 +50,21 @@ deriving instance Show (SIndex as a i)
 -- type instance PolySingOf (SIndex (a ': as) a) 'IZ     = 'SIZ
 -- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
 
--- type SIndexOf as a (i :: Index as a) = (PolySingOf (SIndex as a) i :: SIndex as a i)
+-- type SIndexOf as a (i :: Index as a) = (PolySingOf i :: SIndex as a i)
 
+-- type instance PolySing (SIndex as a i) = SingSing (Index as a) i
 
-
--- instance PolySingI 'IZ where
+-- instance PolySingI (SIndex (a ': as) a) 'IZ where
+--     type PolySingOf 'IZ = 'SIZ
 --     polySing = SIZ
--- instance PolySingI i => PolySingI ('IS i) where
+
+-- instance PolySingI (SIndex as b) i => PolySingI (SIndex (a ': as) b) ('IS i) where
+--     type PolySingOf ('IS i) = 'SIS (PolySingOf i)
 --     polySing = SIS polySing
+
+-- newtype SSIndex as a i :: SIndex as as i -> Type where
+-- newtype SingSing k x :: PolySing k x -> Type where
+--     SingSing :: forall k (x :: k) (s :: PolySing k x). PolySing k x -> SingSing k x s
 
 newtype instance Sing (i :: Index as a) where
     SIx  :: { getSIx  :: SIndex as a i } -> Sing i

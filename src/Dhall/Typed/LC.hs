@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs                    #-}
 {-# LANGUAGE KindSignatures           #-}
 {-# LANGUAGE LambdaCase               #-}
+{-# LANGUAGE RankNTypes               #-}
 {-# LANGUAGE TypeFamilyDependencies   #-}
 {-# LANGUAGE TypeInType               #-}
 {-# LANGUAGE TypeOperators            #-}
@@ -93,14 +94,18 @@ module Dhall.Typed.LC () where
 --   ) where
 
 import           Data.Kind
-import           Dhall.Typed.Type.Prod
+import           Data.Singletons
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
-import           Data.Singletons
+import           Dhall.Typed.Type.Prod
+import           Dhall.Typed.Type.Singletons
 
 type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
     Map f '[]       = '[]
     Map f (x ': xs) = f @@ x ': Map f xs
+
+newtype SingSing k x :: PolySing k x -> Type where
+    SingSing :: forall k (x :: k) (s :: PolySing k x). PolySing k x -> SingSing k x s
 
 -- Implementing the rule pairings:
 --
@@ -217,12 +222,12 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TP    :: TPrim ts as a -> Prod (DType ts us) as -> DType ts us a
 
     -- From having a type with variables
-    TPoly :: SDSort t
-          -> DType (t ': ts) (Map (KShiftSym ts t 'Kind) us) a
-          -> DType ts        us                              ('KPi (SDSortOf t) a)
-    TInst :: DType ts us ('KPi (SDSortOf t) b)
-          -> SDKind ts t a
-          -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+    -- TPoly :: SDSort t
+    --       -> DType (t ': ts) (Map (KShiftSym ts t 'Kind) us) a
+    --       -> DType ts        us                              ('KPi (SDSortOf t) a)
+    -- TInst :: DType ts us ('KPi (SDSortOf t) b)
+    --       -> SDKind ts t a
+    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     -- From being a type of something
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
@@ -264,12 +269,12 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
 
     -- From having a type with variables
-    Poly :: SDKind ts 'Kind u
-         -> DTerm ts (u ': us) (Map (ShiftSym ts us u 'Type) vs) a
-         -> DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) a)
-    Inst :: DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) b)
-         -> SDType ts us u a
-         -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
+    -- Poly :: SDKind ts 'Kind u
+    --      -> DTerm ts (u ': us) (Map (ShiftSym ts us u 'Type) vs) a
+    --      -> DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) a)
+    -- Inst :: DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) b)
+    --      -> SDType ts us u a
+    --      -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
 -- ----------------
 -- > Multiple Level
@@ -306,16 +311,19 @@ data SDSort :: DSort -> Type where
     SKind :: SDSort 'Kind
     (:%*>) :: SDSort s -> SDSort t -> SDSort (s ':*> t)
 
-type family SDSortOf (k :: DSort) = (s :: SDSort k) | s -> k where
-    SDSortOf 'Kind = 'SKind
-    SDSortOf (a ':*> b) = SDSortOf a ':%*> SDSortOf b
+type instance PolySing DSort = SDSort
+-- type instance PolySing (SDSort t) = SingSing DSort t
 
 data SDKind ts a :: DKind ts a -> Type where
     SKVar  :: SIndex ts a i -> SDKind ts a ('KVar i)
-    SKLam  :: SDSort t -> SDKind (t ': ts) a x -> SDKind ts (t ':*> a) ('KLam (SDSortOf t) x)
+    SKLam  :: SingSing DSort t tt
+           -> SDKind (t ': ts) a x
+           -> SDKind ts (t ':*> a) ('KLam tt x)
     SKApp  :: SDKind ts (a ':*> b) f -> SDKind ts a x -> SDKind ts b ('KApp f x)
     (:%~>) :: SDKind ts 'Kind x -> SDKind ts 'Kind y -> SDKind ts 'Kind (x ':~> y)
     SType  :: SDKind ts 'Kind 'Type
+
+type instance PolySing (DKind ts a) = SDKind ts a
 
 data instance Sing (x :: DSort) where
     SDS :: { getSDS :: SDSort x } -> Sing x
@@ -323,8 +331,8 @@ data instance Sing (x :: DSort) where
 instance SingKind DSort where
     type Demote DSort = DSort
 
-type family SDKindOf ts k (x :: DKind ts k) = (y :: SDKind ts k x) | y -> x where
-    SDKindOf ts k          ('KVar i  ) = 'SKVar (SIndexOf ts k i)
+-- type family SDKindOf ts k (x :: DKind ts k) = (y :: SDKind ts k x) | y -> x where
+--     SDKindOf ts k          ('KVar i  ) = 'SKVar (SIndexOf ts k i)
 
 data KShiftSym ts t a :: DKind ts a ~> DKind (t ': ts) a
 
@@ -340,9 +348,9 @@ data STPrim ts as a :: TPrim ts as a -> Type where
 
 data SDType ts us a :: DType ts us a -> Type where
     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
-    STLam  :: SDKind ts 'Kind u
+    STLam  :: SingSing (DKind ts 'Kind) u uu
            -> SDType ts (u ': us) a x
-           -> SDType ts us (u ':~> a) ('TLam (SDKindOf ts 'Kind u) x)
+           -> SDType ts us (u ':~> a) ('TLam uu x)
     STApp  :: SDType ts us (a ':~> b) f
            -> SDType ts us a         x
            -> SDType ts us b         ('TApp f x)

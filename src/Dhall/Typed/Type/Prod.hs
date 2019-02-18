@@ -1,4 +1,5 @@
 {-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE KindSignatures         #-}
@@ -26,10 +27,14 @@ module Dhall.Typed.Type.Prod (
   , ixProd
   , SeqListEq(..)
   , IxProd
-  , SProd(..)
+  , SProd(..) -- , SProdOf
   , sIxProd
+  , ProdList
+  -- * BiProd
+  , BiProd(..), SBiProd(..) -- , SBiProdOf
   ) where
 
+import           Control.Applicative
 import           Data.Kind
 import           Data.Sequence                (Seq(..))
 import           Data.Singletons
@@ -48,6 +53,14 @@ infixr 5 :<
 
 genPolySing ''Prod
 
+data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type where
+    BØ    :: BiProd f g '[] '[]
+    (:<<) :: (f a, g b) -> BiProd f g as bs -> BiProd f g (a ': as) (b ': bs)
+
+infixr 5 :<<
+
+genPolySing ''BiProd
+
 -- data SProd f as :: Prod f as -> Type where
 --     SØ    :: SProd f '[] 'Ø
 --     (:%<) :: PolySing (f a) x
@@ -65,7 +78,7 @@ genPolySing ''Prod
 
 
 -- this Show instance is not general enough
-deriving instance (forall a. Show (f a)) => Show (Prod f as)
+-- deriving instance (forall a. Show (f a)) => Show (Prod f as)
 
 traverseProd
     :: forall f g h as. Applicative h
@@ -151,3 +164,8 @@ sIxProd = \case
       SIZ   -> x
       SIS i -> sIxProd xs i
 
+-- genPolySing ''Const
+
+type family ProdList (xs :: Prod (Const k) ys) :: [k] where
+    ProdList 'Ø                = '[]
+    ProdList ('Const x ':< xs) = x ': ProdList xs
