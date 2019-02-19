@@ -419,12 +419,12 @@ polySingKind
     -> [DCon]
     -> DTyVarBndr
     -> q DDec
-polySingKind (traceShowId->nm) bndrs cons bndr = do
+polySingKind nm bndrs cons bndr = do
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
     n   <- qNewName "x"
-    pure . trace (pprint (sweeten cctx)) $ DInstanceD Nothing cctx
-    -- pure $ DInstanceD Nothing cctx
+    -- pure . trace (pprint (sweeten cctx)) $ DInstanceD Nothing cctx
+    pure $ DInstanceD Nothing cctx
       ( DConT ''PolySingKind `DAppT`
            applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
       )

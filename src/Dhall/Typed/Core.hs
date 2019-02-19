@@ -89,7 +89,7 @@ import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Option
 import           Dhall.Typed.Type.Prod
-import           Dhall.Typed.Type.Singletons
+import           Dhall.Typed.Type.Singletons hiding (SNatural)
 import           Dhall.Typed.Type.Symbol
 import           GHC.TypeLits                  (Symbol)
 import           Numeric.Natural
@@ -462,9 +462,9 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     --      -> SDType ts us 'Type a
     --      -> f (DTerm ts us vs a)
     --      -> DTerm ts us vs (g :$ a)
-    -- Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
-    --      -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
-    --      -> DTerm ts us vs ('Pi uu a)
+    Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
+         -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
+         -> DTerm ts us vs ('Pi uu a)
     Inst :: SingSing (DKind ts 'Kind) u ('WS uu)
          -> DTerm ts us vs ('Pi uu b)
          -> SDType ts us u a
