@@ -43,7 +43,7 @@ library:
   - template-haskell
   - th-desugar
   - th-lift
-  - transformers
+  - mtl
   - data-default
 
 # executables:

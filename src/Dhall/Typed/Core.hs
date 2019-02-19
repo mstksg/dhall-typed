@@ -11,6 +11,7 @@
 {-# LANGUAGE MultiParamTypeClasses   #-}
 {-# LANGUAGE OverloadedStrings       #-}
 {-# LANGUAGE PolyKinds               #-}
+{-# LANGUAGE QuantifiedConstraints   #-}
 {-# LANGUAGE RankNTypes              #-}
 {-# LANGUAGE RecordWildCards         #-}
 {-# LANGUAGE ScopedTypeVariables     #-}

@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
@@ -15,15 +16,17 @@ module Dhall.Typed.Internal.TH (
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.Trans.Writer
+import           Control.Monad.Writer hiding         (lift)
 import           Data.Bifunctor
-import           Data.Default
 import           Data.Char
 import           Data.Containers.ListUtils
+import           Data.Default
 import           Data.Either
 import           Data.List
+import           Data.Map                            (Map)
 import           Data.Maybe
 import           Data.Ord
+import           Data.Semigroup
 import           Data.Set                            (Set)
 import           Data.Singletons
 import           Data.Traversable
@@ -34,6 +37,7 @@ import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Desugar.Sweeten
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
+import qualified Data.Map                            as M
 import qualified Data.Set                            as S
 
 -- Here we will generate singletons for GADTs in the "leading kind
@@ -157,6 +161,8 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
+    -- tracePPId :: DDec -> DDec
+    -- tracePPId x = trace (pprint (sweeten [x])) x
 
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ
@@ -353,12 +359,14 @@ polySingKind
     -> [DCon]
     -> DTyVarBndr
     -> q DDec
-polySingKind nm bndrs cons bndr = do
+polySingKind (traceShowId->nm) bndrs cons bndr = do
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
     n   <- qNewName "x"
-    pure $ DInstanceD Nothing []
-      (DConT ''PolySingKind `DAppT` applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs))
+    pure . trace (pprint (sweeten cctx)) $ DInstanceD Nothing cctx
+      ( DConT ''PolySingKind `DAppT`
+           applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
+      )
       [ DLetDec . DFunD 'fromPolySing $
           [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
           ]
@@ -367,6 +375,30 @@ polySingKind nm bndrs cons bndr = do
           ]
       ]
   where
+    cctx :: [DPred]
+    cctx = do
+      c@(DCon _ _ cnm cfs cTy) <- cons
+      let newBndrs :: [Maybe Name]
+          newBndrs = case unApply cTy of
+            (DConT _, ts) -> flip map ts $ \case
+              DVarT n -> Just n
+              _       -> Nothing
+            _             -> error "polySingKind: Invalid return type on GADT constructor"
+          bndrMap :: Map Name Name
+          bndrMap = M.fromList . catMaybes $
+            [ (, bndrName bO) <$> bN
+            | bN <- newBndrs
+            | bO <- bndrs
+            ]
+      t <- case cfs of
+        DNormalC _ xs -> map snd xs
+        DRecC xs      -> map (\(_,_,t) -> t) xs
+      let (free, t') = flip (traverseDVarT S.empty) t $ \v ->
+            case M.lookup v bndrMap of
+              Just q  -> pure q
+              Nothing -> v <$ tell [v]
+      pure $ DForallPr (DPlainTV <$> free) [] $
+        DConPr ''PolySingKind `DAppPr` t'
     mkFps :: DCon -> q DMatch
     mkFps c@(DCon _ _ cnm cfs cTy) = do
         (_, vs) <- saturate c
@@ -432,6 +464,52 @@ bndrName (DPlainTV x   ) = x
 mkPlain :: DTyVarBndr -> DTyVarBndr
 mkPlain (DKindedTV x _) = DPlainTV x
 mkPlain (DPlainTV x   ) = DPlainTV x
+
+traverseDVarPr
+    :: Applicative f
+    => Set Name
+    -> (Name -> f Name)
+    -> DPred -> f DPred
+traverseDVarPr b f = go
+  where
+    go = \case
+      DForallPr bndrs ctx x ->
+        let (b', bndrs') = mapAccumL
+              (\bb -> \case DKindedTV x t -> (S.insert x bb, DKindedTV x <$> traverseDVarT bb f t)
+                            DPlainTV x    -> (S.insert x bb, pure $ DPlainTV x)
+              ) b bndrs
+        in  DForallPr <$> sequenceA bndrs'
+                      <*> traverse (traverseDVarPr b' f) ctx
+                      <*> traverseDVarPr  b' f x
+      DAppPr x y -> DAppPr <$> go x <*> traverseDVarT b f y
+      DSigPr x y -> DSigPr <$> go x <*> traverseDVarT b f y
+      DVarPr x 
+        | x `S.member` b -> pure $ DVarPr x
+        | otherwise      -> DVarPr <$> f x
+      DConPr x   -> pure $ DConPr x
+      DWildCardPr -> pure DWildCardPr
+
+traverseDVarT :: Applicative f => Set Name -> (Name -> f Name) -> DType -> f DType
+traverseDVarT b f = go
+  where
+    go = \case
+      DForallT bndrs ctx x ->
+        let (b', bndrs') = mapAccumL
+              (\bb -> \case DKindedTV x t -> (S.insert x bb, DKindedTV x <$> traverseDVarT bb f t)
+                            DPlainTV x    -> (S.insert x bb, pure $ DPlainTV x)
+              ) b bndrs
+        in  DForallT <$> sequenceA bndrs'
+                     <*> traverse (traverseDVarPr b' f) ctx
+                     <*> traverseDVarT  b' f x
+      DAppT x y -> DAppT <$> go x <*> go y
+      DSigT x y -> DSigT <$> go x <*> go y
+      DVarT x 
+        | x `S.member` b -> pure $ DVarT x
+        | otherwise      -> DVarT <$> f x
+      DConT x   -> pure $ DConT x
+      DArrowT   -> pure DArrowT
+      DLitT x   -> pure $ DLitT x
+      DWildCardT -> pure DWildCardT
 
 -- typeSingI :: DType -> Maybe Name
 -- typeSingI t = case fst (unApply t) of
