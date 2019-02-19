@@ -104,8 +104,8 @@ type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
     Map f '[]       = '[]
     Map f (x ': xs) = f @@ x ': Map f xs
 
-newtype SingSing k x :: PolySing k x -> Type where
-    SingSing :: forall k (x :: k) (s :: PolySing k x). PolySing k x -> SingSing k x s
+-- newtype SingSing k x :: PolySing k x -> Type where
+--     SingSing :: forall k (x :: k) (s :: PolySing k x). PolySing k x -> SingSing k x s
 
 -- Implementing the rule pairings:
 --
@@ -316,7 +316,7 @@ type instance PolySing DSort = SDSort
 
 data SDKind ts a :: DKind ts a -> Type where
     SKVar  :: SIndex ts a i -> SDKind ts a ('KVar i)
-    SKLam  :: SingSing DSort t tt
+    SKLam  :: SingSing DSort t ('WS tt)
            -> SDKind (t ': ts) a x
            -> SDKind ts (t ':*> a) ('KLam tt x)
     SKApp  :: SDKind ts (a ':*> b) f -> SDKind ts a x -> SDKind ts b ('KApp f x)
@@ -348,7 +348,7 @@ data STPrim ts as a :: TPrim ts as a -> Type where
 
 data SDType ts us a :: DType ts us a -> Type where
     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
-    STLam  :: SingSing (DKind ts 'Kind) u uu
+    STLam  :: SingSing (DKind ts 'Kind) u ('WS uu)
            -> SDType ts (u ': us) a x
            -> SDType ts us (u ':~> a) ('TLam uu x)
     STApp  :: SDType ts us (a ':~> b) f

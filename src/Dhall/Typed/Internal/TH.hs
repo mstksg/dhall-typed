@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE ParallelListComp    #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,9 +8,9 @@
 {-# LANGUAGE ViewPatterns        #-}
 
 module Dhall.Typed.Internal.TH (
-    -- inspector
+    inspector
   -- , unApply
-    genPolySing
+  , genPolySing
   , genPolySingWith
   , GenPolySingOpts(..), defaultGPSO
   ) where
@@ -22,11 +23,13 @@ import           Data.Char
 import           Data.Containers.ListUtils
 import           Data.Default
 import           Data.Either
+import           Data.Foldable
 import           Data.List
 import           Data.Map                            (Map)
 import           Data.Maybe
 import           Data.Ord
 import           Data.Semigroup
+import           Data.Sequence                       (Seq(..))
 import           Data.Set                            (Set)
 import           Data.Singletons
 import           Data.Traversable
@@ -38,6 +41,7 @@ import           Language.Haskell.TH.Desugar.Sweeten
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
 import qualified Data.Map                            as M
+import qualified Data.Sequence                       as Seq
 import qualified Data.Set                            as S
 
 -- Here we will generate singletons for GADTs in the "leading kind
@@ -146,9 +150,10 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
       when gpsoSing $
         tell =<< polySingDataDec ctx nm bndrs dk cons bndr
       when gpsoSingI $
-        tell =<< polySingSingI nm bndrs cons bndr
-      when gpsoPSK $
-        tell . (:[]) =<< polySingKind nm bndrs cons bndr
+        tell . tracePPId' =<< polySingSingI nm bndrs cons bndr
+      -- when gpsoPSK $
+      --   tell . (:[]) . tracePPId =<< polySingKind nm bndrs cons bndr
+
     -- dd   <- polySingDataDec ctx nm bndrs dk cons bndr
     -- si   <- polySingSingI nm bndrs cons bndr
     -- psk  <- polySingKind nm bndrs cons bndr
@@ -161,8 +166,10 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
-    -- tracePPId :: DDec -> DDec
-    -- tracePPId x = trace (pprint (sweeten [x])) x
+    tracePPId :: DDec -> DDec
+    tracePPId x = trace (pprint (sweeten [x])) x
+    tracePPId' :: [DDec] -> [DDec]
+    tracePPId' x = trace (pprint (sweeten x)) x
 
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ
@@ -183,11 +190,20 @@ polySingDataDec
 polySingDataDec ctx nm bndrs dk cons bndr = do
     cons' <- traverse singCons cons
     pure [ DDataD Data ctx nm' (bndrs ++ [bndr]) dk cons' []
+-- type instance PolySing (Maybe a) = SMaybe a
          , DTySynInstD ''PolySing $
-             DTySynEqn [applyDType (DConT nm ) bndrAsTypes]
-                       (applyDType (DConT nm') bndrAsTypes)
+             DTySynEqn [fullHead] fullHead'
+         -- , DTySynInstD ''PolySing $
+         --     DTySynEqn [applyDType (DConT ''WrappedSing) [fullHead, dTyVarBndrToDType bndr]] $
+         --          applyDType (DConT ''SingSing)
+         --            [ fullHead, dTyVarBndrToDType bndr ]
+             -- (applyDType (DConT nm) )
+-- type instance PolySing (WrappedSing Bool b) = SingSing Bool b
+-- type instance PolySing (WrappedSing (Maybe a) b) = SingSing (Maybe a) b
          ]
   where
+    fullHead = applyDType (DConT nm) bndrAsTypes
+    fullHead' = applyDType (DConT nm') bndrAsTypes
     bndrAsTypes = map dTyVarBndrToDType bndrs
     nm' :: Name
     nm' = mapNameBase singleConstr nm
@@ -211,23 +227,46 @@ polySingDataDec ctx nm bndrs dk cons bndr = do
                        $ vbt
       where
         go :: DType -> WriterT [DTyVarBndr] q DType
-        go t = case unApply t of
-          (DConT fnm, targs)
-            -- | Just fnm' <- isSingleConstr fnm -> do
-            --     n <- qNewName "x"
-            --     tell [DPlainTV n]
-            --     pure $ applyDType (DConT ''SingSing) $
-            --              DConT fnm' : targs ++ [DVarT n]
-            | fnm == nm -> do
-                n <- qNewName "x"
-                tell [DPlainTV n]     -- ???
-                -- TODO: handle cases from different module?
-                pure . applyDType (DConT nm') $
-                  targs ++ [DVarT n]
-          (_, targs) -> do
-            n <- qNewName "x"
-            tell [DPlainTV n]
-            pure $ applyDType (DConT ''PolySing) [t, DVarT n]
+        go t = do
+          n <- qNewName "x"
+          tell [DPlainTV n]
+          t' <- expandType t
+          pure $ case deSingleApplied t' of
+            Just (desing, x) -> applyDType (DConT ''SingSing)
+                [ desing, x, DConT 'WS `DAppT` DVarT n ]
+            Nothing -> case unApply t' of
+              (DConT fnm, targs)
+                | fnm == nm -> applyDType (DConT nm') $
+                    targs ++ [DVarT n]
+              _     -> applyDType (DConT ''PolySing) [t', DVarT n]
+
+          -- case unApply t' of
+          --   (DConT fnm, targs)
+          --     | Just fnm' <- isSingleConstr fnm
+          --     , tinit :|> tlast <- Seq.fromList targs -> do
+          --         n <- qNewName "x"
+          --         tell [DPlainTV n]
+          --         pure $ applyDType (DConT ''SingSing) $
+          --           [ applyDType (DConT fnm') (toList tinit)
+          --           , tlast
+          --           , DConT 'WS `DAppT` DVarT n
+          --           ]
+          --           -- DConT fnm' : targs ++
+          --     -- | Just fnm' <- isSingleConstr fnm -> do
+          --     --     n <- qNewName "x"
+          --     --     tell [DPlainTV n]
+          --     --     pure $ applyDType (DConT ''SingSing) $
+          --     --              DConT fnm' : targs ++ [DVarT n]
+          --     | fnm == nm -> do
+          --         n <- qNewName "x"
+          --         tell [DPlainTV n]     -- ???
+          --         -- TODO: handle cases from different module?
+          --         pure . applyDType (DConT nm') $
+          --           targs ++ [DVarT n]
+          --   (_, targs) -> do
+          --     n <- qNewName "x"
+          --     tell [DPlainTV n]
+          --     pure $ applyDType (DConT ''PolySing) [t', DVarT n]
 
 
 -- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
@@ -331,8 +370,29 @@ polySingSingI nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
     (_, vs) <- saturate c
     let cnm' = mapNameBase singleConstr cnm
         (_, newArgs) = unApply cTy
-        cctx = flip map vs $ \(aN, _) -> DConPr ''PolySingI `DAppPr` DVarT aN
+        cctx = flip map vs $ \(aN, aT) ->
+          case deSingleApplied aT of
+            Just (desing, x)
+              | (DConT c, _) <- unApply desing
+              , c == ''SingSing -> DConPr ''PolySingSingI `DAppPr` DVarT aN
+              | otherwise       -> DConPr ''PolySingOfI `DAppPr` DVarT aN
+            Nothing -> DConPr ''PolySingI `DAppPr` DVarT aN
+          -- let pr = case unApply aT of
+          --       (DConT aT', ts)
+          --         | aT' == ''SingSing -> ''PolySingSingI
+          --       _                     -> ''PolySingI
+          -- in  DConPr pr `DAppPr` DVarT aN
+          -- case deSingleApplied aT of
+          --   Just (desgin, x) -> DConPr ''PolySingI `DAppPr` x
+          --   Nothing          -> DConPr ''PolySingI `DAppPr` DVarT aN
+
+          -- case unApply aT of
+          --   (DConT aT', ts)
+          --     | Just orig <- isSingleConstr aT'
+          --     -> DConPr ''PolySingI `DAppPr` last ts
+          --   _ -> DConPr ''PolySingI `DAppPr` DVarT aN
     pure $ DInstanceD Nothing cctx
+      -- (DConT ''PolySingI `DAppT` applyDType (DConT cnm) (map (dTyVarBndrToDType . uncurry DKindedTV) vs))
       (DConT ''PolySingI `DAppT` applyDType (DConT cnm) (map (DVarT . fst) vs))
       [ DLetDec . DFunD 'polySing $
           [ DClause [] . applyDExp (DConE cnm') $
@@ -376,7 +436,7 @@ polySingKind (traceShowId->nm) bndrs cons bndr = do
       ]
   where
     cctx :: [DPred]
-    cctx = do
+    cctx = nubOrdOn show $ do
       c@(DCon _ _ cnm cfs cTy) <- cons
       let newBndrs :: [Maybe Name]
           newBndrs = case unApply cTy of
@@ -483,7 +543,7 @@ traverseDVarPr b f = go
                       <*> traverseDVarPr  b' f x
       DAppPr x y -> DAppPr <$> go x <*> traverseDVarT b f y
       DSigPr x y -> DSigPr <$> go x <*> traverseDVarT b f y
-      DVarPr x 
+      DVarPr x
         | x `S.member` b -> pure $ DVarPr x
         | otherwise      -> DVarPr <$> f x
       DConPr x   -> pure $ DConPr x
@@ -503,7 +563,7 @@ traverseDVarT b f = go
                      <*> traverseDVarT  b' f x
       DAppT x y -> DAppT <$> go x <*> go y
       DSigT x y -> DSigT <$> go x <*> go y
-      DVarT x 
+      DVarT x
         | x `S.member` b -> pure $ DVarT x
         | otherwise      -> DVarT <$> f x
       DConT x   -> pure $ DConT x
@@ -554,6 +614,35 @@ singleValue ds@(c:cs)
   | all isSymbol ds = '%' : ds
   | otherwise       = 's' : toUpper c : cs
 singleValue _ = error "Invalid value name"
+
+-- type instance PolySing (WrappedSing k b) = SingSing k b
+-- type instance PolySing Bool = SBool
+-- type instance PolySing (Maybe a) = SMaybe a
+
+-- | Should convert:
+--
+-- PolySing k   => k
+-- SBool        => Bool
+-- SMaybe a     => Maybe a
+-- SingSing k b => WrappedSing k b
+--
+-- The input is always expected to be (k -> Type).
+deSingle :: DType -> Maybe DType
+deSingle t = case unApply t of
+    (DConT c, xs)
+      | c == ''PolySing -> case xs of
+          y:_ -> Just y
+          _   -> Nothing
+      | c == ''SingSing             -> Just $ applyDType (DConT ''WrappedSing) xs
+      | Just c' <- isSingleConstr c -> Just $ applyDType (DConT c') xs
+    -- TODO: handle case of 'f a b' ?
+    _ -> Nothing
+
+-- | Split a Type-kinded thing that is a singleton into the original type
+-- and the value it is applied to.  Basically it is a de-AppT and 'deSingle'.
+deSingleApplied :: DType -> Maybe (DType, DType)
+deSingleApplied (f `DAppT` x) = (,x) <$> deSingle f
+deSingleApplied _ = Nothing
 
 -- | Will give a false positive for a type that is called "SXyyyy".
 -- Returns the original constructor.

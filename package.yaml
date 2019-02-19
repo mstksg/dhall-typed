@@ -24,6 +24,7 @@ ghc-options:
 - -Wcompat
 - -Wredundant-constraints
 - -fobject-code
+- -freduction-depth=1000
 # - -Werror=incomplete-patterns
 
 dependencies:

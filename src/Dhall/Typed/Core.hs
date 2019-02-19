@@ -42,8 +42,8 @@ module Dhall.Typed.Core (
   -- ** Shared
   -- , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
-  , SDSort(..), SSDSort(..), SSSDSort(..)
-  , SDKind(..), SSDKind(..), SSSDKind(..)
+  , SDSort(..) -- , SSDSort(..), SSSDSort(..)
+  , SDKind(..) -- , SSDKind(..), SSSDKind(..)
   , STPrim(..), SDType(..)
   , SPrim(..), SPrimF(..), SDTerm(..)
   --, SAggType(..)
@@ -234,8 +234,8 @@ data DSort :: Type where
     --          -> DSort
 
 genPolySing ''DSort
-genPolySing ''SDSort
-genPolySing ''SSDSort
+-- genPolySing ''SDSort
+-- genPolySing ''SSDSort
 
 -- ---------
 -- > Kinds
@@ -284,8 +284,8 @@ type a :~> b = a ':~> b
 infixr 1 :~>
 
 genPolySing ''DKind
-genPolySing ''SDKind
-genPolySing ''SSDKind
+-- genPolySing ''SDKind
+-- genPolySing ''SSDKind
 
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
@@ -335,7 +335,7 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
     TP    :: TPrim ts as a -> Prod (DType ts us) as -> DType ts us a
 
-    TPoly :: SSDSort t tt
+    TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
           -> DType ts us ('KPi tt a)
     TInst :: DType ts us ('KPi tt b)
@@ -382,6 +382,12 @@ infixl 9 :$
 --     polySing = STPoly polySing polySing
 
 genPolySing ''DType
+
+-- instance (PolySingIOf x, PolySingI y) => PolySingI ('TPoly x y) where
+--     polySing = STPoly polySing polySing
+    -- TPoly :: SingSing DSort t ('WS tt)
+    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
+    --       -> DType ts us ('KPi tt a)
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
@@ -456,10 +462,10 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
          -> SDType ts us 'Type a
          -> f (DTerm ts us vs a)
          -> DTerm ts us vs (g :$ a)
-    Poly :: SSDKind ts 'Kind u uu
+    Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
          -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
          -> DTerm ts us vs ('Pi uu a)
-    Inst :: SSDKind ts 'Kind u uu
+    Inst :: SingSing (DKind ts 'Kind) u ('WS uu)
          -> DTerm ts us vs ('Pi uu b)
          -> SDType ts us u a
          -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
@@ -534,12 +540,12 @@ data SomeDExpr ts us :: [DType ts us 'Type] -> Type where
 -- 'DEMeta'.
 dExprType :: DExpr ts us vs n -> DExpr ts us vs (ShiftFin N5 n)
 dExprType = \case
-    DEMeta                ->
-      errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
-    DESort _              -> DEMeta
-    DEKind (SomeKind t _) -> DESort (fromPolySing t)
-    DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
-    DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
+    -- DEMeta                ->
+    --   errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
+    -- DESort _              -> DEMeta
+    -- DEKind (SomeKind t _) -> DESort (fromPolySing t)
+    -- DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
+    -- DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
 
 
 -- ---------
