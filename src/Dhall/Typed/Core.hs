@@ -335,12 +335,12 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
     TP    :: TPrim ts as a -> Prod (DType ts us) as -> DType ts us a
 
-    -- TPoly :: SingSing DSort t ('WS tt)
-    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
-    --       -> DType ts us ('KPi tt a)
-    -- TInst :: DType ts us ('KPi tt b)
-    --       -> SDKind ts t a
-    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+    TPoly :: SingSing DSort t ('WS tt)
+          -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
+          -> DType ts us ('KPi tt a)
+    TInst :: DType ts us ('KPi tt b)
+          -> SDKind ts t a
+          -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us a
@@ -430,7 +430,7 @@ data PrimF ts us :: (Type -> Type) -> DType ts us ('Type :~> 'Type) -> Type wher
     ListLit     :: PrimF ts us Seq   TList
     OptionalLit :: PrimF ts us Maybe TOptional
 
--- genPolySing ''PrimF
+genPolySing ''PrimF
 
 -- | Substitute in a type for all occurrences of a type variable of kind
 -- @a@ indicated by the 'Delete' within a type of kind @b@.
@@ -458,19 +458,19 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     Lam  :: SDType ts us 'Type v -> DTerm ts us (v ': vs) a -> DTerm ts us vs (v ':-> a)
     App  :: DTerm ts us vs (a ':-> b) -> DTerm ts us vs a -> DTerm ts us vs b
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
-    PF   :: PrimF ts us f g
-         -> SDType ts us 'Type a
-         -> f (DTerm ts us vs a)
-         -> DTerm ts us vs (g :$ a)
-    Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
-         -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
-         -> DTerm ts us vs ('Pi uu a)
+    -- PF   :: PrimF ts us f g
+    --      -> SDType ts us 'Type a
+    --      -> f (DTerm ts us vs a)
+    --      -> DTerm ts us vs (g :$ a)
+    -- Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
+    --      -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
+    --      -> DTerm ts us vs ('Pi uu a)
     Inst :: SingSing (DKind ts 'Kind) u ('WS uu)
          -> DTerm ts us vs ('Pi uu b)
          -> SDType ts us u a
          -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
--- genPolySing ''DTerm
+genPolySing ''DTerm
 
 -- ----------------
 -- > Multiple Level

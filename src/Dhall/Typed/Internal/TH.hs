@@ -440,8 +440,8 @@ polySingKind (traceShowId->nm) bndrs cons bndr = do
     cctx = nubOrdOn show $ do
       c@(DCon _ _ cnm cfs cTy) <- cons
       let newBndrs :: [Maybe Name]
-          newBndrs = traceShowId $ case unApply cTy of
-            (DConT _, traceShowId->ts) -> flip map ts $ \case
+          newBndrs = case unApply cTy of
+            (DConT _, ts) -> flip map ts $ \case
               DVarT n -> Just n
               DVarT n `DSigT` _ -> Just n
               _       -> Nothing

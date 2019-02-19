@@ -27,10 +27,19 @@ genPolySing ''Const
 
 
 -- data FatNat :: Type where
---     FatNat = Vk
+--     FatNat :: Natural -> FatNat
+
+-- data SFatNat :: FatNat -> Type where
+--     SFN :: SFatNat ('FatNat n)
+
 -- type family
 
--- data SNatural :: Natural -> Type where
-    -- SNatural :: KnownNat n => SNatural n
+data SNatural :: Natural -> Type where
+    SNatural :: SNatural n
+
+type instance PolySing Natural = SNatural
+
+instance PolySingKind Natural where
+
 -- type instance Sing
 -- genPolySing ''Natural
