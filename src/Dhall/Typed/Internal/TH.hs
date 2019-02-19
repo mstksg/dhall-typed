@@ -34,7 +34,7 @@ import           Data.Set                            (Set)
 import           Data.Singletons
 import           Data.Traversable
 import           Debug.Trace
-import           Dhall.Typed.Type.Singletons
+import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Desugar.Sweeten
@@ -150,9 +150,10 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
       when gpsoSing $
         tell =<< polySingDataDec ctx nm bndrs dk cons bndr
       when gpsoSingI $
-        tell . tracePPId' =<< polySingSingI nm bndrs cons bndr
-      -- when gpsoPSK $
-      --   tell . (:[]) . tracePPId =<< polySingKind nm bndrs cons bndr
+        tell =<< polySingSingI nm bndrs cons bndr
+      when gpsoPSK $
+        -- tell . (:[]) . tracePPId =<< polySingKind nm bndrs cons bndr
+        tell . (:[]) =<< polySingKind nm bndrs cons bndr
 
     -- dd   <- polySingDataDec ctx nm bndrs dk cons bndr
     -- si   <- polySingSingI nm bndrs cons bndr
@@ -371,17 +372,10 @@ polySingSingI nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
     let cnm' = mapNameBase singleConstr cnm
         (_, newArgs) = unApply cTy
         cctx = flip map vs $ \(aN, aT) ->
-          case deSingleApplied aT of
-            Just (desing, x)
-              | (DConT c, _) <- unApply desing
-              , c == ''SingSing -> DConPr ''PolySingSingI `DAppPr` DVarT aN
-              | otherwise       -> DConPr ''PolySingOfI `DAppPr` DVarT aN
-            Nothing -> DConPr ''PolySingI `DAppPr` DVarT aN
-          -- let pr = case unApply aT of
-          --       (DConT aT', ts)
-          --         | aT' == ''SingSing -> ''PolySingSingI
-          --       _                     -> ''PolySingI
-          -- in  DConPr pr `DAppPr` DVarT aN
+          let pr = case deSingleApplied aT of
+                Just (desing, _) -> ''PolySingOfI
+                Nothing          -> ''PolySingI
+          in  DConPr pr `DAppPr` DVarT aN
           -- case deSingleApplied aT of
           --   Just (desgin, x) -> DConPr ''PolySingI `DAppPr` x
           --   Nothing          -> DConPr ''PolySingI `DAppPr` DVarT aN
@@ -411,6 +405,12 @@ polySingSingI nm bndrs cons bndr = for cons $ \c@(DCon _ _ cnm cfs cTy) -> do
 --       IS i -> case toPolySing i of
 --         SomePS j -> SomePS (SIS j)
 
+-- instance PolySingKind PoopyButt where
+--     fromPolySing = \case
+--       SPB x -> PB (getWS (fromPolySing x))
+--     toPolySing = \case
+--       PB x -> case toPolySing (WS x) of
+--         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
 
 polySingKind
     :: forall q. DsMonad q
@@ -424,6 +424,7 @@ polySingKind (traceShowId->nm) bndrs cons bndr = do
     tps <- traverse mkTps cons
     n   <- qNewName "x"
     pure . trace (pprint (sweeten cctx)) $ DInstanceD Nothing cctx
+    -- pure $ DInstanceD Nothing cctx
       ( DConT ''PolySingKind `DAppT`
            applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
       )
@@ -453,33 +454,51 @@ polySingKind (traceShowId->nm) bndrs cons bndr = do
       t <- case cfs of
         DNormalC _ xs -> map snd xs
         DRecC xs      -> map (\(_,_,t) -> t) xs
+      case unApply t of
+        (DConT _, _) -> empty
+        _            -> pure ()
       let (free, t') = flip (traverseDVarT S.empty) t $ \v ->
             case M.lookup v bndrMap of
               Just q  -> pure q
               Nothing -> v <$ tell [v]
-      pure $ DForallPr (DPlainTV <$> free) [] $
+      pure $ DForallPr (DPlainTV <$> nubOrd free) [] $
         DConPr ''PolySingKind `DAppPr` t'
+--     fromPolySing = \case
+--       SPB x -> PB (getWS (fromPolySing x))
     mkFps :: DCon -> q DMatch
     mkFps c@(DCon _ _ cnm cfs cTy) = do
         (_, vs) <- saturate c
         pure . DMatch (DConPa cnm' (map (DVarPa . fst) vs)) $
-          applyDExp (DConE cnm) . flip map vs $ \(n, _) ->
-            DVarE 'fromPolySing `DAppE` DVarE n
+          applyDExp (DConE cnm) . flip map vs $ \(n, t) ->
+            let arg = DVarE 'fromPolySing `DAppE` DVarE n
+            in  case deSingleApplied t of
+                  Just _ -> DVarE 'getWS `DAppE` arg
+                  Nothing -> arg
       where
         cnm' = mapNameBase singleConstr cnm
+--     toPolySing = \case
+--       PB x -> case toPolySing (WS x) of
+--         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
     mkTps :: DCon -> q DMatch
     mkTps c@(DCon _ _ cnm cfs cTy) = do
         (_, vs ) <- saturate c
         (_, vs') <- saturate c
         pure . DMatch (DConPa cnm (map (DVarPa . fst) vs)) $
           foldr (uncurry go)
-                (DConE 'SomePS `DAppE` applyDExp (DConE cnm') (map (DVarE . fst) vs'))
+                (DConE 'SomePS `DAppE` applyDExp (DConE cnm') (map reSiSi vs'))
                 (zip vs vs')
       where
-        go (oldN, _) (newN, _) finalRes =
-            DCaseE (DVarE 'toPolySing `DAppE` DVarE oldN)
-              [ DMatch (DConPa 'SomePS [DVarPa newN]) finalRes
+        reSiSi (n, t) = case deSingleApplied t of
+          Just _  -> DConE 'SiSi `DAppE` DVarE n
+          Nothing -> DVarE n
+        go (oldN, t) (newN, _) finalRes =
+            DCaseE (DVarE 'toPolySing `DAppE` wrapWS (DVarE oldN))
+              [ DMatch (DConPa 'SomePS [unSiSi (DVarPa newN)]) finalRes
               ]
+          where
+            (wrapWS, unSiSi) = case deSingleApplied t of
+              Just _ -> (DAppE (DConE 'WS), DConPa 'SiSi . (:[]))
+              Nothing -> (id, id)
         cnm' = mapNameBase singleConstr cnm
 
 isVar :: Name -> Bool
