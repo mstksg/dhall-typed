@@ -423,7 +423,7 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     -- UnionLit      :: UnionVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs a
     --               -> Prim ts us '[a] ('TP ('Record at) bs)
 
--- genPolySing ''Prim
+genPolySing ''Prim
 
 -- | Primitive functors of Dhall terms, built into the language.
 data PrimF ts us :: (Type -> Type) -> DType ts us ('Type :~> 'Type) -> Type where

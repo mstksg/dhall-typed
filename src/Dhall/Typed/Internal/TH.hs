@@ -440,9 +440,10 @@ polySingKind (traceShowId->nm) bndrs cons bndr = do
     cctx = nubOrdOn show $ do
       c@(DCon _ _ cnm cfs cTy) <- cons
       let newBndrs :: [Maybe Name]
-          newBndrs = case unApply cTy of
-            (DConT _, ts) -> flip map ts $ \case
+          newBndrs = traceShowId $ case unApply cTy of
+            (DConT _, traceShowId->ts) -> flip map ts $ \case
               DVarT n -> Just n
+              DVarT n `DSigT` _ -> Just n
               _       -> Nothing
             _             -> error "polySingKind: Invalid return type on GADT constructor"
           bndrMap :: Map Name Name

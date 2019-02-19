@@ -16,9 +16,21 @@ module Dhall.Typed.Type.Singletons (
   , PolySingOfI
   ) where
 
-import           Dhall.Typed.Type.Singletons.Internal
-import           Dhall.Typed.Internal.TH
 import           Control.Applicative
-
+import           Data.Kind
+import           Dhall.Typed.Internal.TH
+import           Dhall.Typed.Type.Singletons.Internal
+import           GHC.TypeLits
+import           Numeric.Natural
 
 genPolySing ''Const
+
+
+-- data FatNat :: Type where
+--     FatNat = Vk
+-- type family
+
+-- data SNatural :: Natural -> Type where
+    -- SNatural :: KnownNat n => SNatural n
+-- type instance Sing
+-- genPolySing ''Natural
