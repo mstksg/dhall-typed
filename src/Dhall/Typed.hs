@@ -111,24 +111,24 @@ lookupCtx v = go
               (True , True ) -> Just (TCIType IZ x)
 
 
-toTyped
-    :: Context ts us vs
-    -> D.Expr () D.X
-    -> Maybe (SomeDExpr ts us vs)
-toTyped ctx = \case
-    D.Const D.Sort -> pure . SomeDExpr sf4 $ DEMeta
-    D.Const D.Kind -> pure . SomeDExpr sf3 . DESort $ Kind
-    D.Const D.Type -> pure . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
-    D.Bool         -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
-    D.BoolLit b    -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
-    D.Natural      -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
-    D.NaturalLit n -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
-    -- D.NaturalFold  -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalFold Ø)
-    -- D.NaturalBuild -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalBuild Ø)
-    D.NaturalPlus x y -> do
-      SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) x')) <- toTyped ctx x
-      SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) y')) <- toTyped ctx y
-      pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P NaturalPlus (x' :< y' :< Ø))
+-- toTyped
+--     :: Context ts us vs
+--     -> D.Expr () D.X
+--     -> Maybe (SomeDExpr ts us vs)
+-- toTyped ctx = \case
+--     D.Const D.Sort -> pure . SomeDExpr sf4 $ DEMeta
+--     D.Const D.Kind -> pure . SomeDExpr sf3 . DESort $ Kind
+--     D.Const D.Type -> pure . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
+--     D.Bool         -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
+--     D.BoolLit b    -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
+--     D.Natural      -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
+--     D.NaturalLit n -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
+--     -- D.NaturalFold  -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalFold Ø)
+--     -- D.NaturalBuild -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalBuild Ø)
+--     D.NaturalPlus x y -> do
+--       SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) x')) <- toTyped ctx x
+--       SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) y')) <- toTyped ctx y
+--       pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P NaturalPlus (x' :< y' :< Ø))
 
     -- NaturalPlus   :: Prim ts us '[ TNatural, TNatural ] TNatural
     -- NaturalTimes  :: Prim ts us '[ TNatural, TNatural ] TNatural

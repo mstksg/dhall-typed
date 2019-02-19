@@ -24,8 +24,6 @@ import           Data.Proxy
 
 type family PolySing k = (s :: k -> Type) | s -> k
 
--- type family PolySingOf (s :: k -> Type) (x :: k) = (y :: s x) | y -> x
-
 class PolySingI (x :: k) where
     polySing :: PolySing k x
 
@@ -78,29 +76,29 @@ instance PolySingKind Bool where
       True  -> SomePS STrue
 
 
-data PoopyButt :: Type where
-    PB :: SBool b -> PoopyButt
+-- data PoolyBing :: Type where
+--     PB :: SBool b -> PoolyBing
 
-data SPoopyButt :: PoopyButt -> Type where
-    SPB :: SingSing Bool b ('WS bb) -> SPoopyButt ('PB bb)
+-- data SPoolyBing :: PoolyBing -> Type where
+--     SPB :: SingSing Bool b ('WS bb) -> SPoolyBing ('PB bb)
 
-foo :: SPoopyButt ('PB 'STrue)
-foo = SPB $ SiSi STrue
+-- foo :: SPoolyBing ('PB 'STrue)
+-- foo = SPB $ SiSi STrue
 
-type instance PolySing PoopyButt = SPoopyButt
+-- type instance PolySing PoolyBing = SPoolyBing
 
-instance PolySingI b => PolySingI ('PB (q :: SBool b)) where
-    polySing = SPB polySing
+-- instance PolySingI b => PolySingI ('PB (q :: SBool b)) where
+--     polySing = SPB polySing
 
-instance PolySingKind PoopyButt where
-    fromPolySing = \case
-      SPB x -> PB (getWS (fromPolySing x))
-    toPolySing = \case
-      PB x -> case toPolySing (WS x) of
-        SomePS (SiSi y) -> SomePS (SPB (SiSi y))
+-- instance PolySingKind PoolyBing where
+--     fromPolySing = \case
+--       SPB x -> PB (getWS (fromPolySing x))
+--     toPolySing = \case
+--       PB x -> case toPolySing (WS x) of
+--         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
 
-data SSPoopyButt pb :: SPoopyButt pb -> Type where
-    SSPB :: SingSing (WrappedSing Bool b) ('WS bb) ('WS bbb) -> SSPoopyButt ('PB bb) ('SPB bbb)
+-- data SSPoolyBing pb :: SPoolyBing pb -> Type where
+--     SSPB :: SingSing (WrappedSing Bool b) ('WS bb) ('WS bbb) -> SSPoolyBing ('PB bb) ('SPB bbb)
 
 -- data SMaybe a :: Maybe a -> Type where
 --     SJust :: PolySing a x -> SMaybe a ('Just x)
@@ -114,7 +112,7 @@ data SSPoopyButt pb :: SPoopyButt pb -> Type where
 -- data SFloop :: Floop -> Type where
 --     SFP :: SingSing (Maybe a) b ('WS bb) -> SFloop ('FP bb)
 
-    -- SingSing (SingSing Bool b ('WS bb)) b ('WS bbb) -> SSPoopyButt ('PB bb) ('SPB bbb)
+    -- SingSing (SingSing Bool b ('WS bb)) b ('WS bbb) -> SSPoolyBing ('PB bb) ('SPB bbb)
 
 -- newtype SingSing k x :: PolySing k x -> Type where
 --     SingSing :: forall k (x :: k) (s :: PolySing k x). ()

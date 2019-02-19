@@ -32,9 +32,9 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , KPrim(..), DKind(..), SomeKind(..), type (:~>), KShift
+  , DKind(..), SomeKind(..), type (:~>), KShift
   -- ** Types
-  , TPrim(..), DType(..), SomeType(..), Type, TBool, TNatural, TList, TOptional, type (:$), type (:->), Shift
+  , DType(..), SomeType(..), type (:$), type (:->), Shift
   -- ** Terms
   , Prim(..), PrimF(..), DTerm(..), SomeTerm(..)
   -- ** Mixed
@@ -44,7 +44,7 @@ module Dhall.Typed.Core (
   -- * Singletons
   , SDSort(..) -- , SSDSort(..), SSSDSort(..)
   , SDKind(..) -- , SSDKind(..), SSSDKind(..)
-  , STPrim(..), SDType(..)
+  , SDType(..)
   , SPrim(..), SPrimF(..), SDTerm(..)
   --, SAggType(..)
   , KShiftSym, ShiftSym
@@ -224,37 +224,14 @@ data DSort :: Type where
     (:*>)    :: DSort -> DSort -> DSort
     SoRecord :: Prod (Const DSort) ls
              -> DSort
-    -- SoRecord :: forall (ls :: [Symbol]) (as :: [()]). ()
-    --          => BiProd Proxy Proxy ls as
-    --          -> Prod (Const DSort) as
-    --          -> DSort
-    -- SoUnion  :: forall (ls :: [Symbol]) (as :: [()]). ()
-    --          => BiProd Proxy Proxy ls as
-    --          -> Prod (Const DSort) as
-    --          -> DSort
+    SoUnion  :: Prod (Const DSort) ls
+             -> DSort
 
 genPolySing ''DSort
--- genPolySing ''SDSort
--- genPolySing ''SSDSort
 
 -- ---------
 -- > Kinds
 -- ---------
-
-data KPrim :: [DSort] -> DSort -> Type where
-    -- KRecord    :: AggType DSort 'Kind ls as -> KPrim as 'Kind
-    -- KUnion     :: AggType DSort 'Kind ls as -> KPrim as 'Kind
-    -- KRecordLit    :: SProd (Const DSort) as p
-    --               -> KPrim '[] ('SoRecord p)
-    -- KUnionLit     :: forall ls as bs (p :: BiProd Proxy Proxy ls as) a. ()
-    --               => Index as a
-    --               -> KPrim '[a] ('SoUnion p bs)
-    -- KRecordLit :: RecordVal () (Const DSort) '() ls ks at bs as
-    --            -> KPrim (Map GetConstSym0 as) ('SoRecord at bs)
-    -- KUnionLit  :: UnionVal () (Const DSort) '() ls ks at bs ('Const a)
-    --            -> KPrim '[a] ('SoUnion at bs)
-
-genPolySing ''KPrim
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -274,7 +251,12 @@ data DKind :: [DSort] -> DSort -> Type where
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
     KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
     Type  :: DKind ts 'Kind
-    KP    :: KPrim as a -> Prod (DKind ts) as -> DKind ts a
+
+    KRecordLit :: Prod (DKind ts) (ProdList ps)
+               -> DKind ts ('SoRecord ps)
+    KUnionLit  :: Index (ProdList ps) a
+               -> DKind ts a
+               -> DKind ts ('SoUnion ps)
 
 -- | Substitute in a kind for all occurrences of a kind variable of sort
 -- @a@ indicated by the 'Delete' within a kind of osrt @b@.
@@ -284,8 +266,6 @@ type a :~> b = a ':~> b
 infixr 1 :~>
 
 genPolySing ''DKind
--- genPolySing ''SDKind
--- genPolySing ''SSDKind
 
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
@@ -298,20 +278,6 @@ type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind 
 -- ---------
 -- > Types
 -- ---------
-
--- | Primitives of Dhall types, built into the language.
-data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
-    Bool       :: TPrim ts '[] 'Type
-    Natural    :: TPrim ts '[] 'Type
-    -- Record     :: AggType (DKind ts 'Kind) 'Type ls as -> TPrim ts as 'Type
-    List       :: TPrim ts '[] ('Type ':~> 'Type)
-    Optional   :: TPrim ts '[] ('Type ':~> 'Type)
-    -- TRecordLit :: RecordVal DSort (DKind ts) 'Kind ls ks at bs as
-    --            -> TPrim ts as ('KP ('KRecord at) bs)
-    -- TUnionLit  :: UnionVal DSort (DKind ts) 'Kind ls ks at bs a
-    --            -> TPrim ts '[a] ('KP ('KRecord at) bs)
-
-genPolySing ''TPrim
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -333,7 +299,6 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
     TLam  :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us (u ':~> a)
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
-    TP    :: TPrim ts as a -> Prod (DType ts us) as -> DType ts us a
 
     TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
@@ -344,42 +309,35 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us a
+
+    Bool     :: DType ts us 'Type
+    Natural  :: DType ts us 'Type
+    List     :: DType ts us ('Type :~> 'Type)
+    Optional :: DType ts us ('Type :~> 'Type)
+
+-- -- | Primitives of Dhall types, built into the language.
+-- data TPrim ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
+--     Bool       :: TPrim ts '[] 'Type
+--     Natural    :: TPrim ts '[] 'Type
+--     -- Record     :: AggType (DKind ts 'Kind) 'Type ls as -> TPrim ts as 'Type
+--     List       :: TPrim ts '[] ('Type ':~> 'Type)
+--     Optional   :: TPrim ts '[] ('Type ':~> 'Type)
+--     -- TRecordLit :: RecordVal DSort (DKind ts) 'Kind ls ks at bs as
+--     --            -> TPrim ts as ('KP ('KRecord at) bs)
+--     -- TUnionLit  :: UnionVal DSort (DKind ts) 'Kind ls ks at bs a
+--     --            -> TPrim ts '[a] ('KP ('KRecord at) bs)
+
     -- TODO
     -- Pi2   :: SDSort t
     --       -> DType (t ': ts) (Map (KShiftSym ts t 'Kind) us) (KShift ts t 'Kind a)
     --       -> DType ts        us                              a
 
-type TBool     = 'TP 'Bool 'Ø
-type TNatural  = 'TP 'Natural 'Ø
-type TList     = 'TP 'List 'Ø
-type TOptional = 'TP 'Optional 'Ø
 type (:$)      = 'TApp
 type a :-> b   = a ':-> b
 
 infixr 0 :->
 infixl 9 `TApp`
 infixl 9 :$
-
--- data SDType ts us a :: DType ts us a -> Type where
---     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
---     STLam  :: SSDKind ts 'Kind u uu
---            -> SDType ts (u ': us) a x
---            -> SDType ts us (u ':~> a) ('TLam uu x)
---     STApp  :: SDType ts us (a ':~> b) f
---            -> SDType ts us a         x
---            -> SDType ts us b         ('TApp f x)
---     (:%->) :: SDType ts us 'Type x
---            -> SDType ts us 'Type y
---            -> SDType ts us 'Type (x ':-> y)
---     STP    :: STPrim ts as a x -> SProd (DType ts us) as p -> SDType ts us a ('TP x p)
---     STPoly :: PolySing (SSDSort t tt) ttt
---            -> SDType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x
---            -> SDType ts us ('KPi tt a) ('TPoly ttt x)
-
--- type instance PolySing (DType ts us a) = SDType ts us a
-
--- instance (PolySingI ttt, PolySingI x) => PolySingI ('TPoly ttt x) where
---     polySing = STPoly polySing polySing
 
 genPolySing ''DType
 
@@ -403,21 +361,21 @@ type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: D
 
 -- | Primitives of Dhall terms, built into the language.
 data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
-    BoolLit       :: Bool -> Prim ts us '[] TBool
-    NaturalLit    :: Natural -> Prim ts us '[] TNatural
-    NaturalFold   :: Prim ts us '[] (TNatural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
-    NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TNatural)
-    NaturalPlus   :: Prim ts us '[ TNatural, TNatural ] TNatural
-    NaturalTimes  :: Prim ts us '[ TNatural, TNatural ] TNatural
-    NaturalIsZero :: Prim ts us '[] (TNatural :-> TBool)
-    ListFold      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
-    ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TList :$ 'TVar 'IZ))
-    ListAppend    :: Prim ts us '[ TList :$ a, TList :$ a ] (TList :$ a)
-    ListHead      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
-    ListLast      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
-    ListReverse   :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TList     :$ 'TVar 'IZ))
-    Some          :: Prim ts us '[ a ] (TOptional :$ a)
-    None          :: Prim ts us '[]    ('Pi 'SType (TOptional :$ 'TVar 'IZ))
+    BoolLit       :: Bool -> Prim ts us '[] 'Bool
+    NaturalLit    :: Natural -> Prim ts us '[] 'Natural
+    NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
+    NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
+    NaturalPlus   :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
+    NaturalTimes  :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
+    NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
+    ListFold      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
+    ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
+    ListAppend    :: Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
+    ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+    ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+    ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
+    Some          :: Prim ts us '[ a ] ('Optional :$ a)
+    None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
     -- RecordLit     :: RecordVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs as
     --               -> Prim ts us as ('TP ('Record at) bs)
     -- UnionLit      :: UnionVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs a
@@ -427,8 +385,8 @@ genPolySing ''Prim
 
 -- | Primitive functors of Dhall terms, built into the language.
 data PrimF ts us :: (Type -> Type) -> DType ts us ('Type :~> 'Type) -> Type where
-    ListLit     :: PrimF ts us Seq   TList
-    OptionalLit :: PrimF ts us Maybe TOptional
+    ListLit     :: PrimF ts us Seq   'List
+    OptionalLit :: PrimF ts us Maybe 'Optional
 
 genPolySing ''PrimF
 
@@ -631,26 +589,26 @@ dExprType = \case
 --     type Demote (DType ts us a) = DType ts us a
 
 -- data SPrim ts us as a :: Prim ts us as a -> Type where
---     SBoolLit    :: Sing b -> SPrim ts us '[] TBool    ('BoolLit    b)
---     SNaturalLit :: Sing n -> SPrim ts us '[] TNatural ('NaturalLit n)
--- --     NaturalLit    :: Natural -> Prim ts us '[] TNatural
--- --     NaturalFold   :: Prim ts us '[] (TNatural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
--- --     NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TNatural)
--- --     NaturalPlus   :: Prim ts us '[ TNatural, TNatural ] TNatural
--- --     NaturalTimes  :: Prim ts us '[ TNatural, TNatural ] TNatural
--- --     NaturalIsZero :: Prim ts us '[] (TNatural :-> TBool)
--- --     ListFold      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
--- --     ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TList :$ 'TVar 'IZ))
--- --     ListAppend    :: Prim ts us '[ TList :$ a, TList :$ a ] (TList :$ a)
--- --     ListHead      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
--- --     ListLast      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
--- --     ListReverse   :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TList     :$ 'TVar 'IZ))
--- --     Some          :: Prim ts us '[ a ] (TOptional :$ a)
--- --     None          :: Prim ts us '[]    ('Pi 'SType (TOptional :$ 'TVar 'IZ))
+--     SBoolLit    :: Sing b -> SPrim ts us '[] 'Bool    ('BoolLit    b)
+--     SNaturalLit :: Sing n -> SPrim ts us '[] 'Natural ('NaturalLit n)
+-- --     NaturalLit    :: Natural -> Prim ts us '[] 'Natural
+-- --     NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
+-- --     NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
+-- --     NaturalPlus   :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
+-- --     NaturalTimes  :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
+-- --     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
+-- --     ListFold      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
+-- --     ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
+-- --     ListAppend    :: Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
+-- --     ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+-- --     ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+-- --     ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
+-- --     Some          :: Prim ts us '[ a ] ('Optional :$ a)
+-- --     None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
 
 -- data SPrimF ts us f g :: PrimF ts us f g -> Type where
---     SListLit     :: SPrimF ts us Seq   TList     'ListLit
---     SOptionalLit :: SPrimF ts us Maybe TOptional 'OptionalLit
+--     SListLit     :: SPrimF ts us Seq   'List     'ListLit
+--     SOptionalLit :: SPrimF ts us Maybe 'Optional 'OptionalLit
 
 -- data SDTerm ts us vs a :: DTerm ts us vs a -> Type where
 --     SVar :: SIndex vs a i -> SDTerm ts us vs a ('Var i)
