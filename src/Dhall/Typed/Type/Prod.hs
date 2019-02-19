@@ -22,8 +22,8 @@ module Dhall.Typed.Type.Prod (
   , zipProd
   , singProd
   , prodSing
-  , allProd
-  , prodAll
+  -- , allProd
+  -- , prodAll
   , ixProd
   , SeqListEq(..)
   , IxProd
@@ -38,7 +38,7 @@ import           Control.Applicative
 import           Data.Kind
 import           Data.Sequence                (Seq(..))
 import           Data.Singletons
-import           Data.Singletons.Prelude.List
+-- import           Data.Singletons.Prelude.List
 import           Data.Type.Universe
 import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
@@ -51,16 +51,14 @@ data Prod :: (k -> Type) -> [k] -> Type where
 
 infixr 5 :<
 
--- genPolySingWith defaultGPSO { gpsoPSK = False } ''Prod
-genPolySingWith defaultGPSO ''Prod
+genPolySing ''Prod
 
 data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type where
-    BØ    :: BiProd f g '[] '[]
-    (:<<) :: (f a, g b) -> BiProd f g as bs -> BiProd f g (a ': as) (b ': bs)
+    BZ :: BiProd f g '[] '[]
+    BS :: f a -> g b -> BiProd f g as bs -> BiProd f g (a ': as) (b ': bs)
 
-infixr 5 :<<
-
-genPolySingWith defaultGPSO { gpsoPSK = False } ''BiProd
+-- genPolySingWith defaultGPSO { gpsoPSK = False } ''BiProd
+genPolySing ''BiProd
 
 -- data SProd f as :: Prod f as -> Type where
 --     SØ    :: SProd f '[] 'Ø
@@ -116,30 +114,30 @@ zipProd = \case
       y :< ys -> (x :*: y) :< zipProd xs ys
 
 singProd
-    :: Sing as
-    -> Prod Sing as
+    :: SList k as
+    -> Prod (PolySing k) as
 singProd = \case
     SNil -> Ø
-    x `SCons` xs -> x :< singProd xs
+    x :% xs -> x :< singProd xs
 
 prodSing
-    :: Prod Sing as
-    -> Sing as
+    :: Prod (PolySing k) as
+    -> SList k as
 prodSing = \case
     Ø -> SNil
-    x :< xs -> x `SCons` prodSing xs
+    x :< xs -> x :% prodSing xs
 
-allProd :: Sing as -> WitAll [] (TyCon1 f) as -> Prod f as
-allProd = \case
-    SNil         -> \_ -> Ø
-    _ `SCons` xs -> \a -> runWitAll a IZ :< allProd xs (WitAll (runWitAll a . IS))
+-- allProd :: Sing as -> WitAll [] (TyCon1 f) as -> Prod f as
+-- allProd = \case
+--     SNil    -> \_ -> Ø
+--     _ :% xs -> \a -> runWitAll a IZ :< allProd xs (WitAll (runWitAll a . IS))
 
-prodAll :: Prod f as -> WitAll [] (TyCon1 f) as
-prodAll = \case
-    Ø       -> WitAll $ \case
-    x :< xs -> WitAll $ \case
-      IZ   -> x
-      IS i -> runWitAll (prodAll xs) i
+-- prodAll :: Prod f as -> WitAll [] (TyCon1 f) as
+-- prodAll = \case
+--     Ø       -> WitAll $ \case
+--     x :< xs -> WitAll $ \case
+--       IZ   -> x
+--       IS i -> runWitAll (prodAll xs) i
 
 ixProd :: Prod f as -> Index as a -> f a
 ixProd = \case

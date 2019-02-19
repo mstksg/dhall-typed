@@ -301,6 +301,7 @@ polySingKind nm bndrs cons = do
       t <- case cfs of
         DNormalC _ xs -> map snd xs
         DRecC xs      -> map (\(_,_,t) -> t) xs
+      let desingled = deSingleApplied t
       case unApply t of
         (DConT _, _) -> empty
         _            -> pure ()

@@ -26,7 +26,7 @@ module Dhall.Typed.Type.Singletons (
   , SingSing(..)
   , PolySingOfI
   -- * Instances
-  , SConst(..), SMaybe(..)
+  , SConst(..), SMaybe(..), SList(..), STup(..), SBool(..), SProxy(..)
   -- ** Natural
   , ToNat, FromNat
   , SNatural(..)
@@ -52,6 +52,7 @@ import qualified Data.Text                            as T
 
 genPolySing ''Const
 genPolySing ''Maybe
+genPolySing ''Proxy
 
 type family ToNat (n :: Natural) = (m :: Nat) | m -> n where
 type family FromNat (m :: Nat)     = (n :: Natural) | n -> m where

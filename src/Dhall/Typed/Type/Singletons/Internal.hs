@@ -7,6 +7,7 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
+{-# LANGUAGE TypeOperators          #-}
 {-# LANGUAGE UndecidableInstances   #-}
 
 module Dhall.Typed.Type.Singletons.Internal (
@@ -17,6 +18,8 @@ module Dhall.Typed.Type.Singletons.Internal (
   , WrappedSing(..)
   , SingSing(..)
   , PolySingOfI
+  -- * Instances
+  , SBool(..), SList(..), STup(..)
   ) where
 
 import           Data.Kind
@@ -75,6 +78,45 @@ instance PolySingKind Bool where
       False -> SomePS SFalse
       True  -> SomePS STrue
 
+data SList k :: [k] -> Type where
+    (:%) :: PolySing k x -> SList k xs -> SList k (x ': xs)
+    SNil :: SList k '[]
+
+infixr 5 :%
+
+type instance PolySing [a] = SList a
+
+instance PolySingI '[] where
+    polySing = SNil
+
+instance (PolySingI a, PolySingI as) => PolySingI (a ': as) where
+    polySing = polySing :% polySing
+
+instance PolySingKind a => PolySingKind [a] where
+    fromPolySing = \case
+      SNil -> []
+      x :% xs -> fromPolySing x : fromPolySing xs
+
+    toPolySing = \case
+      []     -> SomePS SNil
+      x : xs -> case toPolySing x of
+        SomePS x' -> case toPolySing xs of
+          SomePS xs' -> SomePS (x' :% xs')
+
+data STup a b :: (a, b) -> Type where
+    STup :: PolySing a x -> PolySing b y -> STup a b '(x, y)
+
+type instance PolySing (a, b) = STup a b
+
+instance (PolySingI x, PolySingI y) => PolySingI '(x, y) where
+    polySing = STup polySing polySing
+
+instance (PolySingKind a, PolySingKind b) => PolySingKind (a, b) where
+    fromPolySing = \case
+      STup x y -> (fromPolySing x, fromPolySing y)
+    toPolySing (x, y) = case toPolySing x of
+      SomePS x' -> case toPolySing y of
+        SomePS y' -> SomePS (STup x' y')
 
 -- data PoolyBing :: Type where
 --     PB :: SBool b -> PoolyBing
