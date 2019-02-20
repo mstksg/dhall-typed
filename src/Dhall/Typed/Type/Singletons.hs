@@ -26,8 +26,10 @@ module Dhall.Typed.Type.Singletons (
   , WrappedSing(..)
   , SingSing(..)
   , PolySingOfI
+  , SameSingSing(..)
+  , sameSingSing
   -- * Instances
-  , SConst(..), SMaybe(..), SList(..), STup(..), SBool(..), SProxy(..)
+  , SConst(..), SMaybe(..), SList(..), STup2(..), SBool(..), SProxy(..), STup0(..)
   -- ** Natural
   , ToNat, FromNat
   , SNatural(..)

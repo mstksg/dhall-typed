@@ -75,12 +75,13 @@ module Dhall.Typed.Core (
 import           Control.Applicative
 import           Data.Functor.Compose
 import           Data.Kind
-import           Data.Sequence                 (Seq(..))
+import           Data.Sequence                      (Seq(..))
+import           Data.Singletons.Decide
 import           Data.Singletons.Prelude.Const
-import           Data.Singletons.Prelude.List  (Sing(..))
-import           Data.Singletons.TH hiding     (Sum)
-import           Data.Singletons.TypeLits      (SSymbol, Sing(SSym))
-import           Data.Text                     (Text)
+import           Data.Singletons.Prelude.List       (Sing(..))
+import           Data.Singletons.TH hiding          (Sum)
+import           Data.Singletons.TypeLits           (SSymbol, Sing(SSym))
+import           Data.Text                          (Text)
 import           Data.Type.Equality
 import           Data.Type.Predicate
 import           Data.Type.Universe
@@ -91,11 +92,11 @@ import           Dhall.Typed.Type.Option
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons hiding (SNatural)
 import           Dhall.Typed.Type.Symbol
-import           GHC.TypeLits                  (Symbol)
+import           GHC.TypeLits                       (Symbol)
 import           Numeric.Natural
-import           Unsafe.Coerce                 (unsafeCoerce)
-import qualified Data.Sequence                 as Seq
-import qualified GHC.TypeLits                  as TL
+import           Unsafe.Coerce                      (unsafeCoerce)
+import qualified Data.Sequence                      as Seq
+import qualified GHC.TypeLits                       as TL
 
 type family Map (f :: a ~> b) (xs :: [a]) :: [b] where
     Map f '[]       = '[]
@@ -177,12 +178,45 @@ genPolySing ''AggType
 data DSort :: Type where
     Kind    :: DSort
     (:*>)   :: DSort -> DSort -> DSort
-    KRecord :: Prod (Const DSort) ls
+    KRecord :: SList Text ls
+            -> SList ()   as
+            -> AggType () ls as
             -> DSort
-    KUnion  :: Prod (Const DSort) ls
+    KUnion  :: SList Text ls
+            -> SList () as
+            -> AggType () ls as
             -> DSort
 
+    -- TRecord :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
+    -- TUnion  :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
+
 genPolySing ''DSort
+
+-- sameSDSort :: SDSort t -> SDSort u -> Decision (t :~: u)
+-- sameSDSort = \case
+--     SKind -> \case
+--       SKind -> Proved Refl
+--       _ :%*> _ -> Disproved $ \case {}
+--       SKRecord _ _ _ -> Disproved $ \case {}
+--       -- SKUnion _ -> Disproved $ \case {}
+--     x :%*> y -> \case
+--       x' :%*> y' -> case sameSDSort x x' of
+--         Proved Refl -> case sameSDSort y y' of
+--           Proved Refl -> Proved Refl
+--           Disproved v -> Disproved $ \case Refl -> v Refl
+--         Disproved v -> Disproved $ \case Refl -> v Refl
+--     -- THE PROBLEM: EXISTENTIAL KINDS!!!!
+--     SKRecord t u x -> \case
+--       SKRecord t' u' x' -> case sameSingSing t t' of
+--         Proved SiSiRefl -> case sameSingSing u u' of
+--           Proved SiSiRefl -> case eqPS x x' of
+--             Proved Refl -> Proved Refl
+--             Disproved v -> Disproved $ \case Refl -> v Refl
+--           Disproved v -> Disproved $ \case Refl -> v SiSiRefl
+--         Disproved v -> Disproved $ \case Refl -> v SiSiRefl
+
 
 -- ---------
 -- > Kinds
@@ -213,10 +247,10 @@ data DKind :: [DSort] -> DSort -> Type where
     --            -> DKind ts a
     --            -> DKind ts ('KUnion ps)
 
-    TRecord :: AggType (DKind ts 'Kind) ls as
-            -> DKind ts 'Kind
-    TUnion  :: AggType (DKind ts 'Kind) ls as
-            -> DKind ts 'Kind
+    -- TRecord :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
+    -- TUnion  :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
 
 
 -- | Substitute in a kind for all occurrences of a kind variable of sort
@@ -284,12 +318,10 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     --            -> DType ts us a
     --            -> DType ts us ('TRecord at)
 
-    Record :: AggType (DType ts us 'Type) ls as
-           -> DType ts us 'Type
-    Union  :: AggType (DType ts us 'Type) ls as
-           -> DType ts us 'Type
-
-
+    -- Record :: AggType (DType ts us 'Type) ls as
+    --        -> DType ts us 'Type
+    -- Union  :: AggType (DType ts us 'Type) ls as
+    --        -> DType ts us 'Type
 
     -- TODO
     -- Pi2   :: SDSort t

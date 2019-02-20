@@ -394,11 +394,12 @@ polySingKind nm defctx bndrs cons = do
                   foldrM (uncurry go)
                          (DConE 'Proved `DAppE` DConE 'Refl)
                          (zip vs vs2)
-              else Just <$> do
-                n <- qNewName "z"
-                pure . DMatch (DConPa cnm2' (DWildPa <$ vs2)) $
-                    DConE 'Disproved `DAppE`
-                      DLamE [n] (DCaseE (DVarE n) [])
+              else pure Nothing
+              -- else Just <$> do
+              --   n <- qNewName "z"
+              --   pure . DMatch (DConPa cnm2' (DWildPa <$ vs2)) $
+              --       DConE 'Disproved `DAppE`
+              --         DLamE [n] (DCaseE (DVarE n) [])
           where
             cnm2' = mapNameBase singleConstr cnm2
             go (oldN, t) (newN, _) finalRes = do
@@ -547,6 +548,8 @@ singleValue _ = error "Invalid value name"
 -- SMaybe a     => Maybe a
 -- SingSing k b => WrappedSing k b
 --
+-- SList a      => [a]
+--
 -- The input is always expected to be (k -> Type).
 deSingle :: DType -> Maybe DType
 deSingle t = case unApply t of
@@ -555,6 +558,7 @@ deSingle t = case unApply t of
           y:_ -> Just y
           _   -> Nothing
       | c == ''SingSing             -> Just $ applyDType (DConT ''WrappedSing) xs
+      | c == ''SList                -> Just $ applyDType (DConT ''[]) xs
       | Just c' <- isSingleConstr c -> Just $ applyDType (DConT c') xs
     -- TODO: handle case of 'f a b' ?
     _ -> Nothing

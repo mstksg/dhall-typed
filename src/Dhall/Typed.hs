@@ -131,6 +131,7 @@ toTyped ctx = \case
       SomeDExpr (DETerm (SomeTerm SNatural y')) <- toTyped ctx y
       pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
     D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
+    D.List          -> pure . SomeDExpr . deType $ List
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
     D.ListAppend x y -> do
@@ -142,10 +143,14 @@ toTyped ctx = \case
     D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
+    D.Optional      -> pure . SomeDExpr . deType $ Optional
     D.Some x        -> do
       SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
       pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P Some (x' :< Ø)
     D.None          -> pure . SomeDExpr . deTerm $ P None Ø
+    D.Note _ x      -> toTyped ctx x
+    D.ImportAlt x _ -> toTyped ctx x
+    D.Embed v       -> D.absurd v
 
 -- -- | Syntax tree for expressions
 -- data Expr s a

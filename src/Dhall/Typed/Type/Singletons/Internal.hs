@@ -22,7 +22,7 @@ module Dhall.Typed.Type.Singletons.Internal (
   , SameSingSing(..)
   , sameSingSing
   -- * Instances
-  , SBool(..), SList(..), STup(..)
+  , SBool(..), SList(..), STup2(..), STup0(..)
   ) where
 
 import           Data.Kind
@@ -154,27 +154,42 @@ instance PolySingKind a => PolySingKind [a] where
           Disproved v -> Disproved $ \case Refl -> v Refl
 
 
-data STup a b :: (a, b) -> Type where
-    STup :: PolySing a x -> PolySing b y -> STup a b '(x, y)
+data STup2 a b :: (a, b) -> Type where
+    STup2 :: PolySing a x -> PolySing b y -> STup2 a b '(x, y)
 
-type instance PolySing (a, b) = STup a b
+type instance PolySing (a, b) = STup2 a b
 
 instance (PolySingI x, PolySingI y) => PolySingI '(x, y) where
-    polySing = STup polySing polySing
+    polySing = STup2 polySing polySing
 
 instance (PolySingKind a, PolySingKind b) => PolySingKind (a, b) where
     fromPolySing = \case
-      STup x y -> (fromPolySing x, fromPolySing y)
+      STup2 x y -> (fromPolySing x, fromPolySing y)
     toPolySing (x, y) = case toPolySing x of
       SomePS x' -> case toPolySing y of
-        SomePS y' -> SomePS (STup x' y')
+        SomePS y' -> SomePS (STup2 x' y')
     eqPS = \case
-      STup x y -> \case
-        STup x' y' -> case eqPS x x' of
+      STup2 x y -> \case
+        STup2 x' y' -> case eqPS x x' of
           Proved Refl -> case eqPS y y' of
             Proved Refl -> Proved Refl
             Disproved v -> Disproved $ \case Refl -> v Refl
           Disproved v -> Disproved $ \case Refl -> v Refl
+
+data STup0 :: () -> Type where
+    STup0 :: STup0 '()
+
+type instance PolySing () = STup0
+
+instance PolySingI '() where
+    polySing = STup0
+
+instance PolySingKind () where
+    fromPolySing _ = ()
+    toPolySing _ = SomePS STup0
+    eqPS = \case
+      STup0 -> \case
+        STup0 -> Proved Refl
 
 
 
