@@ -32,13 +32,13 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift
+  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType
   -- ** Terms
-  , Prim(..), DTerm(..), SomeTerm(..)
+  , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Mixed
-  , DExpr(..), SomeDExpr(..), dExprType
+  , DExpr(..), SomeDExpr(..), dExprType, deKind, deType, deTerm
   -- ** Shared
   -- , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
@@ -403,11 +403,20 @@ genPolySing ''DTerm
 data SomeKind :: [DSort] -> Type where
     SomeKind :: SDSort a -> DKind ts a -> SomeKind ts
 
+toSomeKind :: PolySingI a => DKind ts a -> SomeKind ts
+toSomeKind = SomeKind polySing
+
 data SomeType ts :: [DKind ts 'Kind] -> Type where
     SomeType :: SDKind ts 'Kind a -> DType ts us a -> SomeType ts us
 
+toSomeType :: PolySingI a => DType ts vs a -> SomeType ts vs
+toSomeType = SomeType polySing
+
 data SomeTerm ts us :: [DType ts us 'Type] -> Type where
     SomeTerm :: SDType ts us 'Type a -> DTerm ts us vs a -> SomeTerm ts us vs
+
+toSomeTerm :: PolySingI a => DTerm ts us vs a -> SomeTerm ts us vs
+toSomeTerm = SomeTerm polySing
 
 -- | A 'DExpr' fully covers all legal type-checking dhall terms.  A value
 -- of type
@@ -454,7 +463,7 @@ data DExpr ts us :: [DType ts us 'Type] -> Fin N5 -> Type where
 -- useful when returning a 'DExpr' of level unknown until runtime, or
 -- storing 'DExpr' of multiple levels in a container.
 data SomeDExpr ts us :: [DType ts us 'Type] -> Type where
-    SomeDExpr :: SFin N5 l -> DExpr ts us vs l -> SomeDExpr ts us vs
+    SomeDExpr :: DExpr ts us vs l -> SomeDExpr ts us vs
 
 -- | Get the meta-level "type" of a 'DExpr'.  If it's a term, this will
 -- return its type.  If it's a type, this returns its type, etc.  It
@@ -471,6 +480,14 @@ dExprType = \case
     DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
     DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
 
+deKind :: PolySingI a => DKind ts a -> DExpr ts us vs F2
+deKind = DEKind . toSomeKind
+
+deType :: PolySingI a => DType ts us a -> DExpr ts us vs F1
+deType = DEType . toSomeType
+
+deTerm :: PolySingI a => DTerm ts us vs a -> DExpr ts us vs F0
+deTerm = DETerm . toSomeTerm
 
 ---- | Represents the possible kinds encountered in Dhall.
 --data DKind = Type | DKind :~> DKind

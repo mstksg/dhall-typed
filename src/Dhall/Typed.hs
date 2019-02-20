@@ -11,7 +11,6 @@
 {-# LANGUAGE TypeOperators                     #-}
 
 module Dhall.Typed (
-    foo
   ) where
 
 -- module Dhall.Typed (
@@ -111,40 +110,39 @@ lookupCtx v = go
               (True , True ) -> Just (TCIType IZ x)
 
 
--- toTyped
---     :: Context ts us vs
---     -> D.Expr () D.X
---     -> Maybe (SomeDExpr ts us vs)
--- toTyped ctx = \case
---     D.Const D.Sort -> pure . SomeDExpr sf4 $ DEMeta
---     D.Const D.Kind -> pure . SomeDExpr sf3 . DESort $ Kind
---     D.Const D.Type -> pure . SomeDExpr sf2 . DEKind $ SomeKind SKind Type
---     D.Bool         -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Bool Ø)
---     D.BoolLit b    -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SBool SØ)    (P (BoolLit b) Ø)
---     D.Natural      -> pure . SomeDExpr sf1 . DEType $ SomeType SType             (TP Natural Ø)
---     D.NaturalLit n -> pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P (NaturalLit n) Ø)
---     -- D.NaturalFold  -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalFold Ø)
---     -- D.NaturalBuild -> pure . SomeDExpr sf0 . DETerm $ SomeTerm _                 (P NaturalBuild Ø)
---     D.NaturalPlus x y -> do
---       SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) x')) <- toTyped ctx x
---       SomeDExpr _ (DETerm (SomeTerm (STP SNatural SØ) y')) <- toTyped ctx y
---       pure . SomeDExpr sf0 . DETerm $ SomeTerm (STP SNatural SØ) (P NaturalPlus (x' :< y' :< Ø))
+toTyped
+    :: Context ts us vs
+    -> D.Expr () D.X
+    -> Maybe (SomeDExpr ts us vs)
+toTyped ctx = \case
+    D.Const D.Sort -> pure . SomeDExpr $ DEMeta
+    D.Const D.Kind -> pure . SomeDExpr . DESort $ Kind
+    D.Const D.Type -> pure . SomeDExpr . deKind $ Type
+    D.Bool         -> pure . SomeDExpr . deType $ Bool
+    D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
+    D.Natural      -> pure . SomeDExpr . deType $ Natural
+    D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
+    D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
+    D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
+    D.NaturalPlus x y -> do
+      SomeDExpr (DETerm (SomeTerm SNatural x')) <- toTyped ctx x
+      SomeDExpr (DETerm (SomeTerm SNatural y')) <- toTyped ctx y
+      pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
+    D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
+    D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
+    D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
+    -- D.ListAppend x y -> do
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
+    --   pure . SomeDExpr . deTerm $ P ListAppend (x' :< y' :< Ø)
+    D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
+    D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
+    D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
+    D.Some x        -> do
+      SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
+      pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P Some (x' :< Ø)
+    D.None          -> pure . SomeDExpr . deTerm $ P None Ø
 
-    -- NaturalPlus   :: Prim ts us '[ TNatural, TNatural ] TNatural
-    -- NaturalTimes  :: Prim ts us '[ TNatural, TNatural ] TNatural
-    -- NaturalIsZero :: Prim ts us '[] (TNatural :-> TBool)
-    -- ListFold      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
-    -- ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> TList :$ 'TVar 'IZ))
-    -- ListAppend    :: Prim ts us '[ TList :$ a, TList :$ a ] (TList :$ a)
-    -- ListHead      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
-    -- ListLast      :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TOptional :$ 'TVar 'IZ))
-    -- ListReverse   :: Prim ts us '[] ('Pi 'SType (TList :$ 'TVar 'IZ :-> TList     :$ 'TVar 'IZ))
-    -- Some          :: Prim ts us '[ a ] (TOptional :$ a)
-    -- None          :: Prim ts us '[]    ('Pi 'SType (TOptional :$ 'TVar 'IZ))
-    -- RecordLit     :: RecordVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs as
-    --               -> Prim ts us as ('TP ('Record at) bs)
-    -- UnionLit      :: UnionVal (DKind ts 'Kind) (DType ts us) 'Type ls ks at bs a
-    --               -> Prim ts us '[a] ('TP ('Record at) bs)
 -- -- | Syntax tree for expressions
 -- data Expr s a
 --     | Var Var
@@ -628,7 +626,4 @@ lookupCtx v = go
 --              )
 --            )
 --      `App` ListLit (STVar SIZ) Seq.empty
-
-foo :: String
-foo = $(inspector '(:~>))
 
