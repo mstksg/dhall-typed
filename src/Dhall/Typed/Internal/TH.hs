@@ -17,31 +17,25 @@ module Dhall.Typed.Internal.TH (
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.Writer hiding         (lift)
+import           Control.Monad.Writer hiding          (lift)
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Containers.ListUtils
 import           Data.Default
-import           Data.Either
-import           Data.Foldable
 import           Data.List
-import           Data.Map                            (Map)
+import           Data.Map                             (Map)
 import           Data.Maybe
-import           Data.Ord
-import           Data.Semigroup
-import           Data.Sequence                       (Seq(..))
-import           Data.Set                            (Set)
-import           Data.Singletons
+import           Data.Sequence                        (Seq(..))
+import           Data.Set                             (Set)
 import           Data.Traversable
 import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
-import           Language.Haskell.TH.Desugar.Sweeten
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
-import qualified Data.Map                            as M
-import qualified Data.Sequence                       as Seq
-import qualified Data.Set                            as S
+import qualified Data.Map                             as M
+import qualified Data.Sequence                        as Seq
+import qualified Data.Set                             as S
 
 -- Here we will generate singletons for GADTs in the "leading kind
 -- variable" style.  Something like:
@@ -151,7 +145,7 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
       when gpsoSingI $
         tell =<< polySingSingI cons
       when gpsoPSK $
-        tell . (:[]) =<< polySingKind nm bndrs cons
+        tell . (:[]) =<< polySingKind nm Nothing bndrs cons
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
@@ -259,28 +253,43 @@ polySingSingI cons = for cons $ \c@(DCon _ _ cnm _ _) -> do
 --       PB x -> case toPolySing (WS x) of
 --         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
 
+-- toPolySingKind :: q [Dec] -> q [Dec]
+-- toPolySingKind ds = do
+--     -- DTyConI (DDataD _ ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
+--     -- decsToTH <$> polySingDecs opts ctx nm bndrs dk cons dervs
+
+      --   tell . (:[]) =<< polySingKind nm Nothing bndrs cons
+
 -- TODO: redundant constraints
 polySingKind
     :: forall q. DsMonad q
     => Name
+    -> Maybe [DPred]
     -> [DTyVarBndr]
     -> [DCon]
     -> q DDec
-polySingKind nm bndrs cons = do
+polySingKind nm defctx bndrs cons = do
+    -- qRunIO $ putStrLn $ "Generating PSK for " ++ show nm
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
     n   <- qNewName "x"
-    pure $ DInstanceD Nothing cctx
-      ( DConT ''PolySingKind `DAppT`
-           applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
-      )
-      [ DLetDec . DFunD 'fromPolySing $
-          [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
+    let res = DInstanceD Nothing (fromMaybe cctx defctx)
+          ( DConT ''PolySingKind `DAppT`
+               applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
+          )
+          [ DLetDec . DFunD 'fromPolySing $
+              [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
+              ]
+          , DLetDec . DFunD 'toPolySing $
+              [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
+              ]
           ]
-      , DLetDec . DFunD 'toPolySing $
-          [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
-          ]
-      ]
+    -- qRunIO . print . length . pprint . sweeten $ [res]
+    -- qRunIO . putStrLn . pprint $ sweeten cctx
+    -- qRunIO . putStrLn . pprint . sweeten $
+    --   [ DLetDec . DFunD 'fromPolySing $ [ DClause [DVarPa n] $ DCaseE (DVarE n) fps ]]
+    -- qRunIO $ putStrLn "Done generating PSK."
+    pure res
   where
     cctx :: [DPred]
     cctx = nubOrdOn show $ do
@@ -301,7 +310,6 @@ polySingKind nm bndrs cons = do
       t <- case cfs of
         DNormalC _ xs -> map snd xs
         DRecC xs      -> map (\(_,_,t) -> t) xs
-      let desingled = deSingleApplied t
       case unApply t of
         (DConT _, _) -> empty
         _            -> pure ()

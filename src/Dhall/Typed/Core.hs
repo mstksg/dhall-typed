@@ -172,21 +172,6 @@ data AggType k :: [Text] -> [k] -> Type where
 
 genPolySing ''AggType
 
-data RecordVal k ls as :: (k -> Type) -> AggType k ls as -> Type where
-    RVZ :: RecordVal k '[] '[] f 'ATZ
-    RVS :: f a
-        -> RecordVal k ls as f at
-        -> RecordVal k (l ': ls) (a ': as) f ('ATS ws at)
-
-genPolySing ''RecordVal
-
-data UnionVal k ls as :: (k -> Type) -> AggType k ls as -> Type where
-    UV :: Index as a
-       -> f a
-       -> UnionVal k ls as f at
-
-genPolySing ''UnionVal
-
 -- ---------
 -- > Sorts
 -- ---------
@@ -229,11 +214,11 @@ data DKind :: [DSort] -> DSort -> Type where
     KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
     Type  :: DKind ts 'Kind
 
-    KRecordLit :: Prod (DKind ts) (ProdList ps)
-               -> DKind ts ('KRecord ps)
-    KUnionLit  :: Index (ProdList ps) a
-               -> DKind ts a
-               -> DKind ts ('KUnion ps)
+    -- KRecordLit :: Prod (DKind ts) (ProdList ps)
+    --            -> DKind ts ('KRecord ps)
+    -- KUnionLit  :: Index (ProdList ps) a
+    --            -> DKind ts a
+    --            -> DKind ts ('KUnion ps)
 
     TRecord :: AggType (DKind ts 'Kind) ls as
             -> DKind ts 'Kind
@@ -298,10 +283,13 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     List     :: DType ts us ('Type :~> 'Type)
     Optional :: DType ts us ('Type :~> 'Type)
 
-    TRecordLit :: RecordVal (DKind ts 'Kind) ls as (DType ts us) at
-               -> DType ts us ('TRecord at)
-    TUnionLit  :: UnionVal  (DKind ts 'Kind) ls as (DType ts us) at
-               -> DType ts us ('TRecord at)
+    -- TRecordLit :: SAggType (DKind ts 'Kind) ls as at
+    --            -> Prod (DType ts us) as
+    --            -> DType ts us ('TRecord at)
+    -- TUnionLit  :: SAggType (DKind ts 'Kind) ls as at
+    --            -> Index as a
+    --            -> DType ts us a
+    --            -> DType ts us ('TRecord at)
 
     Record :: AggType (DType ts us 'Type) ls as
            -> DType ts us 'Type
@@ -397,10 +385,14 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     OptionalLit :: SDType ts us 'Type a
                 -> Maybe (DTerm ts us vs a)
                 -> DTerm ts us vs ('Optional :$ a)
-    RecordLit :: RecordVal (DType ts us 'Type) ls as (DTerm ts us vs) at
-              -> DTerm ts us vs ('Record at)
-    UnionLit  :: UnionVal (DType ts us 'Type) ls as (DTerm ts us vs) at
-              -> DTerm ts us vs ('Union at)
+
+    -- RecordLit :: SAggType (DType ts us 'Type) ls as at
+    --           -> Prod (DTerm ts us vs) as
+    --           -> DTerm ts us vs ('Record at)
+    -- UnionLit  :: SAggType (DType ts us 'Type) ls as at
+    --           -> Index as a
+    --           -> DTerm ts us vs a
+    --           -> DTerm ts us vs ('Record at)
 
 genPolySing ''DTerm
 
@@ -472,157 +464,12 @@ data SomeDExpr ts us :: [DType ts us 'Type] -> Type where
 -- 'DEMeta'.
 dExprType :: DExpr ts us vs n -> DExpr ts us vs (ShiftFin N5 n)
 dExprType = \case
-    -- DEMeta                ->
-    --   errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
-    -- DESort _              -> DEMeta
-    -- DEKind (SomeKind t _) -> DESort (fromPolySing t)
-    -- DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
-    -- DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
-
-
--- ---------
--- > Boring singleton shenanigans
--- ---------
-
--- ---------
--- > Shared
--- ---------
-
--- ---------
--- > Sorts
--- ---------
-
--- data instance Sing (x :: DSort) where
---     SDS :: { getSDS :: SDSort x } -> Sing x
-
--- instance SingKind DSort where
---     type Demote DSort = DSort
-
--- ---------
--- > Kinds
--- ---------
-
--- data SDKind ts a :: DKind ts a -> Type where
---     SKVar  :: SIndex ts a i -> SDKind ts a ('KVar i)
---     SKLam  :: SingSing DSort t tt -> SDKind (t ': ts) a x -> SDKind ts (t ':*> a) ('KLam tt x)
---     SKApp  :: SDKind ts (a ':*> b) f -> SDKind ts a x -> SDKind ts b ('KApp f x)
---     (:%~>) :: SDKind ts 'Kind x -> SDKind ts 'Kind y -> SDKind ts 'Kind (x ':~> y)
---     SType  :: SDKind ts 'Kind 'Type
---     SKPi   :: SingSing DSort t tt
---            -> SDKind (t ': ts) a x
---            -> SDKind ts a ('KPi tt x)
-
--- type instance PolySing (DKind ts k) = SDKind ts k
-
--- data instance Sing (x :: DKind ts a) where
---     SDK :: { getSDK :: SDKind ts a x } -> Sing x
-
--- instance SingKind (DKind ts a) where
---     type Demote (DKind ts a) = DKind ts a
-
--- ---------
--- > Types
--- ---------
-
--- data STPrim ts as a :: TPrim ts as a -> Type where
---     SBool     :: STPrim ts '[] 'Type              'Bool
---     SNatural  :: STPrim ts '[] 'Type              'Natural
---     SList     :: STPrim ts '[] ('Type ':~> 'Type) 'List
---     SOptional :: STPrim ts '[] ('Type ':~> 'Type) 'Optional
-
--- data SDType ts us a :: DType ts us a -> Type where
---     STVar  :: SIndex us a i -> SDType ts us a ('TVar i)
---     STLam  :: SingSing (DKind ts 'Kind) u uu
---            -> SDType ts (u ': us) a x
---            -> SDType ts us (u ':~> a) ('TLam uu x)
---     STApp  :: SDType ts us (a ':~> b) f
---            -> SDType ts us a         x
---            -> SDType ts us b         ('TApp f x)
---     (:%->) :: SDType ts us 'Type x
---            -> SDType ts us 'Type y
---            -> SDType ts us 'Type (x ':-> y)
---     STP    :: STPrim ts as a x -> SProd (DType ts us) as p -> SDType ts us a ('TP x p)
-
---     STPoly :: SingSing DSort t tt
---            -> SDType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x
---            -> SDType ts us ('KPi tt a) ('TPoly ttt x)
-    -- STInst :: SDType ts us ('KPi tt b) x
-    --        -> SDKind ts t a
-    --        -> SDType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b) ('TInst x (SDKindOf ts t a))
-
--- data instance Sing (x :: TPrim ts as a) where
---     STPr :: { getSTPr :: STPrim ts as a x } -> Sing x
-
--- data instance Sing (x :: DType ts us a) where
---     SDTy :: { getSDTy :: SDType ts us a x } -> Sing x
-
--- instance SingKind (TPrim ts as a) where
---     type Demote (TPrim ts as a) = TPrim ts as a
-
--- instance SingKind (DType ts us a) where
---     type Demote (DType ts us a) = DType ts us a
-
--- data SPrim ts us as a :: Prim ts us as a -> Type where
---     SBoolLit    :: Sing b -> SPrim ts us '[] 'Bool    ('BoolLit    b)
---     SNaturalLit :: Sing n -> SPrim ts us '[] 'Natural ('NaturalLit n)
--- --     NaturalLit    :: Natural -> Prim ts us '[] 'Natural
--- --     NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
--- --     NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
--- --     NaturalPlus   :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
--- --     NaturalTimes  :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
--- --     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
--- --     ListFold      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
--- --     ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
--- --     ListAppend    :: Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
--- --     ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
--- --     ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
--- --     ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
--- --     Some          :: Prim ts us '[ a ] ('Optional :$ a)
--- --     None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
-
--- data SPrimF ts us f g :: PrimF ts us f g -> Type where
---     SListLit     :: SPrimF ts us Seq   'List     'ListLit
---     SOptionalLit :: SPrimF ts us Maybe 'Optional 'OptionalLit
-
--- data SDTerm ts us vs a :: DTerm ts us vs a -> Type where
---     SVar :: SIndex vs a i -> SDTerm ts us vs a ('Var i)
---     -- Lam  :: SDType ts us 'Type v -> DTerm ts us (v ': vs) a -> DTerm ts us vs (v ':-> a)
---     -- App  :: DTerm ts us vs (a ':-> b) -> DTerm ts us vs a -> DTerm ts us vs b
---     -- P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
---     -- PF   :: PrimF ts us f g
---     --      -> SDType ts us 'Type a
---     --      -> f (DTerm ts us vs a)
---     --      -> DTerm ts us vs (g :$ a)
---     -- -- From having a type with variables
---     -- Poly :: SDKind ts 'Kind u
---     --      -> DTerm ts (u ': us) (Map (ShiftSym ts us u 'Type) vs) a
---     --      -> DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) a)
---     -- Inst :: DTerm ts us vs ('Pi (SDKindOf ts 'Kind u) b)
---     --      -> SDType ts us u a
---     --      -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
-
--- data instance Sing (x :: Prim ts us as a) where
---     SPr :: { getSPr :: SPrim ts us as a x } -> Sing x
-
--- data instance Sing (x :: PrimF ts us f g) where
---     SPrF :: { getSPrF :: SPrimF ts us f g x } -> Sing x
-
--- data instance Sing (x :: DTerm ts us vs a) where
---     SDTe :: { getSDTe :: SDTerm ts us vs a x } -> Sing x
-
--- instance SingKind (Prim ts us as a) where
---     type Demote (Prim ts us as a) = Prim ts us as a
-
--- instance SingKind (PrimF ts us f g) where
---     type Demote (PrimF ts us f g) = PrimF ts us f g
-
--- instance SingKind (DTerm ts us vs a) where
---     type Demote (DTerm ts us vs a) = DTerm ts us vs a
-
-
-
-
-
+    DEMeta                ->
+      errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
+    DESort _              -> DEMeta
+    DEKind (SomeKind t _) -> DESort (fromPolySing t)
+    DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
+    DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
 
 
 ---- | Represents the possible kinds encountered in Dhall.
