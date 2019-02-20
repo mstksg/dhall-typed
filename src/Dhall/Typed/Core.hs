@@ -155,18 +155,11 @@ type instance Apply (MapSym f) xs = Map f xs
 -- > Shared
 -- ---------
 
--- -- | Meta-level type describing a collection or aggregation of types.  Used
--- -- for specifying records and unions.
--- data AggType k :: k -> [Symbol] -> [k] -> Type where
---     ATZ :: AggType k r '[] '[]
---     ATS :: AggType k r ls as      -- TODO: add witness of uniqueness
---         -> AggType k r (l ': ls) (r ': as)
-
--- genPolySing ''AggType
-
+-- | Meta-level type describing a collection or aggregation of types.  Used
+-- for specifying records and unions.
 data AggType k :: [Text] -> [k] -> Type where
     ATZ :: AggType k '[] '[]
-    ATS :: WrappedSing k a
+    ATS :: WrappedSing k a      -- TODO: add uniqueness
         -> AggType k ls as
         -> AggType k (l ': ls) (a ': as)
 

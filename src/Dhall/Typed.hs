@@ -32,20 +32,22 @@ module Dhall.Typed (
 import           Control.Monad
 import           Data.Functor
 import           Data.Kind
-import           Data.Sequence           (Seq(..))
+import           Data.Sequence               (Seq(..))
 import           Data.Singletons
-import           Data.Text               (Text)
+import           Data.Singletons.Decide
+import           Data.Text                   (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
 import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod
-import qualified Data.Sequence           as Seq
-import qualified Data.Text               as T
-import qualified Dhall.Context           as D
-import qualified Dhall.Core              as D
-import qualified Dhall.TypeCheck         as D
+import           Dhall.Typed.Type.Singletons
+import qualified Data.Sequence               as Seq
+import qualified Data.Text                   as T
+import qualified Dhall.Context               as D
+import qualified Dhall.Core                  as D
+import qualified Dhall.TypeCheck             as D
 
 -- type family ShiftSort
 
@@ -131,10 +133,12 @@ toTyped ctx = \case
     D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
-    -- D.ListAppend x y -> do
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
-    --   pure . SomeDExpr . deTerm $ P ListAppend (x' :< y' :< Ø)
+    D.ListAppend x y -> do
+      SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
+      SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
+      -- TODO: normalize before checking for equality
+      Proved Refl <- Just $ eqPS a b
+      pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P ListAppend (x' :< y' :< Ø)
     D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø

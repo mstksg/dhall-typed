@@ -22,12 +22,15 @@ import           Data.Bifunctor
 import           Data.Char
 import           Data.Containers.ListUtils
 import           Data.Default
+import           Data.Foldable
 import           Data.List
 import           Data.Map                             (Map)
 import           Data.Maybe
 import           Data.Sequence                        (Seq(..))
 import           Data.Set                             (Set)
+import           Data.Singletons.Decide               (Decision(..), (:~:)(..))
 import           Data.Traversable
+import           Debug.Trace
 import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
@@ -269,9 +272,10 @@ polySingKind
     -> [DCon]
     -> q DDec
 polySingKind nm defctx bndrs cons = do
-    -- qRunIO $ putStrLn $ "Generating PSK for " ++ show nm
+    -- qRunIO $ putStrLn $ "Generating PSK for " ++ show nm ++ "\n"
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
+    eps <- traverse mkEps cons
     n   <- qNewName "x"
     let res = DInstanceD Nothing (fromMaybe cctx defctx)
           ( DConT ''PolySingKind `DAppT`
@@ -283,7 +287,14 @@ polySingKind nm defctx bndrs cons = do
           , DLetDec . DFunD 'toPolySing $
               [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
               ]
+          -- , DLetDec . DFunD 'eqPS $
+          --     [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
+          --     ]
           ]
+    -- qRunIO . appendFile "scratch/eqPS.hs" . (++ "\n") . pprint . sweeten . (:[]) $
+    --     DLetDec . DFunD 'eqPS $
+    --       [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
+    --       ]
     -- qRunIO . print . length . pprint . sweeten $ [res]
     -- qRunIO . putStrLn . pprint $ sweeten cctx
     -- qRunIO . putStrLn . pprint . sweeten $
@@ -310,15 +321,19 @@ polySingKind nm defctx bndrs cons = do
       t <- case cfs of
         DNormalC _ xs -> map snd xs
         DRecC xs      -> map (\(_,_,t) -> t) xs
-      case unApply t of
-        (DConT _, _) -> empty
-        _            -> pure ()
-      let (free, t') = flip (traverseDVarT S.empty) t $ \v ->
+      t' <- case unApply t of
+        (DConT tct, targs)
+          | tct == ''WrappedSing
+          , t0:_ <- targs
+          -> pure t0
+          | otherwise -> empty
+        _ -> pure t
+      let (free, t'') = flip (traverseDVarT S.empty) t' $ \v ->
             case M.lookup v bndrMap of
               Just q  -> pure q
               Nothing -> v <$ tell [v]
       pure $ DForallPr (DPlainTV <$> nubOrd free) [] $
-        DConPr ''PolySingKind `DAppPr` t'
+        DConPr ''PolySingKind `DAppPr` t''
 --     fromPolySing = \case
 --       SPB x -> PB (getWS (fromPolySing x))
     mkFps :: DCon -> q DMatch
@@ -356,6 +371,72 @@ polySingKind nm defctx bndrs cons = do
               Just _ -> (DAppE (DConE 'WS), DConPa 'SiSi . (:[]))
               Nothing -> (id, id)
         cnm' = mapNameBase singleConstr cnm
+    -- eqPS = \case
+    --   SPB x -> \case
+    --     SPB y -> case sameSingSing x y of
+    --       Proved SiSiRefl -> Proved Refl
+    --       Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+    mkEps :: DCon -> q DMatch
+    mkEps c@(DCon _ _ cnm _ _) = do
+        (_, vs) <- saturate c
+        n       <- qNewName "y"
+        subEps  <- catMaybes <$> traverse (mkSubEps vs) cons
+        pure . DMatch (DConPa cnm' (map (DVarPa . fst) vs)) $
+            DLamE [n] $ DCaseE (DVarE n) subEps
+      where
+        cnm' = mapNameBase singleConstr cnm
+        mkSubEps :: [(Name, DType)] -> DCon -> q (Maybe DMatch)
+        mkSubEps vs c2@(DCon _ _ cnm2 _ _) = do
+            (_, vs2) <- saturate c2
+            if cnm == cnm2
+              then Just .
+                DMatch (DConPa cnm2' (map (DVarPa . fst) vs2)) <$>
+                  foldrM (uncurry go)
+                         (DConE 'Proved `DAppE` DConE 'Refl)
+                         (zip vs vs2)
+              else Just <$> do
+                n <- qNewName "z"
+                pure . DMatch (DConPa cnm2' (DWildPa <$ vs2)) $
+                    DConE 'Disproved `DAppE`
+                      DLamE [n] (DCaseE (DVarE n) [])
+          where
+            cnm2' = mapNameBase singleConstr cnm2
+            go (oldN, t) (newN, _) finalRes = do
+                n <- qNewName "z"
+                m <- qNewName "q"
+                pure $ DCaseE (applyDExp matcher [DVarE oldN, DVarE newN])
+                  [ DMatch (DConPa 'Proved    [patner  ]) finalRes
+                  , DMatch (DConPa 'Disproved [DVarPa n]) $
+                      DAppE (DConE 'Disproved) $
+                        DLamE [m] . DCaseE (DVarE m) $
+                          [ DMatch (DConPa 'Refl []) $ DVarE n `DAppE` witner
+                          ]
+                  ]
+              where
+                (matcher, patner, witner) = case deSingleApplied t of
+                  Just _  -> (DVarE 'sameSingSing, DConPa 'SiSiRefl [], DConE 'SiSiRefl)
+                  Nothing -> (DVarE 'eqPS        , DConPa 'Refl     [], DConE 'Refl    )
+              -- undefined
+                    -- (DConE 'SomePS `DAppE` applyDExp (DConE cnm') (map reSiSi vs'))
+    -- eqPS = \case
+    --   SNil -> \case
+    --     SNil -> Proved Refl
+    --     _ :% _ -> Disproved $ \case {}
+    --   x :% xs -> \case
+    --     SNil -> Disproved $ \case {}
+    --     y :% ys -> case eqPS x y of
+    --       Proved Refl -> case eqPS xs ys of
+    --         Proved Refl -> Proved Refl
+    --         Disproved v -> Disproved $ \case Refl -> v Refl
+    --       Disproved v -> Disproved $ \case Refl -> v Refl
+        -- pure . DMatch (DConPa cnm' (map (DVarPa . fst) vs)) $
+        --   applyDExp (DConE cnm) . flip map vs $ \(n, t) ->
+        --     let arg = DVarE 'fromPolySing `DAppE` DVarE n
+        --     in  case deSingleApplied t of
+        --           Just _ -> DVarE 'getWS `DAppE` arg
+        --           Nothing -> arg
+      -- where
+        -- cnm' = mapNameBase singleConstr cnm
 
 bndrName :: DTyVarBndr -> Name
 bndrName (DKindedTV x _) = x
@@ -493,3 +574,4 @@ isSingleConstr (nameBase->cs) = case cs of
 
 mapNameBase :: (String -> String) -> Name -> Name
 mapNameBase f = mkName . f . nameBase
+
