@@ -428,7 +428,7 @@ polySingSingEq nm bndrs cons = do
     fullyDetermined = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
                         (determines <$> cons)
     determines :: DCon -> IntSet
-    determines (DCon _ _ _ cfs cTy) = traceShowId . IM.keysSet
+    determines (DCon _ _ cnm cfs cTy) = traceShow cnm . traceShowId . IM.keysSet
                                     . IM.filter S.null
                                     . fmap (`S.difference` found)
                                     . traceShowId
@@ -450,9 +450,10 @@ polySingSingEq nm bndrs cons = do
           case unApply t of
             (DConT n, ts)
               | n == nm -> foldMap (filter isVar . allNamesIn) ts
+              | otherwise -> foldMap (filter isVar . allNamesIn) ts   -- should only be for SingEq
             (tc     , ts) -> do
-              _ :|> DVarT l <- pure $ Seq.fromList (tc : ts)
-              pure l
+              _ :|> l <- pure $ Seq.fromList (tc : ts)
+              filter isVar . allNamesIn $ l
 -- 1.  Shows up as the *last* argument in any input
 -- 2.  Shows up in any argument covered by a TestEq instance where "both
 --     sides" are different tyvars.
