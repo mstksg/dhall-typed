@@ -104,9 +104,10 @@ inspector name = do
     lift $ show i
 
 data GenPolySingOpts = GPSO
-    { gpsoSing  :: Bool
-    , gpsoSingI :: Bool
-    , gpsoPSK   :: Bool
+    { gpsoSing   :: !Bool
+    , gpsoSingI  :: !Bool
+    , gpsoPSK    :: !Bool
+    , gpsoSingEq :: !Bool
     }
   deriving (Eq, Show, Ord)
 
@@ -115,9 +116,10 @@ instance Default GenPolySingOpts where
 
 defaultGPSO :: GenPolySingOpts
 defaultGPSO = GPSO
-    { gpsoSing  = True
-    , gpsoSingI = True
-    , gpsoPSK   = True
+    { gpsoSing   = True
+    , gpsoSingI  = True
+    , gpsoPSK    = True
+    , gpsoSingEq = True
     }
 
 genPolySing
@@ -158,7 +160,7 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
         tell =<< polySingSingI cons
       when gpsoPSK $
         tell . (:[]) =<< polySingKind nm Nothing bndrs cons
-      when True $
+      when gpsoSingEq $
         tell . (:[]) =<< polySingSingEq nm bndrs cons
   where
     bndrKind :: DKind
@@ -414,7 +416,7 @@ polySingSingEq nm bndrs cons = do
               , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
               ]
           )
-
+    liftIO . putStrLn . pprint . sweeten $ cctx
     liftIO . putStrLn . pprint . sweeten $ [res []]
     pure $ res
           [ DLetDec . DFunD 'singEq $
@@ -426,15 +428,20 @@ polySingSingEq nm bndrs cons = do
     fullyDetermined = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
                         (determines <$> cons)
     determines :: DCon -> IntSet
-    determines (DCon _ _ _ cfs cTy) = IM.keysSet
+    determines (DCon _ _ _ cfs cTy) = traceShowId . IM.keysSet
                                     . IM.filter S.null
                                     . fmap (`S.difference` found)
-                                    $ needed                      -- (0, {a}), (1, {b})
+                                    . traceShowId
+                                    $ needed'
       where
         needed :: IntMap (Set Name)
         needed = case unApply cTy of
-          (DConT _, ts) -> IM.fromList $ zip [0..] (map (S.fromList . filter isVar . allNamesIn) ts)
+          (DConT _, ts) -> IM.fromList . zip [0..] $
+              map (S.fromList . filter isVar . allNamesIn) ts
           _             -> error "polySingSingEq: Invalid return type on GADT constructor"
+        needed' = snd
+                . IM.mapAccum (\seen news -> (seen `S.union` news, news `S.difference` seen)) S.empty
+                $ needed
         found :: Set Name
         found = S.fromList $ do
           t <- case cfs of
@@ -442,7 +449,7 @@ polySingSingEq nm bndrs cons = do
             DRecC ts      -> map (\(_,_,t) -> t) ts
           case unApply t of
             (DConT n, ts)
-              | n == nm -> filter isVar . allNamesIn $ ts
+              | n == nm -> foldMap (filter isVar . allNamesIn) ts
             (tc     , ts) -> do
               _ :|> DVarT l <- pure $ Seq.fromList (tc : ts)
               pure l
@@ -472,13 +479,11 @@ polySingSingEq nm bndrs cons = do
         DNormalC _ xs -> map snd xs
         DRecC xs      -> map (\(_,_,t) -> t) xs
       t' <- case unApply t of
-        (DConT _, _) -> empty
-        -- (DConT tct, targs)
-        --   | tct == ''WrappedSing
-        --   , t0:_ <- targs
-        --   , False       -- TODO: remove?
-        --   -> pure t0
-        --   | otherwise -> empty
+        (DConT tct, targs)
+          | tct == ''WrappedSing
+          , t0:_ <- targs
+          -> pure t0
+          | otherwise -> empty
         _ -> pure t
       -- potentially bad because it duplicates 'free'
       let V2 (t1, free) (t2, _) = runWriterT . flip (traverseDVarT S.empty) t' $ \v ->
@@ -655,6 +660,10 @@ traverseDVarT b f = go
       DArrowT   -> pure DArrowT
       DLitT x   -> pure $ DLitT x
       DWildCardT -> pure DWildCardT
+
+
+allVarsIn :: DType -> [Name]
+allVarsIn = ($ []) . appEndo . getConst . traverseDVarT S.empty (Const . Endo . (:))
 
 -- typeSingI :: DType -> Maybe Name
 -- typeSingI t = case fst (unApply t) of

@@ -381,7 +381,8 @@ infixr 0 :->
 infixl 9 `TApp`
 infixl 9 :$
 
-genPolySing ''DType
+-- genPolySing ''DType
+genPolySingWith defaultGPSO { gpsoSingEq = False } ''DType
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
@@ -413,7 +414,8 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Some          :: Prim ts us '[ a ] ('Optional :$ a)
     None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
 
-genPolySing ''Prim
+-- genPolySing ''Prim
+genPolySingWith defaultGPSO { gpsoSingEq = False } ''Prim
 
 -- | Substitute in a type for all occurrences of a type variable of kind
 -- @a@ indicated by the 'Delete' within a type of kind @b@.
@@ -465,7 +467,8 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     --           -> DTerm ts us vs a
     --           -> DTerm ts us vs ('Record at)
 
-genPolySing ''DTerm
+-- genPolySing ''DTerm
+genPolySingWith defaultGPSO { gpsoSingEq = False } ''DTerm
 
 -- ----------------
 -- > Multiple Level
