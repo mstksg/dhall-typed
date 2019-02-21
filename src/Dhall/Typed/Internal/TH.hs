@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE ParallelListComp    #-}
@@ -17,25 +18,33 @@ module Dhall.Typed.Internal.TH (
 
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.Reader hiding          (lift)
 import           Control.Monad.Writer hiding          (lift)
 import           Data.Bifunctor
 import           Data.Char
 import           Data.Containers.ListUtils
 import           Data.Default
 import           Data.Foldable
+import           Data.Functor.Identity
+import           Data.IntMap                          (IntMap)
+import           Data.IntSet                          (IntSet)
 import           Data.List
 import           Data.Map                             (Map)
 import           Data.Maybe
 import           Data.Sequence                        (Seq(..))
 import           Data.Set                             (Set)
-import           Data.Singletons.Decide               (Decision(..), (:~:)(..))
+import           Data.Singletons.Decide               (Decision(..))
 import           Data.Traversable
+import           Data.Type.Equality
 import           Debug.Trace
 import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
+import qualified Control.Monad.Trans as MT
+import qualified Data.IntMap                          as IM
+import qualified Data.IntSet                          as IS
 import qualified Data.Map                             as M
 import qualified Data.Sequence                        as Seq
 import qualified Data.Set                             as S
@@ -149,6 +158,8 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
         tell =<< polySingSingI cons
       when gpsoPSK $
         tell . (:[]) =<< polySingKind nm Nothing bndrs cons
+      when True $
+        tell . (:[]) =<< polySingSingEq nm bndrs cons
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
@@ -275,7 +286,6 @@ polySingKind nm defctx bndrs cons = do
     -- qRunIO $ putStrLn $ "Generating PSK for " ++ show nm ++ "\n"
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
-    eps <- traverse mkEps cons
     n   <- qNewName "x"
     let res = DInstanceD Nothing (fromMaybe cctx defctx)
           ( DConT ''PolySingKind `DAppT`
@@ -287,9 +297,6 @@ polySingKind nm defctx bndrs cons = do
           , DLetDec . DFunD 'toPolySing $
               [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
               ]
-          -- , DLetDec . DFunD 'eqPS $
-          --     [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
-          --     ]
           ]
     -- qRunIO . appendFile "scratch/eqPS.hs" . (++ "\n") . pprint . sweeten . (:[]) $
     --     DLetDec . DFunD 'eqPS $
@@ -325,6 +332,7 @@ polySingKind nm defctx bndrs cons = do
         (DConT tct, targs)
           | tct == ''WrappedSing
           , t0:_ <- targs
+          , False       -- TODO: remove?
           -> pure t0
           | otherwise -> empty
         _ -> pure t
@@ -371,11 +379,115 @@ polySingKind nm defctx bndrs cons = do
               Just _ -> (DAppE (DConE 'WS), DConPa 'SiSi . (:[]))
               Nothing -> (id, id)
         cnm' = mapNameBase singleConstr cnm
-    -- eqPS = \case
-    --   SPB x -> \case
-    --     SPB y -> case sameSingSing x y of
-    --       Proved SiSiRefl -> Proved Refl
-    --       Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+
+-- instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) where
+--     singEq = \case
+--       SATZ -> \case
+--         SATZ -> Proved HRefl
+--         SATS _ _ _ -> Disproved $ \case {}
+--       SATS x y z -> \case
+--         SATZ -> Disproved $ \case {}
+--         SATS x' y' z' -> case singEq x x' of
+--           Proved HRefl -> case singEq y y' of
+--             Proved HRefl -> case singEq z z' of
+--               Proved HRefl -> Proved HRefl
+--               Disproved v -> Disproved $ \case HRefl -> v HRefl
+
+polySingSingEq
+    :: forall q. DsMonad q
+    => Name
+    -> [DTyVarBndr]
+    -> [DCon]
+    -> q DDec
+polySingSingEq nm bndrs cons = do
+    bndr1 <- (traverse . traverseBndrName) (\_ -> qNewName "a") bndrs
+    n     <- qNewName "x"
+    eps   <- traverse mkEps cons
+    bndr2 <- for (zip [0..] bndr1) $ \(i, b) ->
+      if i `IS.member` fullyDetermined
+        then traverseBndrName (\_ -> qNewName "b") b
+        else pure b
+    let cctx = mkCctx $ zip bndr1 bndr2
+    let res = DInstanceD Nothing cctx
+          ( applyDType (DConT ''SingEq)
+              [ applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr1)
+              , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
+              ]
+          )
+
+    liftIO . putStrLn . pprint . sweeten $ [res []]
+    pure $ res
+          [ DLetDec . DFunD 'singEq $
+              [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
+              ]
+          ]
+  where
+    fullyDetermined :: IntSet
+    fullyDetermined = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
+                        (determines <$> cons)
+    determines :: DCon -> IntSet
+    determines (DCon _ _ _ cfs cTy) = IM.keysSet
+                                    . IM.filter S.null
+                                    . fmap (`S.difference` found)
+                                    $ needed                      -- (0, {a}), (1, {b})
+      where
+        needed :: IntMap (Set Name)
+        needed = case unApply cTy of
+          (DConT _, ts) -> IM.fromList $ zip [0..] (map (S.fromList . filter isVar . allNamesIn) ts)
+          _             -> error "polySingSingEq: Invalid return type on GADT constructor"
+        found :: Set Name
+        found = S.fromList $ do
+          t <- case cfs of
+            DNormalC _ ts -> map snd ts
+            DRecC ts      -> map (\(_,_,t) -> t) ts
+          case unApply t of
+            (DConT n, ts)
+              | n == nm -> filter isVar . allNamesIn $ ts
+            (tc     , ts) -> do
+              _ :|> DVarT l <- pure $ Seq.fromList (tc : ts)
+              pure l
+-- 1.  Shows up as the *last* argument in any input
+-- 2.  Shows up in any argument covered by a TestEq instance where "both
+--     sides" are different tyvars.
+-- 3.  Shows up in any recursive argument (this should be a sub-case of
+--     #2 that evens out when taking the intersection).
+        -- found = flip foldMap (case cfs of) _
+    mkCctx :: [(DTyVarBndr, DTyVarBndr)] -> [DPred]
+    mkCctx b0 = nubOrdOn show $ do
+      DCon _ _ _ cfs cTy <- cons
+      let newBndrs :: [Maybe Name]
+          newBndrs = case unApply cTy of
+            (DConT _, ts) -> flip map ts $ \case
+              DVarT n -> Just n
+              DVarT n `DSigT` _ -> Just n
+              _       -> Nothing
+            _             -> error "polySingKind: Invalid return type on GADT constructor"
+          bndrMap :: Map Name (Name, Name)
+          bndrMap = M.fromList . catMaybes $
+            [ (, (bndrName bO1, bndrName bO2)) <$> bN
+            | bN <- newBndrs
+            | (bO1, bO2) <- b0
+            ]
+      t <- case cfs of
+        DNormalC _ xs -> map snd xs
+        DRecC xs      -> map (\(_,_,t) -> t) xs
+      t' <- case unApply t of
+        (DConT _, _) -> empty
+        -- (DConT tct, targs)
+        --   | tct == ''WrappedSing
+        --   , t0:_ <- targs
+        --   , False       -- TODO: remove?
+        --   -> pure t0
+        --   | otherwise -> empty
+        _ -> pure t
+      -- potentially bad because it duplicates 'free'
+      let V2 (t1, free) (t2, _) = runWriterT . flip (traverseDVarT S.empty) t' $ \v ->
+            case M.lookup v bndrMap of
+              Just (q1, q2) -> MT.lift $ V2 q1 q2
+              Nothing       -> v <$ tell (Endo (v:))
+          free' = appEndo free []
+      pure $ DForallPr (DPlainTV <$> nubOrd free') [] $
+        (DConPr ''SingEq `DAppPr` t1) `DAppPr` t2
     mkEps :: DCon -> q DMatch
     mkEps c@(DCon _ _ cnm _ _) = do
         (_, vs) <- saturate c
@@ -392,60 +504,111 @@ polySingKind nm defctx bndrs cons = do
               then Just .
                 DMatch (DConPa cnm2' (map (DVarPa . fst) vs2)) <$>
                   foldrM (uncurry go)
-                         (DConE 'Proved `DAppE` DConE 'Refl)
+                         (DConE 'Proved `DAppE` DConE 'HRefl)
                          (zip vs vs2)
-              else pure Nothing
-              -- else Just <$> do
-              --   n <- qNewName "z"
-              --   pure . DMatch (DConPa cnm2' (DWildPa <$ vs2)) $
-              --       DConE 'Disproved `DAppE`
-              --         DLamE [n] (DCaseE (DVarE n) [])
+              else Just <$> do
+                n <- qNewName "z"
+                pure . DMatch (DConPa cnm2' (DWildPa <$ vs2)) $
+                    DConE 'Disproved `DAppE`
+                      DLamE [n] (DCaseE (DVarE n) [])
           where
             cnm2' = mapNameBase singleConstr cnm2
             go (oldN, t) (newN, _) finalRes = do
                 n <- qNewName "z"
                 m <- qNewName "q"
-                pure $ DCaseE (applyDExp matcher [DVarE oldN, DVarE newN])
-                  [ DMatch (DConPa 'Proved    [patner  ]) finalRes
-                  , DMatch (DConPa 'Disproved [DVarPa n]) $
+                pure $ DCaseE (applyDExp (DVarE 'singEq) [DVarE oldN, DVarE newN])
+                  [ DMatch (DConPa 'Proved    [DConPa 'HRefl []]) finalRes
+                  , DMatch (DConPa 'Disproved [DVarPa n        ]) $
                       DAppE (DConE 'Disproved) $
                         DLamE [m] . DCaseE (DVarE m) $
-                          [ DMatch (DConPa 'Refl []) $ DVarE n `DAppE` witner
+                          [ DMatch (DConPa 'HRefl []) $ DVarE n `DAppE` DConE 'HRefl
                           ]
                   ]
-              where
-                (matcher, patner, witner) = case deSingleApplied t of
-                  Just _  -> (DVarE 'sameSingSing, DConPa 'SiSiRefl [], DConE 'SiSiRefl)
-                  Nothing -> (DVarE 'eqPS        , DConPa 'Refl     [], DConE 'Refl    )
-              -- undefined
-                    -- (DConE 'SomePS `DAppE` applyDExp (DConE cnm') (map reSiSi vs'))
-    -- eqPS = \case
-    --   SNil -> \case
-    --     SNil -> Proved Refl
-    --     _ :% _ -> Disproved $ \case {}
-    --   x :% xs -> \case
-    --     SNil -> Disproved $ \case {}
-    --     y :% ys -> case eqPS x y of
-    --       Proved Refl -> case eqPS xs ys of
-    --         Proved Refl -> Proved Refl
-    --         Disproved v -> Disproved $ \case Refl -> v Refl
-    --       Disproved v -> Disproved $ \case Refl -> v Refl
-        -- pure . DMatch (DConPa cnm' (map (DVarPa . fst) vs)) $
-        --   applyDExp (DConE cnm) . flip map vs $ \(n, t) ->
-        --     let arg = DVarE 'fromPolySing `DAppE` DVarE n
-        --     in  case deSingleApplied t of
-        --           Just _ -> DVarE 'getWS `DAppE` arg
-        --           Nothing -> arg
-      -- where
-        -- cnm' = mapNameBase singleConstr cnm
+
+-- okay. so this works. but how do we know what variables to fix, and what
+-- to not?
+--
+-- It looks like we must, because there is one constructor ATZ
+-- where k is not knowable.
+--
+-- But we *can* let ls, as vary.
+--
+-- ATZ determines ls, as, but leaves unknown k
+-- ATS determins ls, as, k
+--
+-- So it's the net intersection of all the "knowable" types in each
+-- constructor.
+--
+-- Looks like we can check out what is *knowable* by checking if all of the
+-- variables show up as the "last" item in one of the inputs.  that's
+-- because we are always checking "last" items.
+--
+-- So the return type:
+--
+-- > AggType k (l ': ls) (a ': as)
+--
+-- Has the variables k, l, ls, a, as.
+--
+-- * k shows up in (a :: k).  does this count? let's say no, for now.
+--   Did some testing and yes, we should say no for now.  i don't think it
+--   counts.
+-- * l shows up as the last type in `SText l`
+-- * ls shows up as a type in `AggType k ls as`.  Maybe we can special-case
+--   recursive calls.  Yes.  All recursive calls will assume they can all
+--   be determined, since if we get a false positive, this will be factored
+--   out in the intersection of the constructors.
+-- * a shows up as the last type in `WrappedSing k a
+-- * as shows up as the last type in `AggType k ls as`.  We don't need to
+--   special-case this, but we could.
+--
+-- So we count l, a, as from the last-var rule, and ls from the recursive
+-- call rule.
+--
+-- Actually we should also have a TestEq instance rule.  If we have an
+-- appropriate TestEq instance that covers the tyvar, we should be able to
+-- count it.
+--
+-- So the rules to count it are:
+--
+-- 1.  Shows up as the *last* argument in any input
+-- 2.  Shows up in any argument covered by a TestEq instance where "both
+--     sides" are different tyvars.
+-- 3.  Shows up in any recursive argument (this should be a sub-case of
+--     #2 that evens out when taking the intersection).
+--
+-- Situations like vanilla types (Bool) will not run into this, because
+-- their result types have no type variables.
+
+
+              -- where
+              --   (matcher, patner, witner) = case deSingleApplied t of
+              --     Just _  -> (DVarE 'sameSingSing, DConPa 'SiSiRefl [], DConE 'SiSiRefl)
+              --     Nothing -> (DVarE 'eqPS        , DConPa 'Refl     [], DConE 'Refl    )
+
+    -- let res = DInstanceD Nothing (fromMaybe cctx defctx)
+    --       ( DConT ''PolySingKind `DAppT`
+    --            applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
+    --       )
+    --       [ DLetDec . DFunD 'fromPolySing $
+    --           [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
+    --           ]
+    --       , DLetDec . DFunD 'toPolySing $
+    --           [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
+    --           ]
+    --       -- , DLetDec . DFunD 'eqPS $
+    --       --     [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
+    --       --     ]
+    --       ]
 
 bndrName :: DTyVarBndr -> Name
-bndrName (DKindedTV x _) = x
-bndrName (DPlainTV x   ) = x
+bndrName = getConst . traverseBndrName Const
 
 mkPlain :: DTyVarBndr -> DTyVarBndr
-mkPlain (DKindedTV x _) = DPlainTV x
-mkPlain (DPlainTV x   ) = DPlainTV x
+mkPlain = DPlainTV . bndrName
+
+traverseBndrName :: Functor f => (Name -> f Name) -> DTyVarBndr -> f DTyVarBndr
+traverseBndrName f (DKindedTV x t) = (`DKindedTV` t) <$> f x
+traverseBndrName f (DPlainTV x)    = DPlainTV <$> f x
 
 traverseDVarPr
     :: Applicative f
@@ -553,6 +716,7 @@ singleValue _ = error "Invalid value name"
 -- The input is always expected to be (k -> Type).
 deSingle :: DType -> Maybe DType
 deSingle t = case unApply t of
+    -- hey we can do this by reifying the type family for instances
     (DConT c, xs)
       | c == ''PolySing -> case xs of
           y:_ -> Just y
@@ -579,3 +743,21 @@ isSingleConstr (nameBase->cs) = case cs of
 mapNameBase :: (String -> String) -> Name -> Name
 mapNameBase f = mkName . f . nameBase
 
+isVar :: Name -> Bool
+isVar = check . nameBase
+  where
+    check (c:_)
+      | isSymbol c = c /= ':'
+      | otherwise  = isLower c
+    check _ = error "bad name"
+
+data V2 a = V2 { v2x :: !a, v2y :: !a }
+  deriving Functor
+
+instance Applicative V2 where
+    pure x = V2 x x
+    V2 f g <*> V2 x y = V2 (f x) (g y)
+
+instance Monad V2 where
+    return = pure
+    V2 x y >>= f = V2 (v2x (f x)) (v2y (f y))

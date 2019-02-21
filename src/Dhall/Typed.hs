@@ -11,6 +11,7 @@
 {-# LANGUAGE TypeOperators                     #-}
 
 module Dhall.Typed (
+    -- foo
   ) where
 
 -- module Dhall.Typed (
@@ -32,10 +33,10 @@ module Dhall.Typed (
 import           Control.Monad
 import           Data.Functor
 import           Data.Kind
-import           Data.Sequence               (Seq(..))
+import           Data.Sequence                    (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Decide
-import           Data.Text                   (Text)
+import           Data.Text                        (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
 import           Dhall.Typed.Internal.TH
@@ -43,13 +44,24 @@ import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons
-import qualified Data.Sequence               as Seq
-import qualified Data.Text                   as T
-import qualified Dhall.Context               as D
-import qualified Dhall.Core                  as D
-import qualified Dhall.TypeCheck             as D
+import qualified Data.Sequence                    as Seq
+import qualified Data.Text                        as T
+import qualified Dhall.Context                    as D
+import qualified Dhall.Core                       as D
+import qualified Dhall.TypeCheck                  as D
+import qualified Language.Haskell.TH              as TH
+import qualified Language.Haskell.TH.Desugar      as TH
+import qualified Language.Haskell.TH.Desugar.Lift as TH
+import qualified Language.Haskell.TH.Lift         as TH
 
--- type family ShiftSort
+-- -- type family ShiftSort
+-- foo :: String
+-- foo = $(do Just (TH.DTyConI d _) <- TH.dsReify ''AggType
+--            TH.DDataD _ _ nm bs _ cs _ <- pure d
+--            vrs <- traverse (TH.conExistentialTvbs (TH.applyDType (TH.DConT nm) (TH.dTyVarBndrToDType <$> bs)))
+--                       cs
+--            TH.lift $ show vrs
+--        )
 
 data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
                   :: DType ts us 'Type
@@ -134,12 +146,12 @@ toTyped ctx = \case
     D.List          -> pure . SomeDExpr . deType $ List
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
-    D.ListAppend x y -> do
-      SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
-      SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
-      -- TODO: normalize before checking for equality
-      Proved Refl <- Just $ eqPS a b
-      pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P ListAppend (x' :< y' :< Ø)
+    -- D.ListAppend x y -> do
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
+    --   -- TODO: normalize before checking for equality
+    --   Proved Refl <- Just $ eqPS a b
+    --   pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P ListAppend (x' :< y' :< Ø)
     D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø

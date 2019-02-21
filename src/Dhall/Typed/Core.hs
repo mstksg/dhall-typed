@@ -40,6 +40,7 @@ module Dhall.Typed.Core (
   -- ** Mixed
   , DExpr(..), SomeDExpr(..), dExprType, deKind, deType, deTerm
   -- ** Shared
+  , AggType(..)
   -- , AggType(..), RecordVal(..), UnionVal(..)
   -- * Singletons
   , SDSort(..) -- , SSDSort(..), SSSDSort(..)
@@ -158,13 +159,31 @@ type instance Apply (MapSym f) xs = Map f xs
 
 -- | Meta-level type describing a collection or aggregation of types.  Used
 -- for specifying records and unions.
-data AggType k :: [Text] -> [k] -> Type where
+-- data AggType k :: [Text] -> [k] -> Type where
+data AggType k (ls :: [Text]) (as :: [k]) where
     ATZ :: AggType k '[] '[]
-    ATS :: WrappedSing k a      -- TODO: add uniqueness
+    ATS :: SText l              -- TODO: add uniqueness
+        -> WrappedSing k (a :: k)
         -> AggType k ls as
         -> AggType k (l ': ls) (a ': as)
 
 genPolySing ''AggType
+
+-- instance SingEq Text Text
+-- instance SingEq () ()
+
+-- instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) where
+--     singEq = \case
+--       SATZ -> \case
+--         SATZ -> Proved HRefl
+--         SATS _ _ _ -> Disproved $ \case {}
+--       SATS x y z -> \case
+--         SATZ -> Disproved $ \case {}
+--         SATS x' y' z' -> case singEq x x' of
+--           Proved HRefl -> case singEq y y' of
+--             Proved HRefl -> case singEq z z' of
+--               Proved HRefl -> Proved HRefl
+--               Disproved v -> Disproved $ \case HRefl -> v HRefl
 
 -- ---------
 -- > Sorts
@@ -178,13 +197,9 @@ genPolySing ''AggType
 data DSort :: Type where
     Kind    :: DSort
     (:*>)   :: DSort -> DSort -> DSort
-    KRecord :: SList Text ls
-            -> SList ()   as
-            -> AggType () ls as
+    KRecord :: AggType () ls as
             -> DSort
-    KUnion  :: SList Text ls
-            -> SList () as
-            -> AggType () ls as
+    KUnion  :: AggType () ls as
             -> DSort
 
     -- TRecord :: AggType (DKind ts 'Kind) ls as
@@ -194,12 +209,31 @@ data DSort :: Type where
 
 genPolySing ''DSort
 
+-- instance SingEq DSort DSort where
+--     singEq = \case
+--       SKRecord at -> \case
+--         SKRecord bt -> case singEq at bt of
+--           Proved HRefl -> Proved HRefl
+
+-- sameSiSi :: SingSing [a] as ass -> SingSing [a] bs bss -> (as :~: bs)
+-- sameSiSi _ _ = unsafeCoerce Refl
+
+-- sameSiSi2 :: SingSing [a] as ass -> SingSing [a] as bss -> (ass :~: bss)
+-- sameSiSi2 _ _ = unsafeCoerce Refl
+
+-- sameSList :: SList a as -> SList a bs -> (as :~: bs)
+-- sameSList _ _ = unsafeCoerce Refl
+
+-- sameAggType :: SAggType k ls as x -> SAggType k ls as y -> (x :~: y)
+-- sameAggType _ _ = unsafeCoerce Refl
+-- -- data AggType k :: [Text] -> [k] -> Type where
+
 -- sameSDSort :: SDSort t -> SDSort u -> Decision (t :~: u)
 -- sameSDSort = \case
 --     SKind -> \case
 --       SKind -> Proved Refl
 --       _ :%*> _ -> Disproved $ \case {}
---       SKRecord _ _ _ -> Disproved $ \case {}
+--       SKRecord _ -> Disproved $ \case {}
 --       -- SKUnion _ -> Disproved $ \case {}
 --     x :%*> y -> \case
 --       x' :%*> y' -> case sameSDSort x x' of
@@ -208,14 +242,26 @@ genPolySing ''DSort
 --           Disproved v -> Disproved $ \case Refl -> v Refl
 --         Disproved v -> Disproved $ \case Refl -> v Refl
 --     -- THE PROBLEM: EXISTENTIAL KINDS!!!!
---     SKRecord t u x -> \case
---       SKRecord t' u' x' -> case sameSingSing t t' of
---         Proved SiSiRefl -> case sameSingSing u u' of
---           Proved SiSiRefl -> case eqPS x x' of
---             Proved Refl -> Proved Refl
---             Disproved v -> Disproved $ \case Refl -> v Refl
---           Disproved v -> Disproved $ \case Refl -> v SiSiRefl
---         Disproved v -> Disproved $ \case Refl -> v SiSiRefl
+--     SKRecord x -> \case
+--       SKRecord y -> case sameAggType x y of
+--         HRefl -> Proved Refl
+-- --       SKRecord t' u' x' -> case sameSList (getSiSi t) (getSiSi t') of
+-- --         Refl -> case sameSiSi2 t t' of
+-- --           Refl -> case sameSList (getSiSi u) (getSiSi u') of
+-- --             Refl -> case sameSiSi2 u u' of
+-- --               Refl -> case sameAggType x x' of
+-- --                 Refl -> Proved Refl
+-- --     -- SKRecord (SiSi t) (SiSi u) x -> \case
+-- --     --   SKRecord (SiSi t') (SiSi u') x' -> case sameSList t t' of
+-- --     --     Refl -> case sameSList u u' of
+-- --     --       Refl -> case sameAggType x x' of
+-- --     --         Refl -> _
+-- --       --   Proved SiSiRefl -> case sameSingSing u u' of
+-- --       --     Proved SiSiRefl -> case eqPS x x' of
+-- --       --       Proved Refl -> Proved Refl
+-- --       --       Disproved v -> Disproved $ \case Refl -> v Refl
+-- --       --     Disproved v -> Disproved $ \case Refl -> v SiSiRefl
+-- --       --   Disproved v -> Disproved $ \case Refl -> v SiSiRefl
 
 
 -- ---------

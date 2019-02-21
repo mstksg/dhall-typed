@@ -6,6 +6,7 @@
 {-# LANGUAGE InstanceSigs           #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE LambdaCase             #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE QuantifiedConstraints  #-}
 {-# LANGUAGE RankNTypes             #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
@@ -26,8 +27,10 @@ module Dhall.Typed.Type.Singletons (
   , WrappedSing(..)
   , SingSing(..)
   , PolySingOfI
-  , SameSingSing(..)
-  , sameSingSing
+  , SingEq(..)
+  -- , EqTest(..)
+  -- , SameSingSing(..)
+  -- , sameSingSing
   -- * Instances
   , SConst(..), SMaybe(..), SList(..), STup2(..), SBool(..), SProxy(..), STup0(..)
   -- ** Natural
@@ -43,11 +46,12 @@ module Dhall.Typed.Type.Singletons (
 import           Control.Applicative
 import           Data.Kind
 import           Data.Proxy
+import           Data.Singletons.Decide               (Decision(..))
 import           Data.Text                            (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Singletons.Internal
-import           GHC.TypeLits                         (Symbol, KnownSymbol, SomeSymbol(..), someSymbolVal, symbolVal)
+import           GHC.TypeLits                         (Symbol, KnownSymbol, SomeSymbol(..), someSymbolVal, symbolVal, sameSymbol)
 import           GHC.TypeNats
 import           Numeric.Natural
 import           Unsafe.Coerce
@@ -56,6 +60,12 @@ import qualified Data.Text                            as T
 genPolySing ''Const
 genPolySing ''Maybe
 genPolySing ''Proxy
+
+-- instance SingEq a c => SingEq (Const a b) (Const c b) where
+--     singEq = \case
+--       SConst x -> \case
+--         SConst y -> case singEq x y of
+--           Proved HRefl -> Proved HRefl
 
 type family ToNat (n :: Natural) = (m :: Nat) | m -> n where
 type family FromNat (m :: Nat)     = (n :: Natural) | n -> m where
@@ -69,6 +79,9 @@ withKnownNatural x = case natnat @n of
 
 natnat :: n :~: ToNat (FromNat n)
 natnat = unsafeCoerce Refl
+
+natnat' :: n :~: FromNat (ToNat n)
+natnat' = unsafeCoerce Refl
 
 data SNatural :: Natural -> Type where
     SNat :: KnownNat (ToNat n) => SNatural n
@@ -88,6 +101,15 @@ instance PolySingKind Natural where
       SomeNat (Proxy :: Proxy n) -> case natnat @n of
         Refl -> SomePS $ SNat @(FromNat n)
 
+instance SingEq Natural Natural where
+    singEq = \case
+      (SNat :: SNatural n) -> \case
+        (SNat :: SNatural m) -> case sameNat (Proxy @(ToNat n)) (Proxy @(ToNat m)) of
+          Just Refl -> case natnat' @n of
+            Refl -> case natnat' @m of
+              Refl -> Proved HRefl
+          Nothing   -> Disproved unsafeCoerce
+
 type family ToSym (t :: Text) = (s :: Symbol) | s -> t where
 type family FromSym (s :: Symbol) = (t :: Text) | t -> s where
 
@@ -100,6 +122,9 @@ withKnownText x = case symsym @n of
 
 symsym :: n :~: ToSym (FromSym n)
 symsym = unsafeCoerce Refl
+
+symsym' :: n :~: FromSym (ToSym n)
+symsym' = unsafeCoerce Refl
 
 data SText :: Text -> Type where
     SText :: KnownSymbol (ToSym t) => SText t
@@ -118,3 +143,13 @@ instance PolySingKind Text where
     toPolySing t = case someSymbolVal (T.unpack t) of
       SomeSymbol (Proxy :: Proxy t) -> case symsym @t of
         Refl -> SomePS $ SText @(FromSym t)
+
+instance SingEq Text Text where
+    singEq = \case
+      (SText :: SText n) -> \case
+        (SText :: SText m) -> case sameSymbol (Proxy @(ToSym n)) (Proxy @(ToSym m)) of
+          Just Refl -> case symsym' @n of
+            Refl -> case symsym' @m of
+              Refl -> Proved HRefl
+          Nothing   -> Disproved unsafeCoerce
+

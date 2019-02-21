@@ -1,10 +1,13 @@
+{-# LANGUAGE AllowAmbiguousTypes    #-}
 {-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE EmptyCase              #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE KindSignatures         #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE QuantifiedConstraints  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
@@ -19,8 +22,10 @@ module Dhall.Typed.Type.Singletons.Internal (
   , WrappedSing(..)
   , SingSing(..)
   , PolySingOfI
-  , SameSingSing(..)
-  , sameSingSing
+  , SingEq(..)
+  -- , EqTest(..)
+  -- , SameSingSing(..)
+  -- , sameSingSing
   -- * Instances
   , SBool(..), SList(..), STup2(..), STup0(..)
   ) where
@@ -28,6 +33,7 @@ module Dhall.Typed.Type.Singletons.Internal (
 import           Data.Kind
 import           Data.Proxy
 import           Data.Singletons.Decide (Decision(..), (:~:)(..))
+import           Data.Type.Equality
 import           Unsafe.Coerce
 
 type family PolySing k = (s :: k -> Type) | s -> k
@@ -43,8 +49,21 @@ data SomePolySing k where
 class PolySingKind k where
     fromPolySing :: PolySing k x -> k
     toPolySing   :: k -> SomePolySing k
-    eqPS         :: PolySing k x -> PolySing k y -> Decision (x :~: y)
+    -- eqPS         :: PolySing k x -> PolySing k y -> Decision (x :~: y)
 
+-- data SameSingSing k a b :: WrappedSing k a -> WrappedSing k b -> Type where
+--     SiSiRefl :: SameSingSing k a a x x
+
+-- sameSingSing
+--     :: PolySingKind k
+--     => SingSing k a x
+--     -> SingSing k b y
+--     -> Decision (SameSingSing k a b x y)
+-- sameSingSing = \case
+--     SiSi x -> \case
+--       SiSi y -> case eqPS x y of
+--         Proved Refl -> Proved $ unsafeCoerce Refl
+--         Disproved v -> Disproved $ \case SiSiRefl -> v Refl
 
 newtype WrappedSing k (x :: k) = WS { getWS :: PolySing k x }
 
@@ -57,39 +76,38 @@ type instance PolySing (WrappedSing k b) = SingSing k b
 instance PolySingI x => PolySingI ('WS (y :: PolySing k x)) where
     polySing = SiSi polySing
 
-instance PolySingKind k => PolySingKind (WrappedSing k b) where
+instance PolySingKind (WrappedSing k b) where
     fromPolySing (SiSi x) = WS x
     toPolySing (WS x) = SomePS (SiSi x)
-    eqPS x y = case sameSingSing x y of
-      Proved SiSiRefl -> Proved Refl
-      Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+    -- eqPS x y = case sameSingSing x y of
+    --   Proved SiSiRefl -> Proved Refl
+    --   Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
 
-data SameSingSing k a b :: WrappedSing k a -> WrappedSing k b -> Type where
-    SiSiRefl :: SameSingSing k a a x x
+class SingEq f g where
+    singEq :: forall x y. PolySing f x -> PolySing g y -> Decision (x :~~: y)
 
-sameSingSing
-    :: PolySingKind k
-    => SingSing k a x
-    -> SingSing k b y
-    -> Decision (SameSingSing k a b x y)
-sameSingSing = \case
-    SiSi x -> \case
-      SiSi y -> case eqPS x y of
-        Proved Refl -> Proved $ unsafeCoerce Refl
-        Disproved v -> Disproved $ \case SiSiRefl -> v Refl
---         Proved Refl -> Proved SiSiRefl
---         -- Disproved v -> Disproved $ \case Refl -> v Refl
+instance SingEq k j => SingEq (WrappedSing k b) (WrappedSing j c) where
+    singEq = \case
+      SiSi x -> \case
+        SiSi y -> case singEq x y of
+          Proved HRefl -> Proved $ unsafeCoerce HRefl
+          Disproved v -> Disproved $ \case HRefl -> v HRefl
 
--- sameSingSing'
---     :: PolySingKind k
---     => SingSing k a x
---     -> SingSing k b y
---     -> Decision (a :~: b)
--- sameSingSing' = \case
---     SiSi x -> \case
---       SiSi y -> case eqPS x y of
---         Proved Refl -> Proved Refl
---         Disproved v -> Disproved $ \case Refl -> v Refl
+
+-- class EqTest (f :: k -> Type) (g :: j -> Type) where
+--     testEq :: forall a b. f a -> g b -> Decision (a :~~: b)
+
+-- instance EqTest (PolySing k) (PolySing k)
+--       => EqTest (SingSing k a) (SingSing k b) where
+--     testEq = \case
+--       SiSi x -> \case
+--         SiSi y -> case testEq x y of
+--           Proved HRefl -> Proved $ unsafeCoerce HRefl
+--           Disproved v -> Disproved $ \case HRefl -> v HRefl
+    --   SiSi x -> \case
+    --     SiSi y -> case testEq x y of
+    --       Proved Refl -> Proved $ unsafeCoerce Refl
+    --       Disproved v  -> Disproved $ \case Refl -> v Refl
 
 
 
@@ -108,13 +126,15 @@ instance PolySingKind Bool where
     toPolySing = \case
       False -> SomePS SFalse
       True  -> SomePS STrue
-    eqPS = \case
+
+instance SingEq Bool Bool where
+    singEq = \case
       SFalse -> \case
-        SFalse -> Proved Refl
+        SFalse -> Proved HRefl
         STrue  -> Disproved $ \case {}
       STrue  -> \case
         SFalse -> Disproved $ \case {}
-        STrue  -> Proved Refl
+        STrue  -> Proved HRefl
 
 data SList k :: [k] -> Type where
     (:%) :: PolySing k x -> SList k xs -> SList k (x ': xs)
@@ -141,18 +161,18 @@ instance PolySingKind a => PolySingKind [a] where
         SomePS x' -> case toPolySing xs of
           SomePS xs' -> SomePS (x' :% xs')
 
-    eqPS = \case
+instance (SingEq a b, a ~ b) => SingEq [a] [b] where
+    singEq = \case
       SNil -> \case
-        SNil -> Proved Refl
+        SNil -> Proved HRefl
         _ :% _ -> Disproved $ \case {}
       x :% xs -> \case
         SNil -> Disproved $ \case {}
-        y :% ys -> case eqPS x y of
-          Proved Refl -> case eqPS xs ys of
-            Proved Refl -> Proved Refl
-            Disproved v -> Disproved $ \case Refl -> v Refl
-          Disproved v -> Disproved $ \case Refl -> v Refl
-
+        y :% ys -> case singEq x y of
+          Proved HRefl -> case singEq xs ys of
+            Proved HRefl -> Proved HRefl
+            Disproved v -> Disproved $ \case HRefl -> v HRefl
+          Disproved v -> Disproved $ \case HRefl -> v HRefl
 
 data STup2 a b :: (a, b) -> Type where
     STup2 :: PolySing a x -> PolySing b y -> STup2 a b '(x, y)
@@ -168,13 +188,6 @@ instance (PolySingKind a, PolySingKind b) => PolySingKind (a, b) where
     toPolySing (x, y) = case toPolySing x of
       SomePS x' -> case toPolySing y of
         SomePS y' -> SomePS (STup2 x' y')
-    eqPS = \case
-      STup2 x y -> \case
-        STup2 x' y' -> case eqPS x x' of
-          Proved Refl -> case eqPS y y' of
-            Proved Refl -> Proved Refl
-            Disproved v -> Disproved $ \case Refl -> v Refl
-          Disproved v -> Disproved $ \case Refl -> v Refl
 
 data STup0 :: () -> Type where
     STup0 :: STup0 '()
@@ -187,9 +200,11 @@ instance PolySingI '() where
 instance PolySingKind () where
     fromPolySing _ = ()
     toPolySing _ = SomePS STup0
-    eqPS = \case
+
+instance SingEq () () where
+    singEq = \case
       STup0 -> \case
-        STup0 -> Proved Refl
+        STup0 -> Proved HRefl
 
 
 
@@ -213,11 +228,18 @@ instance PolySingKind PoolyBing where
     toPolySing = \case
       PB x -> case toPolySing (WS x) of
         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
-    eqPS = \case
+
+instance SingEq PoolyBing PoolyBing where
+    singEq = \case
       SPB x -> \case
-        SPB y -> case sameSingSing x y of
-          Proved SiSiRefl -> Proved Refl
-          Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+        SPB y -> case singEq x y of
+          Proved HRefl -> Proved HRefl
+          Disproved v  -> Disproved $ \case HRefl -> v HRefl
+    -- eqPS = \case
+    --   SPB x -> \case
+    --     SPB y -> case sameSingSing x y of
+    --       Proved SiSiRefl -> Proved Refl
+    --       Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
 
 data SSPoolyBing pb :: SPoolyBing pb -> Type where
     SSPB :: SingSing (WrappedSing Bool b) ('WS bb) ('WS bbb)
