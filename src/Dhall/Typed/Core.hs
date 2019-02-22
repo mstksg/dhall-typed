@@ -427,7 +427,7 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
-    Some          :: Prim ts us '[ a ] ('Optional :$ a)
+    Some          :: SDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
     None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
 
 genPolySing ''Prim

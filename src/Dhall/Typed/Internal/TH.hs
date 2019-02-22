@@ -25,6 +25,7 @@ import           Data.Char
 import           Data.Containers.ListUtils
 import           Data.Default
 import           Data.Foldable
+import           Data.Function
 import           Data.Functor.Identity
 import           Data.IntMap                          (IntMap)
 import           Data.IntSet                          (IntSet)
@@ -42,7 +43,7 @@ import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
 import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
-import qualified Control.Monad.Trans as MT
+import qualified Control.Monad.Trans                  as MT
 import qualified Data.IntMap                          as IM
 import qualified Data.IntSet                          as IS
 import qualified Data.Map                             as M
@@ -405,12 +406,18 @@ polySingSingEq nm bndrs cons = do
     bndr1 <- (traverse . traverseBndrName) (\_ -> qNewName "a") bndrs
     n     <- qNewName "x"
     eps   <- traverse mkEps cons
+    DTyConI _ (Just insts) <- dsInfo <=< reifyWithLocals $ ''SingEq
+
+    let instMap = traceShowId . M.fromList $ mapMaybe singEqInstance insts
+        fullyDet = findFullyDet instMap
+
     bndr2 <- for (zip [0..] bndr1) $ \(i, b) ->
-      if i `IS.member` fullyDetermined
+      if i `IS.member` fullyDet
         then traverseBndrName (\_ -> qNewName "b") b
         else pure b
+
     let cctx = mkCctx $ zip bndr1 bndr2
-    let res = DInstanceD Nothing cctx
+        res = DInstanceD Nothing cctx
           ( applyDType (DConT ''SingEq)
               [ applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr1)
               , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
@@ -424,36 +431,50 @@ polySingSingEq nm bndrs cons = do
               ]
           ]
   where
-    fullyDetermined :: IntSet
-    fullyDetermined = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
-                        (determines <$> cons)
-    determines :: DCon -> IntSet
-    determines (DCon _ _ cnm cfs cTy) = traceShow cnm . traceShowId . IM.keysSet
-                                    . IM.filter S.null
-                                    . fmap (`S.difference` found)
-                                    . traceShowId
-                                    $ needed'
+    findFullyDet :: Map String [Bool] -> IntSet
+    findFullyDet insts = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
+                              (determines <$> cons)
       where
-        needed :: IntMap (Set Name)
-        needed = case unApply cTy of
-          (DConT _, ts) -> IM.fromList . zip [0..] $
-              map (S.fromList . filter isVar . allNamesIn) ts
-          _             -> error "polySingSingEq: Invalid return type on GADT constructor"
-        needed' = snd
-                . IM.mapAccum (\seen news -> (seen `S.union` news, news `S.difference` seen)) S.empty
-                $ needed
-        found :: Set Name
-        found = S.fromList $ do
-          t <- case cfs of
-            DNormalC _ ts -> map snd ts
-            DRecC ts      -> map (\(_,_,t) -> t) ts
-          case unApply t of
-            (DConT n, ts)
-              | n == nm -> foldMap (filter isVar . allNamesIn) ts
-              | otherwise -> foldMap (filter isVar . allNamesIn) ts   -- should only be for SingEq
-            (tc     , ts) -> do
-              _ :|> l <- pure $ Seq.fromList (tc : ts)
-              filter isVar . allNamesIn $ l
+        determines :: DCon -> IntSet
+        determines (DCon _ _ cnm cfs cTy) = traceShow cnm . traceShowId . IM.keysSet
+                                        . IM.filter S.null
+                                        . fmap (`S.difference` found)
+                                        . traceShowId
+                                        $ needed'
+          where
+            needed :: IntMap (Set Name)
+            needed = case unApply cTy of
+              (DConT _, ts) -> IM.fromList . zip [0..] $
+                  map (S.fromList . filter isVar . allNamesIn) ts
+              _             -> error "polySingSingEq: Invalid return type on GADT constructor"
+            needed' = snd
+                    . IM.mapAccum (\seen news -> (seen `S.union` news, news `S.difference` seen)) S.empty
+                    $ needed
+            found :: Set Name
+            found = traceShowId . S.fromList $ do
+              t <- case cfs of
+                DNormalC _ ts -> map snd ts
+                DRecC ts      -> map (\(_,_,t) -> t) ts
+              case t of
+                (unApply->(DConT n, ts))
+                  | n == nm -> foldMap (filter isVar . allNamesIn) ts
+                (deSingleApplied->Just (unApply->(DConT n, ts), qs))
+                  | Just constSame <- traceShowId $ M.lookup (nameBase n) insts
+                  -> filter isVar . concat $
+                        zipWith (\case False -> allNamesIn; True -> const [])
+                          (constSame ++ repeat False) (ts ++ [qs])
+                (unApply->(tc, ts)) -> do
+                  _ :|> l <- pure $ Seq.fromList (tc : ts)
+                  filter isVar . allNamesIn $ l
+              -- case unApply t of
+              --   (DConT (traceShowId->n), ts)
+              --     | n == nm -> foldMap (filter isVar . allNamesIn) ts
+              --     -- | Just constSame <- traceShowId (M.lookup n insts)
+              --     -- -> filter isVar . concat $
+              --     --     zipWith (\case False -> allNamesIn; True -> const [])
+              --     --       (constSame ++ repeat False) ts
+              --     -- | otherwise -> foldMap (filter isVar . allNamesIn) ts   -- HERE: should only be for SingEq
+              --   (tc     , ts) -> do
 -- 1.  Shows up as the *last* argument in any input
 -- 2.  Shows up in any argument covered by a TestEq instance where "both
 --     sides" are different tyvars.
@@ -605,6 +626,17 @@ polySingSingEq nm bndrs cons = do
     --       --     [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
     --       --     ]
     --       ]
+
+-- | Returns the type constructor of the 'SingEq' instance, and also a list
+-- of whether or not each field is constrained to be the same.
+singEqInstance :: DDec -> Maybe (String, [Bool])
+singEqInstance (DInstanceD _ _ t _)
+    | (DConT se, [unApply->(DConT a, as), unApply->(DConT b, bs)]) <- unApply t
+    , se == ''SingEq
+    , a == b
+    = Just (nameBase a, zipWith ((==) `on` show) as bs)
+    | otherwise = Nothing
+-- = case unApply
 
 bndrName :: DTyVarBndr -> Name
 bndrName = getConst . traverseBndrName Const

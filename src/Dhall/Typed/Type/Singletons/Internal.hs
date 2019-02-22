@@ -161,7 +161,8 @@ instance PolySingKind a => PolySingKind [a] where
         SomePS x' -> case toPolySing xs of
           SomePS xs' -> SomePS (x' :% xs')
 
-instance (SingEq a b, a ~ b) => SingEq [a] [b] where
+-- instance (SingEq a b, a ~ b) => SingEq [a] [b] where
+instance (SingEq a a) => SingEq [a] [a] where
     singEq = \case
       SNil -> \case
         SNil -> Proved HRefl
