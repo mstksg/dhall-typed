@@ -32,7 +32,7 @@ module Dhall.Typed.Core.Internal (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType
   -- ** Terms
@@ -167,6 +167,8 @@ genPolySingWith defaultGPSO
 -- Note that this implementation allows records of kinds with sorts other
 -- than 'Kind', so @{ foo : Kind -> Kind }@ would typecheck, even though
 -- normal Dhall forbids this.
+--
+-- A 'DSort' is always in normal form.
 data DSort :: Type where
     Kind    :: DSort
     (:*>)   :: DSort -> DSort -> DSort
@@ -184,55 +186,6 @@ genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind DSort |]
   , gpsoSingEq = GOHead [d| instance SingEq DSort DSort |]
   } ''DSort
-
-
--- sameSiSi :: SingSing [a] as ass -> SingSing [a] bs bss -> (as :~: bs)
--- sameSiSi _ _ = unsafeCoerce Refl
-
--- sameSiSi2 :: SingSing [a] as ass -> SingSing [a] as bss -> (ass :~: bss)
--- sameSiSi2 _ _ = unsafeCoerce Refl
-
--- sameSList :: SList a as -> SList a bs -> (as :~: bs)
--- sameSList _ _ = unsafeCoerce Refl
-
--- sameAggType :: SAggType k ls as x -> SAggType k ls as y -> (x :~: y)
--- sameAggType _ _ = unsafeCoerce Refl
--- -- data AggType k :: [Text] -> [k] -> Type where
-
--- sameSDSort :: SDSort t -> SDSort u -> Decision (t :~: u)
--- sameSDSort = \case
---     SKind -> \case
---       SKind -> Proved Refl
---       _ :%*> _ -> Disproved $ \case {}
---       SKRecord _ -> Disproved $ \case {}
---       -- SKUnion _ -> Disproved $ \case {}
---     x :%*> y -> \case
---       x' :%*> y' -> case sameSDSort x x' of
---         Proved Refl -> case sameSDSort y y' of
---           Proved Refl -> Proved Refl
---           Disproved v -> Disproved $ \case Refl -> v Refl
---         Disproved v -> Disproved $ \case Refl -> v Refl
---     -- THE PROBLEM: EXISTENTIAL KINDS!!!!
---     SKRecord x -> \case
---       SKRecord y -> case sameAggType x y of
---         HRefl -> Proved Refl
--- --       SKRecord t' u' x' -> case sameSList (getSiSi t) (getSiSi t') of
--- --         Refl -> case sameSiSi2 t t' of
--- --           Refl -> case sameSList (getSiSi u) (getSiSi u') of
--- --             Refl -> case sameSiSi2 u u' of
--- --               Refl -> case sameAggType x x' of
--- --                 Refl -> Proved Refl
--- --     -- SKRecord (SiSi t) (SiSi u) x -> \case
--- --     --   SKRecord (SiSi t') (SiSi u') x' -> case sameSList t t' of
--- --     --     Refl -> case sameSList u u' of
--- --     --       Refl -> case sameAggType x x' of
--- --     --         Refl -> _
--- --       --   Proved SiSiRefl -> case sameSingSing u u' of
--- --       --     Proved SiSiRefl -> case eqPS x x' of
--- --       --       Proved Refl -> Proved Refl
--- --       --       Disproved v -> Disproved $ \case Refl -> v Refl
--- --       --     Disproved v -> Disproved $ \case Refl -> v SiSiRefl
--- --       --   Disproved v -> Disproved $ \case Refl -> v SiSiRefl
 
 
 -- ---------
@@ -269,11 +222,6 @@ data DKind :: [DSort] -> DSort -> Type where
     -- TUnion  :: AggType (DKind ts 'Kind) ls as
     --         -> DKind ts 'Kind
 
-
--- | Substitute in a kind for all occurrences of a kind variable of sort
--- @a@ indicated by the 'Delete' within a kind of osrt @b@.
-type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b where
-
 type a :~> b = a ':~> b
 infixr 1 :~>
 
@@ -282,6 +230,10 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq (DKind ts a) (DKind ts b) |]
   } ''DKind
 
+-- | Substitute in a kind for all occurrences of a kind variable of sort
+-- @a@ indicated by the 'Delete' within a kind of osrt @b@.
+type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b where
+
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
 
@@ -289,6 +241,17 @@ type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
 -- for a new bound variable of sort @a@, to be inserted at the position
 -- indicated by the 'Insert'.
 type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind ps b where
+
+-- | Ideally we would want this to be encodable within the type.  But the
+-- main problem here is checking if the LHS of an application is a variable
+-- or not.  This is the next best thing?
+type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
+    KNormalize ts a          ('KVar i   ) = 'KVar i
+    KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
+    KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
+    KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
+    KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
+    KNormalize ts 'Kind      'Type        = 'Type
 
 -- ---------
 -- > Types
@@ -310,11 +273,15 @@ type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind 
 --
 -- Note that the type of "kind-polymorphic values" (functions from kinds to
 -- terms) is not yet supported.
+--
+-- IMPORTANT RESTRICTION: the kinds of all type variables /must/ be
+-- normalized.  Currently we we can't ensure this is the case.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
-    TLam  :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us (u ':~> a)
+    TLam  :: SDKind ts 'Kind u
+          -> DType ts (KNormalize ts 'Kind u ': us) a
+          -> DType ts us (KNormalize ts 'Kind u ':~> a)
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
-
     TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
           -> DType ts us ('KPi tt a)
@@ -323,7 +290,9 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
-    Pi    :: SDKind ts 'Kind u -> DType ts (u ': us) a -> DType ts us a
+    Pi    :: SDKind ts 'Kind u
+          -> DType ts (KNormalize ts 'Kind u ': us) a
+          -> DType ts us a
 
     Bool     :: DType ts us 'Type
     Natural  :: DType ts us 'Type
@@ -422,12 +391,16 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     App  :: DTerm ts us vs (a ':-> b) -> DTerm ts us vs a -> DTerm ts us vs b
 
     Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
-         -> DTerm ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs) a
+         -> DTerm ts (KNormalize ts 'Kind u ': us)
+                    (Map (ShiftSym ts us (KNormalize ts 'Kind u ': us)
+                         (KNormalize ts 'Kind u) 'Type 'InsZ) vs
+                    ) a
          -> DTerm ts us vs ('Pi uu a)
     Inst :: SingSing (DKind ts 'Kind) u ('WS uu)
          -> DTerm ts us vs ('Pi uu b)
-         -> SDType ts us u a
-         -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
+         -> SDType ts us (KNormalize ts 'Kind u) a
+         -> DTerm ts us vs
+              (Sub ts (KNormalize ts 'Kind u ': us) us (KNormalize ts 'Kind u) 'Type 'DelZ a b)
 
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
     -- TODO: use Seq

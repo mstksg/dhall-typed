@@ -40,6 +40,9 @@ import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons
 
+skNormalize :: SDKind ts a x -> SDKind ts a (KNormalize ts a x)
+skNormalize = undefined
+
 sortOf :: DKind '[] a -> SDSort a
 sortOf = sortOfWith Ø
 
@@ -59,7 +62,8 @@ kindOf = kindOfWith Ø
 kindOfWith :: Prod (SDKind ts 'Kind) us -> DType ts us a -> SDKind ts 'Kind a
 kindOfWith us = \case
     TVar i   -> ixProd us i
-    TLam u x -> u :%~> kindOfWith (u :< us) x
+    TLam u x -> let u' = skNormalize u
+                in  u' :%~> kindOfWith (u' :< us) x
     TApp f _ -> case kindOfWith us f of
       _ :%~> u -> u
     -- STPoly t x       -> case kindOfWith
@@ -71,7 +75,7 @@ kindOfWith us = \case
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
     _ :-> _  -> SType
-    Pi u x   -> kindOfWith (u :< us) x
+    Pi u x   -> kindOfWith (skNormalize u :< us) x
     Bool     -> SType
     Natural  -> SType
     List     -> SType :%~> SType

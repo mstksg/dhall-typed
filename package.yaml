@@ -42,6 +42,7 @@ library:
   - Dhall.Typed.Plugin
   - Dhall.Typed.Type.Index
   - Dhall.Typed.Type.N
+  - Dhall.Typed.Type.Bool
   - Dhall.Typed.Type.Option
   - Dhall.Typed.Type.Prod
   - Dhall.Typed.Type.Singletons
