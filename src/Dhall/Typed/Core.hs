@@ -62,8 +62,8 @@ kindOf = kindOfWith Ø
 kindOfWith :: Prod (SDKind ts 'Kind) us -> DType ts us a -> SDKind ts 'Kind a
 kindOfWith us = \case
     TVar i   -> ixProd us i
-    TLam u x -> let u' = skNormalize u
-                in  u' :%~> kindOfWith (u' :< us) x
+    TLam (NDK u) x -> let u' = skNormalize u
+                       in  u' :%~> kindOfWith (u' :< us) x
     TApp f _ -> case kindOfWith us f of
       _ :%~> u -> u
     -- STPoly t x       -> case kindOfWith
@@ -75,7 +75,7 @@ kindOfWith us = \case
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
     _ :-> _  -> SType
-    Pi u x   -> kindOfWith (skNormalize u :< us) x
+    Pi (NDK u) x   -> kindOfWith (skNormalize u :< us) x
     Bool     -> SType
     Natural  -> SType
     List     -> SType :%~> SType
@@ -97,7 +97,8 @@ primType = \case
     ListLast      -> (Ø, polySing)
     ListReverse   -> (Ø, polySing)
     Some t        -> (t :< Ø, SOptional `STApp` t)
-    None          -> (Ø, SPi (SiSi SType) (SOptional `STApp` STVar SIZ))
+    None          -> (Ø, polySing)
+    -- None          -> (Ø, SPi _ (SOptional `STApp` STVar SIZ))
 
 typeOf :: DTerm ts us '[] a -> SDType ts us 'Type a
 typeOf = typeOfWith Ø

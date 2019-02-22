@@ -32,7 +32,7 @@ module Dhall.Typed.Core.Internal (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..)
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType
   -- ** Terms
@@ -43,7 +43,7 @@ module Dhall.Typed.Core.Internal (
   , AggType(..)
   -- * Singletons
   , SDSort(..)
-  , SDKind(..)
+  , SDKind(..), SNDKind(..)
   , SDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
@@ -253,6 +253,28 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
     KNormalize ts 'Kind      'Type        = 'Type
 
+-- | Version of 'SDKind' that exposes itself in normal form.
+data NDKind ts a :: DKind ts a -> Type where
+    NDK :: SDKind ts a x
+        -> NDKind ts a (KNormalize ts a x)
+
+genPolySingWith defaultGPSO
+  { gpsoSingI = False
+  , gpsoPSK    = GOHead [d| instance PolySingKind (NDKind ts a x) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (NDKind ts a x) (NDKind ts b y) |]
+  } ''NDKind
+
+instance PolySingI ('NDK t)
+
+-- instance PolySingOfI t => PolySingI ('NDK (t :: SDKind ts a x)) where
+
+instance PolySingI ('NDK 'SType) where
+    -- KVar  :: Index ts a -> DKind ts a
+    -- KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
+    -- KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
+    -- (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
+    -- KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
+
 -- ---------
 -- > Types
 -- ---------
@@ -274,13 +296,14 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
 -- Note that the type of "kind-polymorphic values" (functions from kinds to
 -- terms) is not yet supported.
 --
--- IMPORTANT RESTRICTION: the kinds of all type variables /must/ be
--- normalized.  Currently we we can't ensure this is the case.
+-- The kinds of the type variables should all be normalized.  All
+-- constructors that introduce type variables should normalize
+-- automatically, but it's possible create nonsensical types with 'TVar'.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
-    TLam  :: SDKind ts 'Kind u
-          -> DType ts (KNormalize ts 'Kind u ': us) a
-          -> DType ts us (KNormalize ts 'Kind u ':~> a)
+    TLam  :: NDKind ts 'Kind u
+          -> DType ts (u ': us) a
+          -> DType ts us (u ':~> a)
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
     TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
@@ -290,8 +313,8 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
-    Pi    :: SDKind ts 'Kind u
-          -> DType ts (KNormalize ts 'Kind u ': us) a
+    Pi    :: NDKind ts 'Kind u
+          -> DType ts (u ': us) a
           -> DType ts us a
 
     Bool     :: DType ts us 'Type
@@ -329,6 +352,10 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq (DType ts us a) (DType ts us b) |]
   } ''DType
 
+-- | Substitute in a type for all occurrences of a type variable of kind
+-- @a@ indicated by the 'Delete' within a type of kind @b@.
+type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: DType ts us b) :: DType ts qs b where
+
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 
@@ -336,6 +363,43 @@ type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 -- for a new bound variable of kind @a@, to be inserted at the position
 -- indicated by the 'Insert'.
 type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: DType ts qs b where
+
+-- | Ideally we would want this to be encodable within the type.  But the
+-- main problem here is checking if the LHS of an application is a variable
+-- or not.  This is the next best thing?
+type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
+    TNormalize ts us a          ('TVar i   ) = 'TVar i
+    TNormalize ts us (u ':~> a) ('TLam (uu :: NDKind ts 'Kind u) x)
+            = 'TLam uu (TNormalize ts (u ': us) a x)
+    -- TNormalize ts us a ('TApp f x) =
+    TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
+
+    -- TLam  :: SDKind ts 'Kind u
+    --       -> DType ts (KNormalize ts 'Kind u ': us) a
+    --       -> DType ts us (KNormalize ts 'Kind u ':~> a)
+    -- TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
+    -- TPoly :: SingSing DSort t ('WS tt)
+    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
+    --       -> DType ts us ('KPi tt a)
+    -- TInst :: DType ts us ('KPi tt b)
+    --       -> SDKind ts t a
+    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+
+    -- (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
+    -- Pi    :: SDKind ts 'Kind u
+    --       -> DType ts (KNormalize ts 'Kind u ': us) a
+    --       -> DType ts us a
+
+--     Bool     :: DType ts us 'Type
+--     Natural  :: DType ts us 'Type
+--     List     :: DType ts us ('Type :~> 'Type)
+--     Optional :: DType ts us ('Type :~> 'Type)
+--     -- KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
+--     -- KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
+--     -- KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
+--     -- KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
+--     -- KNormalize ts 'Kind      'Type        = 'Type
+
 
 -- ---------
 -- > Terms
@@ -345,28 +409,24 @@ type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: D
 data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     BoolLit       :: Bool -> Prim ts us '[] 'Bool
     NaturalLit    :: Natural -> Prim ts us '[] 'Natural
-    NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
-    NaturalBuild  :: Prim ts us '[] ('Pi 'SType (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
+    NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi ('NDK 'SType) (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
+    NaturalBuild  :: Prim ts us '[] ('Pi ('NDK 'SType) (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
     NaturalPlus   :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
     NaturalTimes  :: Prim ts us '[ 'Natural, 'Natural ] 'Natural
     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
-    ListFold      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
-    ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
+    ListFold      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
+    ListBuild     :: Prim ts us '[] ('Pi ('NDK 'SType) ('Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
     ListAppend    :: SDType ts us 'Type a -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
-    ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
-    ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
-    ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
+    ListHead      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+    ListLast      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
+    ListReverse   :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
     Some          :: SDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
-    None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
+    None          :: Prim ts us '[]    ('Pi ('NDK 'SType) ('Optional :$ 'TVar 'IZ))
 
 genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind (Prim ts us as a) |]
   , gpsoSingEq = GOHead [d| instance SingEq (Prim ts us as a) (Prim ts us bs b) |]
   } ''Prim
-
--- | Substitute in a type for all occurrences of a type variable of kind
--- @a@ indicated by the 'Delete' within a type of kind @b@.
-type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: DType ts us b) :: DType ts qs b where
 
 -- | Represents the possible terms encountered in Dhall.  A value of type
 --
@@ -390,17 +450,17 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     Lam  :: SDType ts us 'Type v -> DTerm ts us (v ': vs) a -> DTerm ts us vs (v ':-> a)
     App  :: DTerm ts us vs (a ':-> b) -> DTerm ts us vs a -> DTerm ts us vs b
 
-    Poly :: SingSing (DKind ts 'Kind) u ('WS uu)
-         -> DTerm ts (KNormalize ts 'Kind u ': us)
-                    (Map (ShiftSym ts us (KNormalize ts 'Kind u ': us)
-                         (KNormalize ts 'Kind u) 'Type 'InsZ) vs
+    Poly :: SNDKind ts 'Kind u uu
+         -> DTerm ts (u ': us)
+                    (Map (ShiftSym ts us (u ': us)
+                         u 'Type 'InsZ) vs
                     ) a
          -> DTerm ts us vs ('Pi uu a)
-    Inst :: SingSing (DKind ts 'Kind) u ('WS uu)
+    Inst :: SNDKind ts 'Kind u uu
          -> DTerm ts us vs ('Pi uu b)
-         -> SDType ts us (KNormalize ts 'Kind u) a
+         -> SDType ts us u a
          -> DTerm ts us vs
-              (Sub ts (KNormalize ts 'Kind u ': us) us (KNormalize ts 'Kind u) 'Type 'DelZ a b)
+              (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
     -- TODO: use Seq
