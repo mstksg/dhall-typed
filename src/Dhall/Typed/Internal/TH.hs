@@ -13,7 +13,9 @@ module Dhall.Typed.Internal.TH (
   -- , unApply
   , genPolySing
   , genPolySingWith
+  , genPolySingKind
   , GenPolySingOpts(..), defaultGPSO
+  , GenOpts(..)
   ) where
 
 import           Control.Applicative
@@ -103,13 +105,16 @@ inspector name = do
     i <- dsInfo <=< reifyWithLocals $ name
     lift $ show i
 
+data GenOpts = GOInfer
+             | GOSkip
+             | GOHead (Q [Dec])
+
 data GenPolySingOpts = GPSO
     { gpsoSing   :: !Bool
     , gpsoSingI  :: !Bool
-    , gpsoPSK    :: !Bool
-    , gpsoSingEq :: !Bool
+    , gpsoPSK    :: !GenOpts
+    , gpsoSingEq :: !GenOpts
     }
-  deriving (Eq, Show, Ord)
 
 instance Default GenPolySingOpts where
     def = defaultGPSO
@@ -118,8 +123,8 @@ defaultGPSO :: GenPolySingOpts
 defaultGPSO = GPSO
     { gpsoSing   = True
     , gpsoSingI  = True
-    , gpsoPSK    = True
-    , gpsoSingEq = True
+    , gpsoPSK    = GOInfer
+    , gpsoSingEq = GOInfer
     }
 
 genPolySing
@@ -136,6 +141,87 @@ genPolySingWith
 genPolySingWith opts name = do
     DTyConI (DDataD _ ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
     decsToTH <$> polySingDecs opts ctx nm bndrs dk cons dervs
+
+-- | Expects an instance head with constraints:
+--
+-- @
+-- $(genPolySingKind [d|
+--   instance PolySingKind a => PolySingKind (Maybe a) where
+--
+--   instance (PolySingKind a, PolySingKind b) => PolySingKind (Either a b) where
+--   |])
+-- @
+--
+-- The default constraint guessing mechanism can be pretty clunky, so this
+-- allows you to help out the logic.
+genPolySingKind
+    :: forall q. DsMonad q
+    => q [Dec]
+    -> q [Dec]
+genPolySingKind qdecs =
+    fmap decsToTH . traverse (genPolySingKind_ Nothing) =<< dsDecs =<< qdecs
+
+genPolySingKind_
+    :: forall q. DsMonad q
+    => Maybe Name             -- ^ restrict to a single name
+    -> DDec
+    -> q DDec
+genPolySingKind_ targ = \case
+    DInstanceD o ctx (DConT psk `DAppT` t) _
+      | psk == ''PolySingKind
+      , (DConT nm, ts) <- unApply t
+      , maybe True (== nm) targ
+      , Just ts' <- extractTs ts
+      -> do
+        DTyConI (DDataD _ _ _ _ _ cs _) _ <- dsInfo <=< reifyWithLocals $ nm
+        polySingKind nm o (Just ctx) ts' cs
+    _ -> errorWithoutStackTrace "Not a valid PolySingKind head."
+  where
+    extractTs = traverse $ \case
+      DVarT n           -> Just $ DPlainTV n
+      DVarT n `DSigT` q -> Just $ DKindedTV n q
+      _                 -> Nothing
+
+-- | Expects an instance head with constraints:
+--
+-- @
+-- $(genSingEq [d|
+--   instance SingEq a a => SingEq (Maybe a) (Maybe a)
+--   |])
+-- @
+--
+-- The default constraint guessing mechanism can be pretty clunky, so this
+-- allows you to help out the logic.
+genSingEq
+    :: forall q. DsMonad q
+    => q [Dec]
+    -> q [Dec]
+genSingEq qdecs =
+    fmap decsToTH . traverse (genSingEq_ Nothing) =<< dsDecs =<< qdecs
+
+genSingEq_
+    :: forall q. DsMonad q
+    => Maybe Name             -- ^ restrict to a single name
+    -> DDec
+    -> q DDec
+genSingEq_ targ = \case
+    DInstanceD o ctx ((DConT psk `DAppT` t1) `DAppT` t2) _
+      | psk == ''SingEq
+      , (DConT nm1, ts1) <- unApply t1
+      , (DConT nm2, ts2) <- unApply t2
+      , nm1 == nm2
+      , maybe True (== nm1) targ
+      , Just ts1' <- extractTs ts1
+      , Just ts2' <- extractTs ts2
+      -> do
+        DTyConI (DDataD _ _ _ bndrs _ cs _) _ <- dsInfo <=< reifyWithLocals $ nm1
+        polySingSingEq nm1 o (Just ctx) (Left (zip ts1' ts2')) cs
+    _ -> errorWithoutStackTrace "Not a valid SingEq head."
+  where
+    extractTs = traverse $ \case
+      DVarT n           -> Just $ DPlainTV n
+      DVarT n `DSigT` q -> Just $ DKindedTV n q
+      _                 -> Nothing
 
 -- data Index :: [k] -> k -> Type where
 --     IZ :: Index (a ': as) a
@@ -158,10 +244,22 @@ polySingDecs GPSO{..} ctx nm bndrs dk cons _dervs = do
         tell =<< polySingDataDec ctx nm bndrs dk cons bndr
       when gpsoSingI $
         tell =<< polySingSingI cons
-      when gpsoPSK $
-        tell . (:[]) =<< polySingKind nm Nothing bndrs cons
-      when gpsoSingEq $
-        tell . (:[]) =<< polySingSingEq nm bndrs cons
+      case gpsoPSK of
+        GOInfer  -> tell . (:[])
+                =<< polySingKind nm Nothing Nothing bndrs cons
+        GOSkip   -> pure ()
+        GOHead q -> tell . (:[])
+                =<< genPolySingKind_ (Just nm) . head
+                =<< dsDecs
+                =<< runQ q
+      case gpsoSingEq of
+        GOInfer  -> tell . (:[])
+                =<< polySingSingEq nm Nothing Nothing (Right bndrs) cons
+        GOSkip   -> pure ()
+        GOHead q -> tell . (:[])
+                =<< genSingEq_ (Just nm) . head
+                =<< dsDecs
+                =<< runQ q
   where
     bndrKind :: DKind
     bndrKind = applyDType (DConT nm) (dTyVarBndrToDType <$> bndrs)
@@ -240,7 +338,7 @@ polySingSingI
 polySingSingI cons = for cons $ \c@(DCon _ _ cnm _ _) -> do
     (_, vs) <- saturate c
     let cnm' = mapNameBase singleConstr cnm
-        cctx = flip map vs $ \(aN, aT) ->
+        cctx = nubOrdOn show . flip map vs $ \(aN, aT) ->
           let pr = case deSingleApplied aT of
                 Just _  -> ''PolySingOfI
                 Nothing -> ''PolySingI
@@ -269,26 +367,20 @@ polySingSingI cons = for cons $ \c@(DCon _ _ cnm _ _) -> do
 --       PB x -> case toPolySing (WS x) of
 --         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
 
--- toPolySingKind :: q [Dec] -> q [Dec]
--- toPolySingKind ds = do
---     -- DTyConI (DDataD _ ctx nm bndrs dk cons dervs) _ <- dsInfo <=< reifyWithLocals $ name
---     -- decsToTH <$> polySingDecs opts ctx nm bndrs dk cons dervs
-
-      --   tell . (:[]) =<< polySingKind nm Nothing bndrs cons
-
 -- TODO: redundant constraints
 polySingKind
     :: forall q. DsMonad q
     => Name
+    -> Maybe Overlap
     -> Maybe [DPred]
     -> [DTyVarBndr]
     -> [DCon]
     -> q DDec
-polySingKind nm defctx bndrs cons = do
+polySingKind nm o defctx bndrs cons = do
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
     n   <- qNewName "x"
-    let res = DInstanceD Nothing (fromMaybe cctx defctx)
+    let res = DInstanceD o (fromMaybe cctx defctx)
           ( DConT ''PolySingKind `DAppT`
                applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
           )
@@ -388,25 +480,32 @@ polySingKind nm defctx bndrs cons = do
 polySingSingEq
     :: forall q. DsMonad q
     => Name
-    -> [DTyVarBndr]
+    -> Maybe Overlap
+    -> Maybe [DPred]
+    -> Either [(DTyVarBndr, DTyVarBndr)] [DTyVarBndr]     -- ^ Left: defaults, Right: dummy
     -> [DCon]
     -> q DDec
-polySingSingEq nm bndrs cons = do
-    bndr1 <- (traverse . traverseBndrName) (\_ -> qNewName "a") bndrs
+polySingSingEq nm o defctx defbndrs cons = do
+    (bndr1, bndr2) <- case defbndrs of
+      Left bb -> pure $ unzip bb
+      Right bb -> do
+        bndr1 <- (traverse . traverseBndrName) (\_ -> qNewName "a") bb
+        DTyConI _ (Just insts) <- dsInfo <=< reifyWithLocals $ ''SingEq
+
+        let instMap = M.fromList $ mapMaybe singEqInstance insts
+            fullyDet = findFullyDet instMap bb
+
+        bndr2 <- for (zip [0..] bndr1) $ \(i, b) ->
+          if i `IS.member` fullyDet
+            then traverseBndrName (\_ -> qNewName "b") b
+            else pure b
+        pure (bndr1,bndr2)
+
     n     <- qNewName "x"
     eps   <- traverse mkEps cons
-    DTyConI _ (Just insts) <- dsInfo <=< reifyWithLocals $ ''SingEq
 
-    let instMap = M.fromList $ mapMaybe singEqInstance insts
-        fullyDet = findFullyDet instMap
-
-    bndr2 <- for (zip [0..] bndr1) $ \(i, b) ->
-      if i `IS.member` fullyDet
-        then traverseBndrName (\_ -> qNewName "b") b
-        else pure b
-
-    let cctx = mkCctx $ zip bndr1 bndr2
-        res = DInstanceD Nothing cctx
+    let cctx = fromMaybe (mkCctx (zip bndr1 bndr2)) defctx
+        res = DInstanceD o cctx
           ( applyDType (DConT ''SingEq)
               [ applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr1)
               , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
@@ -418,8 +517,9 @@ polySingSingEq nm bndrs cons = do
               ]
           ]
   where
-    findFullyDet :: Map String [Bool] -> IntSet
-    findFullyDet insts = foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
+    findFullyDet :: Map String [Bool] -> [DTyVarBndr] -> IntSet
+    findFullyDet insts bndrs =
+        foldr IS.intersection (IS.fromList $ zipWith const [0..] bndrs)
                               (determines <$> cons)
       where
         determines :: DCon -> IntSet
@@ -591,8 +691,7 @@ singEqInstance (DInstanceD _ _ t _)
     , se == ''SingEq
     , a == b
     = Just (nameBase a, zipWith ((==) `on` show) as bs)
-    | otherwise = Nothing
--- = case unApply
+singEqInstance _ = Nothing
 
 bndrName :: DTyVarBndr -> Name
 bndrName = getConst . traverseBndrName Const

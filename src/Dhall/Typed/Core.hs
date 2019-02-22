@@ -167,23 +167,10 @@ data AggType k (ls :: [Text]) (as :: [k]) where
         -> AggType k ls as
         -> AggType k (l ': ls) (a ': as)
 
-genPolySing ''AggType
-
--- instance SingEq Text Text
--- instance SingEq () ()
-
--- instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) where
---     singEq = \case
---       SATZ -> \case
---         SATZ -> Proved HRefl
---         SATS _ _ _ -> Disproved $ \case {}
---       SATS x y z -> \case
---         SATZ -> Disproved $ \case {}
---         SATS x' y' z' -> case singEq x x' of
---           Proved HRefl -> case singEq y y' of
---             Proved HRefl -> case singEq z z' of
---               Proved HRefl -> Proved HRefl
---               Disproved v -> Disproved $ \case HRefl -> v HRefl
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (AggType k ls as) |]
+  , gpsoSingEq = GOHead [d| instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) |]
+  } ''AggType
 
 -- ---------
 -- > Sorts
@@ -207,13 +194,11 @@ data DSort :: Type where
     -- TUnion  :: AggType (DKind ts 'Kind) ls as
     --         -> DKind ts 'Kind
 
-genPolySing ''DSort
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind DSort |]
+  , gpsoSingEq = GOHead [d| instance SingEq DSort DSort |]
+  } ''DSort
 
--- instance SingEq DSort DSort where
---     singEq = \case
---       SKRecord at -> \case
---         SKRecord bt -> case singEq at bt of
---           Proved HRefl -> Proved HRefl
 
 -- sameSiSi :: SingSing [a] as ass -> SingSing [a] bs bss -> (as :~: bs)
 -- sameSiSi _ _ = unsafeCoerce Refl
@@ -306,7 +291,10 @@ type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind
 type a :~> b = a ':~> b
 infixr 1 :~>
 
-genPolySing ''DKind
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (DKind ts a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (DKind ts a) (DKind ts b) |]
+  } ''DKind
 
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
@@ -381,24 +369,10 @@ infixr 0 :->
 infixl 9 `TApp`
 infixl 9 :$
 
-genPolySing ''DType
--- genPolySingWith defaultGPSO { gpsoSingEq = False } ''DType
-
--- instance SingEq (DType ts us a) (DType ts us b) where
---     singEq = \case
---       STApp x y -> \case
---         STApp x' y' -> case singEq x x' of
---           Proved HRefl -> case singEq y y' of
---             Proved HRefl -> Proved HRefl
---       STInst x y -> \case
---         STInst x' y' -> case singEq x x' of
---           Proved HRefl -> case singEq y y' of
---             Proved HRefl -> Proved HRefl
--- --     -- TInst :: DType ts us ('KPi tt b)
--- --     --       -> SDKind ts t a
--- --     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
--- --     -- TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
--- -- -- data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (DType ts us a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (DType ts us a) (DType ts us b) |]
+  } ''DType
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
@@ -430,8 +404,10 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Some          :: SDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
     None          :: Prim ts us '[]    ('Pi 'SType ('Optional :$ 'TVar 'IZ))
 
-genPolySing ''Prim
--- genPolySingWith defaultGPSO { gpsoSingEq = False } ''Prim
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (Prim ts us as a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (Prim ts us as a) (Prim ts us bs b) |]
+  } ''Prim
 
 -- | Substitute in a type for all occurrences of a type variable of kind
 -- @a@ indicated by the 'Delete' within a type of kind @b@.
@@ -483,8 +459,11 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
     --           -> DTerm ts us vs a
     --           -> DTerm ts us vs ('Record at)
 
-genPolySing ''DTerm
--- genPolySingWith defaultGPSO { gpsoSingEq = False } ''DTerm
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (DTerm ts us vs a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (DTerm ts us vs a) (DTerm ts us vs b) |]
+  } ''DTerm
+
 
 -- ----------------
 -- > Multiple Level

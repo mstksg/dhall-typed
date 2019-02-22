@@ -51,30 +51,25 @@ data Prod :: (k -> Type) -> [k] -> Type where
 
 infixr 5 :<
 
-genPolySing ''Prod
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance (forall a. PolySingKind (f a)) => PolySingKind (Prod f as) |]
+  , gpsoSingEq = GOHead [d| instance (forall a b. SingEq (f a) (f b)) => SingEq (Prod f as) (Prod f bs) |]
+  } ''Prod
 
 data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type where
     BZ :: BiProd f g '[] '[]
     BS :: f a -> g b -> BiProd f g as bs -> BiProd f g (a ': as) (b ': bs)
 
--- genPolySingWith defaultGPSO { gpsoPSK = False } ''BiProd
-genPolySing ''BiProd
-
--- data SProd f as :: Prod f as -> Type where
---     SØ    :: SProd f '[] 'Ø
---     (:%<) :: PolySing (f a) x
---           -> SProd f as xs
---           -> SProd f (a ': as) (x ':< xs)
-
--- type instance PolySingOf (SProd f '[]      ) 'Ø         = 'SØ
--- type instance PolySingOf (SProd f (a ': as)) (x ':< xs) = PolySingOf (PolySing (f a)) x ':%< PolySingOf (SProd f as) xs
-
--- type instance PolySingOf (SIndex (a ': as) b) ('IS i) = 'SIS (PolySingOf (SIndex as b) i)
-
--- type family SProdOf f as (xs :: Prod f as) = (ys :: SProd f as xs) | ys -> xs where
---     SProdOf f '[]       'Ø         = SØ
---     SProdOf f (a ': as) (x ':< xs) = x :%< SProdOf f as xs
-
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d|
+        instance (forall a. PolySingKind (f a), forall a. PolySingKind (g a))
+            => PolySingKind (BiProd f g as bs)
+      |]
+  , gpsoSingEq = GOHead [d|
+        instance (forall a b. SingEq (f a) (f b), forall a b. SingEq (g a) (g b))
+            => SingEq (BiProd f g as bs) (BiProd f g bs cs)
+      |]
+  } ''BiProd
 
 -- this Show instance is not general enough
 -- deriving instance (forall a. Show (f a)) => Show (Prod f as)

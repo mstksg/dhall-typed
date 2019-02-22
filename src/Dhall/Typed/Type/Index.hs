@@ -37,9 +37,15 @@ import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Singletons
 import qualified GHC.TypeLits                as TL
 
-genPolySing ''Index
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (Index as a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (Index as a) (Index as b) |]
+  } ''Index
 
-genPolySing ''SIndex
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (SIndex as a x) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (SIndex as a x) (SIndex as b y) |]
+  } ''SIndex
 
 -- data SIndex as a :: Index as a -> Type where
 --     SIZ :: SIndex (a ': as) a 'IZ
@@ -91,21 +97,6 @@ instance SingKind (Index as a) where
       IZ   -> SomeSing (SIx SIZ)
       IS i -> case toSing i of
         SomeSing (SIx j) -> SomeSing (SIx (SIS j))
-
--- class SIndexI as a (i :: Index as a) | i -> as a where
---     sIndex :: SIndex as a i
-
--- instance SIndexI (a ': as) a 'IZ where
---     sIndex = SIZ
-
--- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
---     sIndex = SIS sIndex
-
--- type instance SIndexOf
--- type family PolySingOf k (x :: k) = (y :: PolySing k x) | y -> x
--- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
---     SIndexOf (a ': as) a 'IZ     = 'SIZ
---     SIndexOf (a ': as) b ('IS i) = 'SIS (SIndexOf as b i)
 
 sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
 sSameIx = undefined

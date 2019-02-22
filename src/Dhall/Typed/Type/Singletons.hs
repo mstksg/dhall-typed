@@ -57,9 +57,21 @@ import           Numeric.Natural
 import           Unsafe.Coerce
 import qualified Data.Text                            as T
 
-genPolySing ''Const
-genPolySing ''Maybe
-genPolySing ''Proxy
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind a => PolySingKind (Const a b) |]
+  , gpsoSingEq = GOHead [d| instance SingEq a b => SingEq (Const a c) (Const b c) |]
+  } ''Const
+
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind a => PolySingKind (Maybe a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq a a => SingEq (Maybe a) (Maybe a) |]
+  } ''Maybe
+
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (Proxy a) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (Proxy a) (Proxy a) |]
+  } ''Proxy
+
 
 -- instance SingEq a c => SingEq (Const a b) (Const c b) where
 --     singEq = \case
