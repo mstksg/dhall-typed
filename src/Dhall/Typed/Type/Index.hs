@@ -33,9 +33,9 @@ import           Data.Kind
 import           Data.Singletons
 import           Data.Type.Equality
 import           Data.Type.Universe
-import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Singletons
-import qualified GHC.TypeLits                as TL
+import           Dhall.Typed.Type.Singletons.TH
+import qualified GHC.TypeLits                   as TL
 
 genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind (Index as a) |]

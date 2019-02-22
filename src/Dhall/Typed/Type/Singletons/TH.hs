@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE ViewPatterns        #-}
 
-module Dhall.Typed.Internal.TH (
+module Dhall.Typed.Type.Singletons.TH (
   -- * General creation
     genPolySing
   , genPolySingWith

@@ -39,7 +39,6 @@ import           Data.Singletons.Decide
 import           Data.Text                        (Text)
 import           Data.Type.Equality
 import           Dhall.Typed.Core
-import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod

@@ -36,11 +36,11 @@ module Dhall.Typed.Type.Prod (
 
 import           Control.Applicative
 import           Data.Kind
-import           Data.Sequence               (Seq(..))
+import           Data.Sequence                  (Seq(..))
 import           Data.Type.Universe
-import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.Singletons
+import           Dhall.Typed.Type.Singletons.TH
 import           GHC.Generics
 
 data Prod :: (k -> Type) -> [k] -> Type where

@@ -49,8 +49,8 @@ import           Data.Proxy
 import           Data.Singletons.Decide               (Decision(..))
 import           Data.Text                            (Text)
 import           Data.Type.Equality
-import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Singletons.Internal
+import           Dhall.Typed.Type.Singletons.TH
 import           GHC.TypeLits                         (Symbol, KnownSymbol, SomeSymbol(..), someSymbolVal, symbolVal, sameSymbol)
 import           GHC.TypeNats
 import           Numeric.Natural

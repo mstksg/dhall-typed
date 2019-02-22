@@ -71,29 +71,17 @@ module Dhall.Typed.Core.Internal (
 --   , Sing(SDK, getSDK, SDTy, getSDTy, SDTe, getSDTe)
 --   ) where
 
-import           Control.Applicative
-import           Data.Functor.Compose
 import           Data.Kind
 import           Data.Sequence                      (Seq(..))
-import           Data.Singletons.Decide
-import           Data.Singletons.Prelude.Const
-import           Data.Singletons.Prelude.List       (Sing(..))
 import           Data.Singletons.TH hiding          (Sum)
-import           Data.Singletons.TypeLits           (SSymbol, Sing(SSym))
 import           Data.Text                          (Text)
-import           Data.Type.Equality
-import           Data.Type.Predicate
 import           Data.Type.Universe
-import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
-import           Dhall.Typed.Type.Option
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons hiding (SNatural)
-import           Dhall.Typed.Type.Symbol
-import           GHC.TypeLits                       (Symbol)
+import           Dhall.Typed.Type.Singletons.TH
 import           Numeric.Natural
-import           Unsafe.Coerce                      (unsafeCoerce)
 import qualified Data.Sequence                      as Seq
 import qualified GHC.TypeLits                       as TL
 
@@ -442,6 +430,7 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
          -> DTerm ts us vs (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
+    -- TODO: use Seq
     ListLit :: SDType ts us 'Type a
             -> [DTerm ts us vs a]
             -> DTerm ts us vs ('List :$ a)

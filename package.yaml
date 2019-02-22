@@ -32,6 +32,17 @@ dependencies:
 
 library:
   source-dirs: src
+  exposed-modules:
+  - Dhall.Typed
+  - Dhall.Typed.Core
+  - Dhall.Typed.LC
+  - Dhall.Typed.Plugin
+  - Dhall.Typed.Type.Index
+  - Dhall.Typed.Type.N
+  - Dhall.Typed.Type.Option
+  - Dhall.Typed.Type.Prod
+  - Dhall.Typed.Type.Singletons
+  - Dhall.Typed.Type.Singletons.TH
   dependencies:
   - containers
   - decidable

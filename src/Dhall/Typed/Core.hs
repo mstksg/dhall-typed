@@ -61,12 +61,12 @@ kindOfWith us = \case
     TVar i   -> ixProd us i
     TLam u x -> u :%~> kindOfWith (u :< us) x
     TApp f _ -> case kindOfWith us f of
-                  _ :%~> u -> u
-    -- STPoly t x       -> case kindOfWith 
+      _ :%~> u -> u
+    -- STPoly t x       -> case kindOfWith
     -- TPoly :: SingSing DSort t ('WS tt)
     --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
     --       -> DType ts us ('KPi tt a)
-    -- STInts x t       -> case kindOfWith 
+    -- STInts x t       -> case kindOfWith
     -- TInst :: DType ts us ('KPi tt b)
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
