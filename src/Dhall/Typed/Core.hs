@@ -423,7 +423,7 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
     ListFold      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
     ListBuild     :: Prim ts us '[] ('Pi 'SType ('Pi 'SType (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
-    ListAppend    :: Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
+    ListAppend    :: SDType ts us 'Type a -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
     ListHead      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListLast      :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListReverse   :: Prim ts us '[] ('Pi 'SType ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
