@@ -101,7 +101,7 @@ instance SingKind (Index as a) where
 -- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
 --     sIndex = SIS sIndex
 
--- type instance SIndexOf 
+-- type instance SIndexOf
 -- type family PolySingOf k (x :: k) = (y :: PolySing k x) | y -> x
 -- type family SIndexOf as a (i :: Index as a) = (s :: SIndex as a i) | s -> i where
 --     SIndexOf (a ': as) a 'IZ     = 'SIZ

@@ -37,7 +37,6 @@ import           Data.Set                             (Set)
 import           Data.Singletons.Decide               (Decision(..))
 import           Data.Traversable
 import           Data.Type.Equality
-import           Debug.Trace
 import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
@@ -286,7 +285,6 @@ polySingKind
     -> [DCon]
     -> q DDec
 polySingKind nm defctx bndrs cons = do
-    -- qRunIO $ putStrLn $ "Generating PSK for " ++ show nm ++ "\n"
     fps <- traverse mkFps cons
     tps <- traverse mkTps cons
     n   <- qNewName "x"
@@ -301,15 +299,6 @@ polySingKind nm defctx bndrs cons = do
               [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
               ]
           ]
-    -- qRunIO . appendFile "scratch/eqPS.hs" . (++ "\n") . pprint . sweeten . (:[]) $
-    --     DLetDec . DFunD 'eqPS $
-    --       [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
-    --       ]
-    -- qRunIO . print . length . pprint . sweeten $ [res]
-    -- qRunIO . putStrLn . pprint $ sweeten cctx
-    -- qRunIO . putStrLn . pprint . sweeten $
-    --   [ DLetDec . DFunD 'fromPolySing $ [ DClause [DVarPa n] $ DCaseE (DVarE n) fps ]]
-    -- qRunIO $ putStrLn "Done generating PSK."
     pure res
   where
     cctx :: [DPred]
@@ -408,7 +397,7 @@ polySingSingEq nm bndrs cons = do
     eps   <- traverse mkEps cons
     DTyConI _ (Just insts) <- dsInfo <=< reifyWithLocals $ ''SingEq
 
-    let instMap = traceShowId . M.fromList $ mapMaybe singEqInstance insts
+    let instMap = M.fromList $ mapMaybe singEqInstance insts
         fullyDet = findFullyDet instMap
 
     bndr2 <- for (zip [0..] bndr1) $ \(i, b) ->
@@ -423,8 +412,6 @@ polySingSingEq nm bndrs cons = do
               , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
               ]
           )
-    liftIO . putStrLn . pprint . sweeten $ cctx
-    liftIO . putStrLn . pprint . sweeten $ [res []]
     pure $ res
           [ DLetDec . DFunD 'singEq $
               [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
@@ -436,11 +423,10 @@ polySingSingEq nm bndrs cons = do
                               (determines <$> cons)
       where
         determines :: DCon -> IntSet
-        determines (DCon _ _ cnm cfs cTy) = traceShow cnm . traceShowId . IM.keysSet
-                                        . IM.filter S.null
-                                        . fmap (`S.difference` found)
-                                        . traceShowId
-                                        $ needed'
+        determines (DCon _ _ cnm cfs cTy) = IM.keysSet
+                                          . IM.filter S.null
+                                          . fmap (`S.difference` found)
+                                          $ needed'
           where
             needed :: IntMap (Set Name)
             needed = case unApply cTy of
@@ -451,7 +437,7 @@ polySingSingEq nm bndrs cons = do
                     . IM.mapAccum (\seen news -> (seen `S.union` news, news `S.difference` seen)) S.empty
                     $ needed
             found :: Set Name
-            found = traceShowId . S.fromList $ do
+            found = S.fromList $ do
               t <- case cfs of
                 DNormalC _ ts -> map snd ts
                 DRecC ts      -> map (\(_,_,t) -> t) ts
@@ -459,28 +445,18 @@ polySingSingEq nm bndrs cons = do
                 (unApply->(DConT n, ts))
                   | n == nm -> foldMap (filter isVar . allNamesIn) ts
                 (deSingleApplied->Just (unApply->(DConT n, ts), qs))
-                  | Just constSame <- traceShowId $ M.lookup (nameBase n) insts
+                  | Just constSame <- M.lookup (nameBase n) insts
                   -> filter isVar . concat $
                         zipWith (\case False -> allNamesIn; True -> const [])
                           (constSame ++ repeat False) (ts ++ [qs])
                 (unApply->(tc, ts)) -> do
                   _ :|> l <- pure $ Seq.fromList (tc : ts)
                   filter isVar . allNamesIn $ l
-              -- case unApply t of
-              --   (DConT (traceShowId->n), ts)
-              --     | n == nm -> foldMap (filter isVar . allNamesIn) ts
-              --     -- | Just constSame <- traceShowId (M.lookup n insts)
-              --     -- -> filter isVar . concat $
-              --     --     zipWith (\case False -> allNamesIn; True -> const [])
-              --     --       (constSame ++ repeat False) ts
-              --     -- | otherwise -> foldMap (filter isVar . allNamesIn) ts   -- HERE: should only be for SingEq
-              --   (tc     , ts) -> do
--- 1.  Shows up as the *last* argument in any input
--- 2.  Shows up in any argument covered by a TestEq instance where "both
---     sides" are different tyvars.
--- 3.  Shows up in any recursive argument (this should be a sub-case of
---     #2 that evens out when taking the intersection).
-        -- found = flip foldMap (case cfs of) _
+            -- 1.  Shows up as the *last* argument in any input
+            -- 2.  Shows up in any argument covered by a TestEq instance where "both
+            --     sides" are different tyvars.
+            -- 3.  Shows up in any recursive argument (this should be a sub-case of
+            --     #2 that evens out when taking the intersection).
     mkCctx :: [(DTyVarBndr, DTyVarBndr)] -> [DPred]
     mkCctx b0 = nubOrdOn show $ do
       DCon _ _ _ cfs cTy <- cons
@@ -606,26 +582,6 @@ polySingSingEq nm bndrs cons = do
 -- Situations like vanilla types (Bool) will not run into this, because
 -- their result types have no type variables.
 
-
-              -- where
-              --   (matcher, patner, witner) = case deSingleApplied t of
-              --     Just _  -> (DVarE 'sameSingSing, DConPa 'SiSiRefl [], DConE 'SiSiRefl)
-              --     Nothing -> (DVarE 'eqPS        , DConPa 'Refl     [], DConE 'Refl    )
-
-    -- let res = DInstanceD Nothing (fromMaybe cctx defctx)
-    --       ( DConT ''PolySingKind `DAppT`
-    --            applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
-    --       )
-    --       [ DLetDec . DFunD 'fromPolySing $
-    --           [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
-    --           ]
-    --       , DLetDec . DFunD 'toPolySing $
-    --           [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
-    --           ]
-    --       -- , DLetDec . DFunD 'eqPS $
-    --       --     [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
-    --       --     ]
-    --       ]
 
 -- | Returns the type constructor of the 'SingEq' instance, and also a list
 -- of whether or not each field is constrained to be the same.

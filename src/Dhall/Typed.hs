@@ -146,19 +146,19 @@ toTyped ctx = \case
     D.List          -> pure . SomeDExpr . deType $ List
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
-    -- D.ListAppend x y -> do
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
-    --   -- TODO: normalize before checking for equality
-    --   Proved Refl <- Just $ eqPS a b
-    --   pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P ListAppend (x' :< y' :< Ø)
+    D.ListAppend x y -> do
+      SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
+      SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
+      -- TODO: normalize before checking for equality
+      Proved HRefl <- pure $ singEq a b
+      pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P (ListAppend a) (x' :< y' :< Ø)
     D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
     D.Optional      -> pure . SomeDExpr . deType $ Optional
     D.Some x        -> do
       SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
-      pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P Some (x' :< Ø)
+      pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P (Some a) (x' :< Ø)
     D.None          -> pure . SomeDExpr . deTerm $ P None Ø
     D.Note _ x      -> toTyped ctx x
     D.ImportAlt x _ -> toTyped ctx x
