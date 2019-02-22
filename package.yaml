@@ -27,6 +27,9 @@ ghc-options:
 - -freduction-depth=1000
 # - -Werror=incomplete-patterns
 
+cpp-options:
+- -DNOSING
+
 dependencies:
 - base >= 4.7 && < 5
 

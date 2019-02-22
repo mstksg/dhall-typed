@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE DeriveFunctor       #-}
 {-# LANGUAGE LambdaCase          #-}
 {-# LANGUAGE MultiWayIf          #-}
@@ -48,6 +49,15 @@ import qualified Data.IntSet                          as IS
 import qualified Data.Map                             as M
 import qualified Data.Sequence                        as Seq
 import qualified Data.Set                             as S
+
+
+nosing :: Bool
+#ifdef NOSING
+nosing = True
+#else
+nosing = False
+#endif
+
 
 -- Here we will generate singletons for GADTs in the "leading kind
 -- variable" style.  Something like:
@@ -375,14 +385,16 @@ polySingKind nm o defctx bndrs cons = do
           ( DConT ''PolySingKind `DAppT`
                applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndrs)
           )
-          [ DLetDec . DFunD 'fromPolySing $
-              [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
-              ]
-          , DLetDec . DFunD 'toPolySing $
-              [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
-              ]
-          ]
-    pure res
+    pure . res $
+      if nosing
+        then []
+        else [ DLetDec . DFunD 'fromPolySing $
+                 [ DClause [DVarPa n] $ DCaseE (DVarE n) fps
+                 ]
+             , DLetDec . DFunD 'toPolySing $
+                 [ DClause [DVarPa n] $ DCaseE (DVarE n) tps
+                 ]
+             ]
   where
     cctx :: [DPred]
     cctx = nubOrdOn show $ do
@@ -502,11 +514,13 @@ polySingSingEq nm o defctx defbndrs cons = do
               , applyDType (DConT nm) (dTyVarBndrToDType . mkPlain <$> bndr2)
               ]
           )
-    pure $ res
-          [ DLetDec . DFunD 'singEq $
-              [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
-              ]
-          ]
+    pure . res $
+      if nosing
+        then []
+        else [ DLetDec . DFunD 'singEq $
+                 [ DClause [DVarPa n] $ DCaseE (DVarE n) eps
+                 ]
+             ]
   where
     findFullyDet :: Map String [Bool] -> [DTyVarBndr] -> IntSet
     findFullyDet insts bndrs =
