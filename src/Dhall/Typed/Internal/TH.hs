@@ -9,18 +9,18 @@
 {-# LANGUAGE ViewPatterns        #-}
 
 module Dhall.Typed.Internal.TH (
-    inspector
-  -- , unApply
-  , genPolySing
+  -- * General creation
+    genPolySing
   , genPolySingWith
-  , genPolySingKind
   , GenPolySingOpts(..), defaultGPSO
   , GenOpts(..)
+  -- * Specific generation
+  , genPolySingKind
+  , genSingEq
   ) where
 
 import           Control.Applicative
 import           Control.Monad
-import           Control.Monad.Reader hiding          (lift)
 import           Control.Monad.Writer hiding          (lift)
 import           Data.Bifunctor
 import           Data.Char
@@ -28,7 +28,6 @@ import           Data.Containers.ListUtils
 import           Data.Default
 import           Data.Foldable
 import           Data.Function
-import           Data.Functor.Identity
 import           Data.IntMap                          (IntMap)
 import           Data.IntSet                          (IntSet)
 import           Data.List
@@ -42,7 +41,6 @@ import           Data.Type.Equality
 import           Dhall.Typed.Type.Singletons.Internal
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Desugar
-import           Language.Haskell.TH.Lift
 import           Language.Haskell.TH.Syntax
 import qualified Control.Monad.Trans                  as MT
 import qualified Data.IntMap                          as IM
@@ -97,13 +95,6 @@ import qualified Data.Set                             as S
 --    KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
 --    SKLam  :: SDSort t -> SDKind (t ': ts) a x -> SDKind ts (t ':*> a) ('KLam (SDSortOf t) x)
 --    @
-
-inspector
-    :: Name
-    -> Q Exp
-inspector name = do
-    i <- dsInfo <=< reifyWithLocals $ name
-    lift $ show i
 
 data GenOpts = GOInfer
              | GOSkip
@@ -214,7 +205,7 @@ genSingEq_ targ = \case
       , Just ts1' <- extractTs ts1
       , Just ts2' <- extractTs ts2
       -> do
-        DTyConI (DDataD _ _ _ bndrs _ cs _) _ <- dsInfo <=< reifyWithLocals $ nm1
+        DTyConI (DDataD _ _ _ _ _ cs _) _ <- dsInfo <=< reifyWithLocals $ nm1
         polySingSingEq nm1 o (Just ctx) (Left (zip ts1' ts2')) cs
     _ -> errorWithoutStackTrace "Not a valid SingEq head."
   where
@@ -424,7 +415,7 @@ polySingKind nm o defctx bndrs cons = do
             case M.lookup v bndrMap of
               Just q  -> pure q
               Nothing -> v <$ tell [v]
-      pure $ DForallPr (DPlainTV <$> nubOrd free) [] $
+      pure $ mkForall (DPlainTV <$> nubOrd free) $
         DConPr ''PolySingKind `DAppPr` t''
 --     fromPolySing = \case
 --       SPB x -> PB (getWS (fromPolySing x))
@@ -523,10 +514,10 @@ polySingSingEq nm o defctx defbndrs cons = do
                               (determines <$> cons)
       where
         determines :: DCon -> IntSet
-        determines (DCon _ _ cnm cfs cTy) = IM.keysSet
-                                          . IM.filter S.null
-                                          . fmap (`S.difference` found)
-                                          $ needed'
+        determines (DCon _ _ _ cfs cTy) = IM.keysSet
+                                        . IM.filter S.null
+                                        . fmap (`S.difference` found)
+                                        $ needed'
           where
             needed :: IntMap (Set Name)
             needed = case unApply cTy of
@@ -589,7 +580,7 @@ polySingSingEq nm o defctx defbndrs cons = do
               Just (q1, q2) -> MT.lift $ V2 q1 q2
               Nothing       -> v <$ tell (Endo (v:))
           free' = appEndo free []
-      pure $ DForallPr (DPlainTV <$> nubOrd free') [] $
+      pure $ mkForall (DPlainTV <$> nubOrd free') $
         (DConPr ''SingEq `DAppPr` t1) `DAppPr` t2
     mkEps :: DCon -> q DMatch
     mkEps c@(DCon _ _ cnm _ _) = do
@@ -616,7 +607,7 @@ polySingSingEq nm o defctx defbndrs cons = do
                       DLamE [n] (DCaseE (DVarE n) [])
           where
             cnm2' = mapNameBase singleConstr cnm2
-            go (oldN, t) (newN, _) finalRes = do
+            go (oldN, _) (newN, _) finalRes = do
                 n <- qNewName "z"
                 m <- qNewName "q"
                 pure $ DCaseE (applyDExp (DVarE 'singEq) [DVarE oldN, DVarE newN])
@@ -693,6 +684,13 @@ singEqInstance (DInstanceD _ _ t _)
     = Just (nameBase a, zipWith ((==) `on` show) as bs)
 singEqInstance _ = Nothing
 
+mkForall :: [DTyVarBndr] -> DPred -> DPred
+mkForall xs
+    | null xs   = id
+    | otherwise = DForallPr (nubOrdOn show (kinds ++ xs)) []
+  where
+    kinds = [ DPlainTV o | DKindedTV _ k <- xs, o <- allNamesIn k, isVar o ]
+
 bndrName :: DTyVarBndr -> Name
 bndrName = getConst . traverseBndrName Const
 
@@ -749,23 +747,6 @@ traverseDVarT b f = go
       DLitT x   -> pure $ DLitT x
       DWildCardT -> pure DWildCardT
 
-
-allVarsIn :: DType -> [Name]
-allVarsIn = ($ []) . appEndo . getConst . traverseDVarT S.empty (Const . Endo . (:))
-
--- typeSingI :: DType -> Maybe Name
--- typeSingI t = case fst (unApply t) of
---     DConT c -> Just $ mapNameBase iSingleValue c
---     DVarT _ -> Just $ 'sing
-
-
--- class SIndexI as a (i :: Index as a) where
---     sIndex :: SIndex as a i
-
--- instance SIndexI (a ': as) a 'IZ where
---     sIndex = SIZ
--- instance SIndexI as b i => SIndexI (a ': as) b ('IS i) where
---     sIndex = SIS sIndex
 
 saturate :: Quasi q => DCon -> q (DType, [(Name, DType)])
 saturate (DCon _ _ nm fs _) = do

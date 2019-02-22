@@ -23,16 +23,12 @@ module Dhall.Typed.Type.Singletons.Internal (
   , SingSing(..)
   , PolySingOfI
   , SingEq(..)
-  -- , EqTest(..)
-  -- , SameSingSing(..)
-  -- , sameSingSing
   -- * Instances
   , SBool(..), SList(..), STup2(..), STup0(..)
   ) where
 
 import           Data.Kind
-import           Data.Proxy
-import           Data.Singletons.Decide (Decision(..), (:~:)(..))
+import           Data.Singletons.Decide (Decision(..))
 import           Data.Type.Equality
 import           Unsafe.Coerce
 
@@ -49,7 +45,6 @@ data SomePolySing k where
 class PolySingKind k where
     fromPolySing :: PolySing k x -> k
     toPolySing   :: k -> SomePolySing k
-    -- eqPS         :: PolySing k x -> PolySing k y -> Decision (x :~: y)
 
 -- data SameSingSing k a b :: WrappedSing k a -> WrappedSing k b -> Type where
 --     SiSiRefl :: SameSingSing k a a x x
@@ -209,42 +204,37 @@ instance SingEq () () where
 
 
 
-data PoolyBing :: Type where
-    PB :: SBool b -> PoolyBing
+-- data PoolyBing :: Type where
+--     PB :: SBool b -> PoolyBing
 
-data SPoolyBing :: PoolyBing -> Type where
-    SPB :: SingSing Bool b ('WS bb) -> SPoolyBing ('PB bb)
+-- data SPoolyBing :: PoolyBing -> Type where
+--     SPB :: SingSing Bool b ('WS bb) -> SPoolyBing ('PB bb)
 
-foo :: SPoolyBing ('PB 'STrue)
-foo = SPB $ SiSi STrue
+-- foo :: SPoolyBing ('PB 'STrue)
+-- foo = SPB $ SiSi STrue
 
-type instance PolySing PoolyBing = SPoolyBing
+-- type instance PolySing PoolyBing = SPoolyBing
 
-instance PolySingI b => PolySingI ('PB (q :: SBool b)) where
-    polySing = SPB polySing
+-- instance PolySingI b => PolySingI ('PB (q :: SBool b)) where
+--     polySing = SPB polySing
 
-instance PolySingKind PoolyBing where
-    fromPolySing = \case
-      SPB x -> PB (getWS (fromPolySing x))
-    toPolySing = \case
-      PB x -> case toPolySing (WS x) of
-        SomePS (SiSi y) -> SomePS (SPB (SiSi y))
+-- instance PolySingKind PoolyBing where
+--     fromPolySing = \case
+--       SPB x -> PB (getWS (fromPolySing x))
+--     toPolySing = \case
+--       PB x -> case toPolySing (WS x) of
+--         SomePS (SiSi y) -> SomePS (SPB (SiSi y))
 
-instance SingEq PoolyBing PoolyBing where
-    singEq = \case
-      SPB x -> \case
-        SPB y -> case singEq x y of
-          Proved HRefl -> Proved HRefl
-          Disproved v  -> Disproved $ \case HRefl -> v HRefl
-    -- eqPS = \case
-    --   SPB x -> \case
-    --     SPB y -> case sameSingSing x y of
-    --       Proved SiSiRefl -> Proved Refl
-    --       Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+-- instance SingEq PoolyBing PoolyBing where
+--     singEq = \case
+--       SPB x -> \case
+--         SPB y -> case singEq x y of
+--           Proved HRefl -> Proved HRefl
+--           Disproved v  -> Disproved $ \case HRefl -> v HRefl
 
-data SSPoolyBing pb :: SPoolyBing pb -> Type where
-    SSPB :: SingSing (WrappedSing Bool b) ('WS bb) ('WS bbb)
-         -> SSPoolyBing ('PB bb) ('SPB bbb)
+-- data SSPoolyBing pb :: SPoolyBing pb -> Type where
+--     SSPB :: SingSing (WrappedSing Bool b) ('WS bb) ('WS bbb)
+--          -> SSPoolyBing ('PB bb) ('SPB bbb)
 
 -- data SMaybe a :: Maybe a -> Type where
 --     SJust :: PolySing a x -> SMaybe a ('Just x)

@@ -36,9 +36,7 @@ module Dhall.Typed.Type.Prod (
 
 import           Control.Applicative
 import           Data.Kind
-import           Data.Sequence                (Seq(..))
-import           Data.Singletons
--- import           Data.Singletons.Prelude.List
+import           Data.Sequence               (Seq(..))
 import           Data.Type.Universe
 import           Dhall.Typed.Internal.TH
 import           Dhall.Typed.Type.Index
@@ -67,7 +65,7 @@ genPolySingWith defaultGPSO
       |]
   , gpsoSingEq = GOHead [d|
         instance (forall a b. SingEq (f a) (f b), forall a b. SingEq (g a) (g b))
-            => SingEq (BiProd f g as bs) (BiProd f g bs cs)
+            => SingEq (BiProd f g as bs) (BiProd f g cs ds)
       |]
   } ''BiProd
 
