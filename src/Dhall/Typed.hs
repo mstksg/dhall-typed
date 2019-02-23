@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeApplications                  #-}
 {-# LANGUAGE TypeInType                        #-}
 {-# LANGUAGE TypeOperators                     #-}
+{-# LANGUAGE ViewPatterns                      #-}
 
 module Dhall.Typed (
     -- foo
@@ -74,18 +75,18 @@ data Context ts us :: [DType ts us 'Type] -> Type where
               -> Context (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
                                    (Map (ShiftSortSym ts (t ': ts) us t 'InsZ) vs)
     ConsKind  :: Text
-              -> SDKind ts 'Kind u
+              -> NDKind ts 'Kind u
               -> Context ts us vs
               -> Context ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs)
     ConsType  :: Text
-              -> SDType ts us 'Type v
+              -> NDType ts us 'Type v
               -> Context ts us vs
               -> Context ts us (v ': vs)
 
 data ContextItem ts us :: [DType ts us 'Type] -> Type where
     TCISort :: Index ts t -> SDSort t             -> ContextItem ts us vs
-    TCIKind :: Index us u -> SDKind ts 'Kind u    -> ContextItem ts us vs
-    TCIType :: Index vs v -> SDType ts us 'Type v -> ContextItem ts us vs
+    TCIKind :: Index us u -> NDKind ts 'Kind u    -> ContextItem ts us vs
+    TCIType :: Index vs v -> NDType ts us 'Type v -> ContextItem ts us vs
 
 lookupCtx
     :: Text
@@ -122,50 +123,104 @@ lookupCtx v = go
               (True , False) -> descend (i - 1)
               (True , True ) -> Just (TCIType IZ x)
 
+-- lookupCtx
+--     :: Text
+--     -> Integer
+--     -> Context ts us vs
+--     -> Maybe (ContextItem ts us vs)
+-- lookupCtx v = go
 
 toTyped
     :: Context ts us vs
     -> D.Expr () D.X
     -> Maybe (SomeDExpr ts us vs)
 toTyped ctx = \case
-    D.Const D.Sort -> pure . SomeDExpr $ DEMeta
-    D.Const D.Kind -> pure . SomeDExpr . DESort $ Kind
-    D.Const D.Type -> pure . SomeDExpr . deKind $ Type
-    D.Bool         -> pure . SomeDExpr . deType $ Bool
-    D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
-    D.Natural      -> pure . SomeDExpr . deType $ Natural
-    D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
-    D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
-    D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
-    D.NaturalPlus x y -> do
-      SomeDExpr (DETerm (SomeTerm SNatural x')) <- toTyped ctx x
-      SomeDExpr (DETerm (SomeTerm SNatural y')) <- toTyped ctx y
-      pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
-    D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
-    D.List          -> pure . SomeDExpr . deType $ List
-    D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
-    D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
-    D.ListAppend x y -> do
-      SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
-      SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
-      -- TODO: normalize before checking for equality
-      Proved HRefl <- pure $ singEq a b
-      pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P (ListAppend a) (x' :< y' :< Ø)
-    D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
-    D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
-    D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
-    D.Optional      -> pure . SomeDExpr . deType $ Optional
-    D.Some x        -> do
-      SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
-      pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P (Some a) (x' :< Ø)
-    D.None          -> pure . SomeDExpr . deTerm $ P None Ø
-    D.Note _ x      -> toTyped ctx x
-    D.ImportAlt x _ -> toTyped ctx x
-    D.Embed v       -> D.absurd v
+    D.Var (D.V l i) -> lookupCtx l i ctx <&> \case
+      TCISort j t -> SomeDExpr . DEKind $ SomeKind t (KVar j)
+      TCIKind j u -> SomeDExpr . DEType $ SomeType u (TVar j)
+      TCIType j v -> SomeDExpr . DETerm $ SomeTerm v (Var  j)
+    D.Lam l m x -> do
+      SomeDExpr m' <- toTyped ctx m
+      case m' of
+        DEMeta -> Nothing
+        DESort (toPolySing->SomePS t) -> do
+          SomeDExpr x' <- toTyped (ConsSort l t ctx) x
+          case x' of
+            DEMeta                   -> Nothing
+            DESort _                 -> Nothing
+            DEKind (SomeKind t' x'') -> Just $
+              SomeDExpr . DEKind $ SomeKind (t :%*> t') (KLam t x'')
+            DEType (SomeType (NDK u) x'') -> Just $
+              SomeDExpr . DEType $ SomeType (NDK (SKPi (SiSi t) u)) $
+                TPoly (SiSi t) x''
+            DETerm _                -> Nothing    -- poly-kind term not supported
+        DEKind (SomeKind t (toPolySing->SomePS u)) -> case t of
+          SKind -> do
+            SomeDExpr x' <- toTyped (ConsKind l (NDK u) ctx) x
+            case x' of
+              DEMeta    -> Nothing
+              DESort _  -> Nothing
+              DEKind _  -> Nothing
+              DEType (SomeType (NDK u') x'') -> Just $
+                SomeDExpr . DEType $ SomeType (NDK (u :%~> u')) $
+                    TLam (NDK u) x''
+              DETerm (SomeTerm (NDT v) x'') -> Just $
+                SomeDExpr . DETerm $ SomeTerm (NDT (SPi (SNDK (SiSi u)) v)) $
+                  Poly (SNDK (SiSi u)) x''
+          _   -> Nothing  -- type variables must have kinds of sort Kind
+        DEType (SomeType (NDK u) (toPolySing->SomePS v)) -> case skNormalize u of
+          SType -> do
+            SomeDExpr x' <- toTyped (ConsType l (NDT v) ctx) x
+            case x' of
+              DEMeta   -> Nothing
+              DESort _ -> Nothing
+              DEKind _ -> Nothing
+              -- DETerm (SomeTerm v x'')
+
+          _ -> Nothing -- term variables must have types of kind type
+          
+          -- case t of
+            
+
+
+--     | Lam Text (Expr s a) (Expr s a)
+    -- D.Const D.Sort -> pure . SomeDExpr $ DEMeta
+    -- D.Const D.Kind -> pure . SomeDExpr . DESort $ Kind
+    -- D.Const D.Type -> pure . SomeDExpr . deKind $ Type
+    -- D.Bool         -> pure . SomeDExpr . deType $ Bool
+    -- D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
+    -- D.Natural      -> pure . SomeDExpr . deType $ Natural
+    -- D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
+    -- D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
+    -- D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
+    -- D.NaturalPlus x y -> do
+    --   SomeDExpr (DETerm (SomeTerm SNatural x')) <- toTyped ctx x
+    --   SomeDExpr (DETerm (SomeTerm SNatural y')) <- toTyped ctx y
+    --   pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
+    -- D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
+    -- D.List          -> pure . SomeDExpr . deType $ List
+    -- D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
+    -- D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
+    -- D.ListAppend x y -> do
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
+    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
+    --   -- TODO: normalize before checking for equality
+    --   Proved HRefl <- pure $ singEq a b
+    --   pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P (ListAppend a) (x' :< y' :< Ø)
+    -- D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
+    -- D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
+    -- D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
+    -- D.Optional      -> pure . SomeDExpr . deType $ Optional
+    -- D.Some x        -> do
+    --   SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
+    --   pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P (Some a) (x' :< Ø)
+    -- D.None          -> pure . SomeDExpr . deTerm $ P None Ø
+    -- D.Note _ x      -> toTyped ctx x
+    -- D.ImportAlt x _ -> toTyped ctx x
+    -- D.Embed v       -> D.absurd v
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
---     | Var Var
 --     | Lam Text (Expr s a) (Expr s a)
 --     | Pi  Text (Expr s a) (Expr s a)
 --     | App (Expr s a) (Expr s a)
@@ -222,9 +277,6 @@ toTyped ctx = \case
 --     | Constructors (Expr s a)
 --     | Field (Expr s a) Text
 --     | Project (Expr s a) (Set Text)
---     | Note s (Expr s a)
---     | ImportAlt (Expr s a) (Expr s a)
---     | Embed a
 --     deriving (Eq, Foldable, Generic, Traversable, Show, Data)
 
 

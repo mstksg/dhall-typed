@@ -34,7 +34,7 @@ module Dhall.Typed.Core.Internal (
   -- ** Kinds
   , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..)
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType
+  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..)
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Mixed
@@ -44,7 +44,7 @@ module Dhall.Typed.Core.Internal (
   -- * Singletons
   , SDSort(..)
   , SDKind(..), SNDKind(..)
-  , SDType(..)
+  , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
   , KShiftSym, ShiftSym
@@ -264,6 +264,7 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq (NDKind ts a x) (NDKind ts b y) |]
   } ''NDKind
 
+-- why doesn't this work?
 instance PolySingI ('NDK t)
 
 -- instance PolySingOfI t => PolySingI ('NDK (t :: SDKind ts a x)) where
@@ -400,6 +401,17 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
 --     -- KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
 --     -- KNormalize ts 'Kind      'Type        = 'Type
 
+-- | Version of 'SDType' that exposes itself in normal form.
+data NDType ts us a :: DType ts us a -> Type where
+    NDT :: SDType ts us a x
+        -> NDType ts us a (TNormalize ts us a x)
+
+genPolySingWith defaultGPSO
+  { gpsoSingI = False
+  , gpsoPSK    = GOHead [d| instance PolySingKind (NDType ts us a x) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (NDType ts us a x) (NDType ts us b y) |]
+  } ''NDType
+
 
 -- ---------
 -- > Terms
@@ -447,8 +459,12 @@ genPolySingWith defaultGPSO
 -- terms) are not yet supported.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Var  :: Index vs a -> DTerm ts us vs a
-    Lam  :: SDType ts us 'Type v -> DTerm ts us (v ': vs) a -> DTerm ts us vs (v ':-> a)
-    App  :: DTerm ts us vs (a ':-> b) -> DTerm ts us vs a -> DTerm ts us vs b
+    Lam  :: NDType ts us 'Type v
+         -> DTerm ts us (v ': vs) a
+         -> DTerm ts us vs (v ':-> a)
+    App  :: DTerm ts us vs (a ':-> b)
+         -> DTerm ts us vs a
+         -> DTerm ts us vs b
 
     Poly :: SNDKind ts 'Kind u uu
          -> DTerm ts (u ': us)
@@ -458,16 +474,16 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
          -> DTerm ts us vs ('Pi uu a)
     Inst :: SNDKind ts 'Kind u uu
          -> DTerm ts us vs ('Pi uu b)
-         -> SDType ts us u a
+         -> NDType ts us u a
          -> DTerm ts us vs
               (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
     P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
     -- TODO: use Seq
-    ListLit :: SDType ts us 'Type a
+    ListLit :: NDType ts us 'Type a
             -> [DTerm ts us vs a]
             -> DTerm ts us vs ('List :$ a)
-    OptionalLit :: SDType ts us 'Type a
+    OptionalLit :: NDType ts us 'Type a
                 -> Maybe (DTerm ts us vs a)
                 -> DTerm ts us vs ('Optional :$ a)
 
@@ -496,16 +512,21 @@ toSomeKind :: PolySingI a => DKind ts a -> SomeKind ts
 toSomeKind = SomeKind polySing
 
 data SomeType ts :: [DKind ts 'Kind] -> Type where
-    SomeType :: SDKind ts 'Kind a -> DType ts us a -> SomeType ts us
+    SomeType :: NDKind ts 'Kind a -> DType ts us a -> SomeType ts us
 
-toSomeType :: PolySingI a => DType ts vs a -> SomeType ts vs
-toSomeType = SomeType polySing
+toSomeType
+    :: forall ts us a. (PolySingI a, KNormalize ts 'Kind a ~ a)
+    => DType ts us a
+    -> SomeType ts us
+toSomeType = SomeType (NDK (polySing @_ @a))
 
 data SomeTerm ts us :: [DType ts us 'Type] -> Type where
-    SomeTerm :: SDType ts us 'Type a -> DTerm ts us vs a -> SomeTerm ts us vs
+    SomeTerm :: NDType ts us 'Type a -> DTerm ts us vs a -> SomeTerm ts us vs
 
-toSomeTerm :: PolySingI a => DTerm ts us vs a -> SomeTerm ts us vs
-toSomeTerm = SomeTerm polySing
+toSomeTerm
+    :: forall ts us vs a. (PolySingI a, TNormalize ts us 'Type a ~ a)
+    => DTerm ts us vs a -> SomeTerm ts us vs
+toSomeTerm = SomeTerm (NDT (polySing @_ @a))
 
 -- | A 'DExpr' fully covers all legal type-checking dhall terms.  A value
 -- of type
@@ -566,16 +587,19 @@ dExprType = \case
       errorWithoutStackTrace "dExprType: Inaccessible; this should not be allowed by GHC"
     DESort _              -> DEMeta
     DEKind (SomeKind t _) -> DESort (fromPolySing t)
-    DEType (SomeType t _) -> DEKind (SomeKind SKind (fromPolySing t))
-    DETerm (SomeTerm t _) -> DEType (SomeType SType (fromPolySing t))
+    DEType (SomeType (NDK t) _) -> DEKind (SomeKind SKind (fromPolySing t))
+    DETerm (SomeTerm (NDT t) _) -> DEType (SomeType (NDK SType) (fromPolySing t))
 
 deKind :: PolySingI a => DKind ts a -> DExpr ts us vs F2
 deKind = DEKind . toSomeKind
 
-deType :: PolySingI a => DType ts us a -> DExpr ts us vs F1
+deType
+    :: (PolySingI a, KNormalize ts 'Kind a ~ a)
+    => DType ts us a
+    -> DExpr ts us vs F1
 deType = DEType . toSomeType
 
-deTerm :: PolySingI a => DTerm ts us vs a -> DExpr ts us vs F0
+deTerm :: (PolySingI a, TNormalize ts us 'Type a ~ a) => DTerm ts us vs a -> DExpr ts us vs F0
 deTerm = DETerm . toSomeTerm
 
 

@@ -12,9 +12,11 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..)
+  , skNormalize
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType
+  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..)
+  , stNormalize
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Mixed
@@ -26,8 +28,8 @@ module Dhall.Typed.Core (
   , sortOfWith, kindOfWith, typeOfWith
   -- * Singletons
   , SDSort(..)
-  , SDKind(..)
-  , SDType(..)
+  , SDKind(..), SNDKind(..)
+  , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
   , KShiftSym, ShiftSym
@@ -42,6 +44,9 @@ import           Dhall.Typed.Type.Singletons
 
 skNormalize :: SDKind ts a x -> SDKind ts a (KNormalize ts a x)
 skNormalize = undefined
+
+stNormalize :: SDType ts us a x -> SDType ts us a (TNormalize ts us a x)
+stNormalize = undefined
 
 sortOf :: DKind '[] a -> SDSort a
 sortOf = sortOfWith Ø
@@ -106,10 +111,11 @@ typeOf = typeOfWith Ø
 typeOfWith :: Prod (SDType ts us 'Type) vs -> DTerm ts us vs a -> SDType ts us 'Type a
 typeOfWith vs = \case
     Var i           -> ixProd vs i
-    Lam v x         -> v :%-> typeOfWith (v :< vs) x
+    Lam (NDT v) x   -> let v' = stNormalize v
+                       in  v' :%-> typeOfWith (v' :< vs) x
     App f _         -> case typeOfWith vs f of
       _ :%-> v -> v
     P p _           -> snd $ primType p
-    ListLit t _     -> SList `STApp` t
-    OptionalLit t _ -> SOptional `STApp` t
+    ListLit (NDT t) _     -> SList `STApp` stNormalize t
+    OptionalLit (NDT t) _ -> SOptional `STApp` stNormalize t
 
