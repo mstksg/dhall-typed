@@ -97,11 +97,12 @@ primType = \case
     NaturalIsZero -> (Ø, SNatural :%-> SBool)
     ListFold      -> (Ø, polySing)
     ListBuild     -> (Ø, polySing)
-    ListAppend t  -> let l = SList `STApp` t in (l :< l :< Ø, l)
+    ListAppend (NDT t) -> let l = SList `STApp` stNormalize t in (l :< l :< Ø, l)
     ListHead      -> (Ø, polySing)
     ListLast      -> (Ø, polySing)
     ListReverse   -> (Ø, polySing)
-    Some t        -> (t :< Ø, SOptional `STApp` t)
+    Some (NDT t)  -> let t' = stNormalize t
+                     in  (t' :< Ø, SOptional `STApp` t')
     None          -> (Ø, polySing)
     -- None          -> (Ø, SPi _ (SOptional `STApp` STVar SIZ))
 

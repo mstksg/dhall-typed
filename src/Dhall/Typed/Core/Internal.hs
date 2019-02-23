@@ -249,6 +249,8 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts a          ('KVar i   ) = 'KVar i
     KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
     KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
+    KNormalize ts a ('KApp (f :: DKind ts (r ':*> a)) x) =
+      'KApp (KNormalize ts (r ':*> a) f) (KNormalize ts r x)
     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
     KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
     KNormalize ts 'Kind      'Type        = 'Type
@@ -372,7 +374,10 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     TNormalize ts us a          ('TVar i   ) = 'TVar i
     TNormalize ts us (u ':~> a) ('TLam (uu :: NDKind ts 'Kind u) x)
             = 'TLam uu (TNormalize ts (u ': us) a x)
-    -- TNormalize ts us a ('TApp f x) =
+    -- TNormalize ts us a ('TApp ('TLam (tt :: SDSort t) f) x) =
+    --     TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
+    TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
+        'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
     TNormalize ts us 'Type 'Bool = 'Bool
@@ -418,11 +423,11 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
     ListFold      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
     ListBuild     :: Prim ts us '[] ('Pi ('NDK 'SType) ('Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
-    ListAppend    :: SDType ts us 'Type a -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
+    ListAppend    :: NDType ts us 'Type a -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
     ListHead      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListLast      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListReverse   :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
-    Some          :: SDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
+    Some          :: NDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
     None          :: Prim ts us '[]    ('Pi ('NDK 'SType) ('Optional :$ 'TVar 'IZ))
 
 genPolySingWith defaultGPSO

@@ -181,42 +181,45 @@ toTyped ctx = \case
                     Lam (NDT v) x''
           _ -> Nothing -- term variables must have types of kind type
         DETerm _ -> Nothing   -- must be a type
-
---     | Lam Text (Expr s a) (Expr s a)
-    -- D.Const D.Sort -> pure . SomeDExpr $ DEMeta
-    -- D.Const D.Kind -> pure . SomeDExpr . DESort $ Kind
-    -- D.Const D.Type -> pure . SomeDExpr . deKind $ Type
-    -- D.Bool         -> pure . SomeDExpr . deType $ Bool
-    -- D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
-    -- D.Natural      -> pure . SomeDExpr . deType $ Natural
-    -- D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
-    -- D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
-    -- D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
-    -- D.NaturalPlus x y -> do
-    --   SomeDExpr (DETerm (SomeTerm SNatural x')) <- toTyped ctx x
-    --   SomeDExpr (DETerm (SomeTerm SNatural y')) <- toTyped ctx y
-    --   pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
-    -- D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
-    -- D.List          -> pure . SomeDExpr . deType $ List
-    -- D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
-    -- D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
+    D.Const D.Sort -> pure . SomeDExpr $ DEMeta
+    D.Const D.Kind -> pure . SomeDExpr . DESort $ Kind
+    D.Const D.Type -> pure . SomeDExpr . deKind $ Type
+    D.Bool         -> pure . SomeDExpr . deType $ Bool
+    D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
+    D.Natural      -> pure . SomeDExpr . deType $ Natural
+    D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
+    D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
+    D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
+    D.NaturalPlus x y -> do
+      SomeDExpr (DETerm (SomeTerm (NDT t1) x')) <- toTyped ctx x
+      SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
+      SNatural <- pure $ stNormalize t1
+      SNatural <- pure $ stNormalize t2
+      pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
+    D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
+    D.List          -> pure . SomeDExpr . deType $ List
+    D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
+    D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
     -- D.ListAppend x y -> do
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` a) x')) <- toTyped ctx x
-    --   SomeDExpr (DETerm (SomeTerm (SList `STApp` b) y')) <- toTyped ctx y
-    --   -- TODO: normalize before checking for equality
+    --   SomeDExpr (DETerm (SomeTerm (NDT t1) x')) <- toTyped ctx x
+    --   SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
+    --   SList `STApp` a <- pure $ stNormalize t1
+    --   SList `STApp` b <- pure $ stNormalize t2
     --   Proved HRefl <- pure $ singEq a b
-    --   pure . SomeDExpr . DETerm . SomeTerm (SList `STApp` a) $ P (ListAppend a) (x' :< y' :< Ø)
-    -- D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
-    -- D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
-    -- D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
-    -- D.Optional      -> pure . SomeDExpr . deType $ Optional
-    -- D.Some x        -> do
-    --   SomeDExpr (DETerm (SomeTerm a x')) <- toTyped ctx x
-    --   pure . SomeDExpr . DETerm . SomeTerm (SOptional `STApp` a) $ P (Some a) (x' :< Ø)
-    -- D.None          -> pure . SomeDExpr . deTerm $ P None Ø
-    -- D.Note _ x      -> toTyped ctx x
-    -- D.ImportAlt x _ -> toTyped ctx x
-    -- D.Embed v       -> D.absurd v
+    --   pure . SomeDExpr . DETerm . SomeTerm (NDT (SList `STApp` a)) $
+    --     P (ListAppend (NDT a)) (x' :< y' :< Ø)
+    --     -- TODO: nroamlize type but x' and y' have to be the same.
+    D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
+    D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
+    D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
+    D.Optional      -> pure . SomeDExpr . deType $ Optional
+    D.Some x        -> do
+      SomeDExpr (DETerm (SomeTerm (NDT a) x')) <- toTyped ctx x
+      pure . SomeDExpr . DETerm . SomeTerm (NDT (SOptional `STApp` a)) $ P (Some (NDT a)) (x' :< Ø)
+    D.None          -> pure . SomeDExpr . deTerm $ P None Ø
+    D.Note _ x      -> toTyped ctx x
+    D.ImportAlt x _ -> toTyped ctx x
+    D.Embed v       -> D.absurd v
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
