@@ -28,9 +28,6 @@ module Dhall.Typed.Type.Singletons (
   , SingSing(..)
   , PolySingOfI
   , SingEq(..)
-  -- , EqTest(..)
-  -- , SameSingSing(..)
-  -- , sameSingSing
   -- * Instances
   , SConst(..), SMaybe(..), SList(..), STup2(..), SBool(..), SProxy(..), STup0(..)
   -- ** Natural
@@ -164,4 +161,3 @@ instance SingEq Text Text where
             Refl -> case symsym' @m of
               Refl -> Proved HRefl
           Nothing   -> Disproved unsafeCoerce
-

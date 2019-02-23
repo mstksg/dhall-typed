@@ -32,12 +32,14 @@ module Dhall.Typed (
 --   ) where
 
 import           Control.Monad
+import           Data.Foldable
 import           Data.Functor
 import           Data.Kind
 import           Data.Sequence                    (Seq(..))
 import           Data.Singletons
 import           Data.Singletons.Decide
 import           Data.Text                        (Text)
+import           Data.Traversable
 import           Data.Type.Equality
 import           Dhall.Typed.Core
 import           Dhall.Typed.Type.Index
@@ -131,7 +133,8 @@ lookupCtx v = go
 -- lookupCtx v = go
 
 toTyped
-    :: Context ts us vs
+    :: forall ts us vs. ()
+    => Context ts us vs
     -> D.Expr () D.X
     -> Maybe (SomeDExpr ts us vs)
 toTyped ctx = \case
@@ -198,6 +201,28 @@ toTyped ctx = \case
       pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
     D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
     D.List          -> pure . SomeDExpr . deType $ List
+    D.ListLit Nothing xs -> do
+      y :<| ys <- pure xs
+      SomeDExpr (DETerm (SomeTerm (NDT t1) (y' :: DTerm ts us vs a))) <- toTyped ctx y
+      let t1' = stNormalize t1
+      ys' :: [DTerm ts us vs a] <- for (toList ys) $ \z -> do
+        SomeDExpr (DETerm (SomeTerm (NDT t2) z')) <- toTyped ctx z
+        let t2' = stNormalize t2
+        Proved HRefl <- pure $ singEq t1' t2'
+        pure z'
+      pure . SomeDExpr . DETerm $ SomeTerm (NDT (SList `STApp` t1)) $
+        ListLit (NDT t1) (y' : ys')
+    D.ListLit (Just t) xs -> do
+      SomeDExpr (DEType (SomeType (NDK k) (toPolySing->SomePS (t' :: SDType ts us k a)))) <- toTyped ctx t
+      SType <- pure $ skNormalize k
+      let t'' = stNormalize t'
+      xs' <- for (toList xs) $ \y -> do
+        SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
+        let t2' = stNormalize t2
+        Proved HRefl <- pure $ singEq t'' t2'
+        pure y'
+      pure . SomeDExpr . DETerm $ SomeTerm (NDT (SList `STApp` t')) $
+        ListLit (NDT t') xs'
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
     D.ListAppend x y -> do
@@ -212,6 +237,17 @@ toTyped ctx = \case
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
     D.Optional      -> pure . SomeDExpr . deType $ Optional
+    D.OptionalLit t xs -> do
+      SomeDExpr (DEType (SomeType (NDK k) (toPolySing->SomePS (t' :: SDType ts us k a)))) <- toTyped ctx t
+      SType <- pure $ skNormalize k
+      let t'' = stNormalize t'
+      xs' <- for xs $ \y -> do
+        SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
+        let t2' = stNormalize t2
+        Proved HRefl <- pure $ singEq t'' t2'
+        pure y'
+      pure . SomeDExpr . DETerm $ SomeTerm (NDT (SOptional `STApp` t')) $
+        OptionalLit (NDT t') xs'
     D.Some x        -> do
       SomeDExpr (DETerm (SomeTerm (NDT a) x')) <- toTyped ctx x
       pure . SomeDExpr . DETerm . SomeTerm (NDT (SOptional `STApp` a))
