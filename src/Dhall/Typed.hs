@@ -175,13 +175,12 @@ toTyped ctx = \case
               DEMeta   -> Nothing
               DESort _ -> Nothing
               DEKind _ -> Nothing
-              -- DETerm (SomeTerm v x'')
-
+              DEType _ -> Nothing
+              DETerm (SomeTerm (NDT v') x'') -> Just $
+                SomeDExpr . DETerm $ SomeTerm (NDT (v :%-> v')) $
+                    Lam (NDT v) x''
           _ -> Nothing -- term variables must have types of kind type
-          
-          -- case t of
-            
-
+        DETerm _ -> Nothing   -- must be a type
 
 --     | Lam Text (Expr s a) (Expr s a)
     -- D.Const D.Sort -> pure . SomeDExpr $ DEMeta

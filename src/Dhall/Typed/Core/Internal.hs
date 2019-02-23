@@ -374,6 +374,11 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
             = 'TLam uu (TNormalize ts (u ': us) a x)
     -- TNormalize ts us a ('TApp f x) =
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
+    TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
+    TNormalize ts us 'Type 'Bool = 'Bool
+    TNormalize ts us 'Type 'Natural = 'Natural
+    TNormalize ts us ('Type ':~> 'Type) 'List = 'List
+    TNormalize ts us ('Type ':~> 'Type) 'Optional = 'Optional
 
     -- TLam  :: SDKind ts 'Kind u
     --       -> DType ts (KNormalize ts 'Kind u ': us) a
@@ -385,21 +390,6 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     -- TInst :: DType ts us ('KPi tt b)
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
-
-    -- (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
-    -- Pi    :: SDKind ts 'Kind u
-    --       -> DType ts (KNormalize ts 'Kind u ': us) a
-    --       -> DType ts us a
-
---     Bool     :: DType ts us 'Type
---     Natural  :: DType ts us 'Type
---     List     :: DType ts us ('Type :~> 'Type)
---     Optional :: DType ts us ('Type :~> 'Type)
---     -- KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
---     -- KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
---     -- KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
---     -- KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
---     -- KNormalize ts 'Kind      'Type        = 'Type
 
 -- | Version of 'SDType' that exposes itself in normal form.
 data NDType ts us a :: DType ts us a -> Type where
