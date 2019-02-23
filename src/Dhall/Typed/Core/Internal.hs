@@ -254,6 +254,7 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
     KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
     KNormalize ts 'Kind      'Type        = 'Type
+    KNormalize ts a t = TL.TypeError ('TL.Text "No KNormalize")
 
 -- | Version of 'SDKind' that exposes itself in normal form.
 data NDKind ts a :: DKind ts a -> Type where
@@ -384,6 +385,7 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     TNormalize ts us 'Type 'Natural = 'Natural
     TNormalize ts us ('Type ':~> 'Type) 'List = 'List
     TNormalize ts us ('Type ':~> 'Type) 'Optional = 'Optional
+    TNormalize ts us a t = TL.TypeError ('TL.Text "No TNormalize")
 
     -- TLam  :: SDKind ts 'Kind u
     --       -> DType ts (KNormalize ts 'Kind u ': us) a
@@ -395,6 +397,9 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     -- TInst :: DType ts us ('KPi tt b)
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+
+data TNormalizeSym ts us a :: DType ts us a ~> DType ts us a
+type instance Apply (TNormalizeSym ts us a) x = TNormalize ts us a x
 
 -- | Version of 'SDType' that exposes itself in normal form.
 data NDType ts us a :: DType ts us a -> Type where
@@ -423,11 +428,12 @@ data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     NaturalIsZero :: Prim ts us '[] ('Natural :-> 'Bool)
     ListFold      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ)))
     ListBuild     :: Prim ts us '[] ('Pi ('NDK 'SType) ('Pi ('NDK 'SType) (('TVar ('IS 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'List :$ 'TVar 'IZ))
-    ListAppend    :: NDType ts us 'Type a -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
+    ListAppend    :: SDType ts us 'Type a
+                  -> Prim ts us '[ 'List :$ a, 'List :$ a ] ('List :$ a)
     ListHead      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListLast      :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'Optional :$ 'TVar 'IZ))
     ListReverse   :: Prim ts us '[] ('Pi ('NDK 'SType) ('List :$ 'TVar 'IZ :-> 'List     :$ 'TVar 'IZ))
-    Some          :: NDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
+    Some          :: SDType ts us 'Type a -> Prim ts us '[ a ] ('Optional :$ a)
     None          :: Prim ts us '[]    ('Pi ('NDK 'SType) ('Optional :$ 'TVar 'IZ))
 
 genPolySingWith defaultGPSO
@@ -473,7 +479,9 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
          -> DTerm ts us vs
               (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
-    P    :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
+    P    :: Prim ts us as a
+         -> Prod (DTerm ts us vs) as
+         -> DTerm ts us vs a
     -- TODO: use Seq
     ListLit :: NDType ts us 'Type a
             -> [DTerm ts us vs a]
@@ -516,7 +524,9 @@ toSomeType
 toSomeType = SomeType (NDK (polySing @_ @a))
 
 data SomeTerm ts us :: [DType ts us 'Type] -> Type where
-    SomeTerm :: NDType ts us 'Type a -> DTerm ts us vs a -> SomeTerm ts us vs
+    SomeTerm :: NDType ts us 'Type a
+             -> DTerm ts us vs a
+             -> SomeTerm ts us vs
 
 toSomeTerm
     :: forall ts us vs a. (PolySingI a, TNormalize ts us 'Type a ~ a)

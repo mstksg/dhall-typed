@@ -200,22 +200,22 @@ toTyped ctx = \case
     D.List          -> pure . SomeDExpr . deType $ List
     D.ListFold      -> pure . SomeDExpr . deTerm $ P ListFold Ø
     D.ListBuild     -> pure . SomeDExpr . deTerm $ P ListBuild Ø
-    -- D.ListAppend x y -> do
-    --   SomeDExpr (DETerm (SomeTerm (NDT t1) x')) <- toTyped ctx x
-    --   SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
-    --   SList `STApp` a <- pure $ stNormalize t1
-    --   SList `STApp` b <- pure $ stNormalize t2
-    --   Proved HRefl <- pure $ singEq a b
-    --   pure . SomeDExpr . DETerm . SomeTerm (NDT (SList `STApp` a)) $
-    --     P (ListAppend (NDT a)) (x' :< y' :< Ø)
-    --     -- TODO: nroamlize type but x' and y' have to be the same.
+    D.ListAppend x y -> do
+      SomeDExpr (DETerm (SomeTerm (NDT t1) x')) <- toTyped ctx x
+      SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- toTyped ctx y
+      SList `STApp` a <- pure $ stNormalize t1
+      SList `STApp` b <- pure $ stNormalize t2
+      Proved HRefl <- pure $ singEq a b
+      pure . SomeDExpr . DETerm . SomeTerm (NDT t1) $
+        P (ListAppend a) (x' :< y' :< Ø)
     D.ListHead      -> pure . SomeDExpr . deTerm $ P ListHead Ø
     D.ListLast      -> pure . SomeDExpr . deTerm $ P ListLast Ø
     D.ListReverse   -> pure . SomeDExpr . deTerm $ P ListReverse Ø
     D.Optional      -> pure . SomeDExpr . deType $ Optional
     D.Some x        -> do
       SomeDExpr (DETerm (SomeTerm (NDT a) x')) <- toTyped ctx x
-      pure . SomeDExpr . DETerm . SomeTerm (NDT (SOptional `STApp` a)) $ P (Some (NDT a)) (x' :< Ø)
+      pure . SomeDExpr . DETerm . SomeTerm (NDT (SOptional `STApp` a))
+        $ P (Some (stNormalize a)) (x' :< Ø)
     D.None          -> pure . SomeDExpr . deTerm $ P None Ø
     D.Note _ x      -> toTyped ctx x
     D.ImportAlt x _ -> toTyped ctx x
