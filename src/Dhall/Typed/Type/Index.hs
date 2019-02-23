@@ -21,6 +21,7 @@ module Dhall.Typed.Type.Index (
   -- * Index
     Index(..), SIndex(..), sSameIx, fromSIndex -- , SIndexOf
   , SSIndex(..)
+  , indexN
   -- * Delete
   , Delete(..), del, ISMaybe, Del, SDelete(..), sDel, GetDeleted(..)
   -- * Insert
@@ -33,6 +34,7 @@ import           Data.Kind
 import           Data.Singletons
 import           Data.Type.Equality
 import           Data.Type.Universe
+import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Singletons
 import           Dhall.Typed.Type.Singletons.TH
 import qualified GHC.TypeLits                   as TL
@@ -182,3 +184,9 @@ sIns = \case
       SIZ   -> SIZ
       SIS i -> SIS (sIns ins i)
 
+indexN
+    :: Index as a
+    -> N
+indexN = \case
+    IZ -> Z
+    IS i -> S (indexN i)

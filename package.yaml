@@ -49,18 +49,19 @@ library:
   - Dhall.Typed.Type.Singletons.TH
   dependencies:
   - containers
+  - data-default
   - decidable
   - dhall
   - ghc
   - ghc-tcplugins-extra
+  - mtl
   - profunctors
   - singletons
-  - text
   - template-haskell
+  - text
   - th-desugar
   - th-lift
-  - mtl
-  - data-default
+  - these
 
 # executables:
 #   dhall-typed-exe:
