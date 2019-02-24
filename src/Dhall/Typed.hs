@@ -1,15 +1,16 @@
-{-# LANGUAGE EmptyCase                         #-}
-{-# LANGUAGE FlexibleContexts                  #-}
-{-# LANGUAGE GADTs                             #-}
-{-# LANGUAGE LambdaCase                        #-}
-{-# LANGUAGE OverloadedStrings                 #-}
-{-# LANGUAGE RankNTypes                        #-}
-{-# LANGUAGE ScopedTypeVariables               #-}
-{-# LANGUAGE TemplateHaskell                   #-}
-{-# LANGUAGE TypeApplications                  #-}
-{-# LANGUAGE TypeInType                        #-}
-{-# LANGUAGE TypeOperators                     #-}
-{-# LANGUAGE ViewPatterns                      #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE EmptyCase           #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeInType          #-}
+{-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 -- {-# OPTIONS_GHC -fplugin Dhall.Typed.Plugin #-}
 
@@ -39,17 +40,18 @@ module Dhall.Typed (
 --   ) where
 
 import           Control.Monad
+import           Control.Monad.Except
 import           Data.Foldable
 import           Data.Functor
 import           Data.Kind
 import           Data.Sequence                    (Seq(..))
 import           Data.Singletons
-import           Control.Monad.Except
 import           Data.Singletons.Decide
 import           Data.Text                        (Text)
 import           Data.Traversable
 import           Data.Type.Equality
 import           Data.Type.Predicate
+import           Dhall.Typed.Context
 import           Dhall.Typed.Core
 import           Dhall.Typed.Type.Either
 import           Dhall.Typed.Type.Index
@@ -65,82 +67,6 @@ import qualified Language.Haskell.TH              as TH
 import qualified Language.Haskell.TH.Desugar      as TH
 import qualified Language.Haskell.TH.Desugar.Lift as TH
 import qualified Language.Haskell.TH.Lift         as TH
-
--- -- type family ShiftSort
--- foo :: String
--- foo = $(do Just (TH.DTyConI d _) <- TH.dsReify ''AggType
---            TH.DDataD _ _ nm bs _ cs _ <- pure d
---            vrs <- traverse (TH.conExistentialTvbs (TH.applyDType (TH.DConT nm) (TH.dTyVarBndrToDType <$> bs)))
---                       cs
---            TH.lift $ show vrs
---        )
-
-data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
-                  :: DType ts us 'Type
-                  ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
-
-data Context ts us :: [DType ts us 'Type] -> Type where
-    CtxNil    :: Context '[] '[] '[]
-    ConsSort  :: Text
-              -> SDSort t
-              -> Context ts        us vs
-              -> Context (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
-                                   (Map (ShiftSortSym ts (t ': ts) us t 'InsZ) vs)
-    ConsKind  :: Text
-              -> NDKind ts 'Kind u    -- TODO: more than just Kind
-              -> Context ts us vs
-              -> Context ts (u ': us) (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs)
-    ConsType  :: Text
-              -> NDType ts us 'Type v
-              -> Context ts us vs
-              -> Context ts us (v ': vs)
-
-data ContextItem ts us :: [DType ts us 'Type] -> Type where
-    TCISort :: Index ts t -> SDSort t             -> ContextItem ts us vs
-    TCIKind :: Index us u -> NDKind ts 'Kind u    -> ContextItem ts us vs
-    TCIType :: Index vs v -> NDType ts us 'Type v -> ContextItem ts us vs
-
-lookupCtx
-    :: Text
-    -> Integer
-    -> Context ts us vs
-    -> Maybe (ContextItem ts us vs)
-lookupCtx v = go
-  where
-    go :: Integer -> Context ps qs rs -> Maybe (ContextItem ps qs rs)
-    go i = \case
-      CtxNil       -> Nothing
-      -- ConsSort t e vs ->
-      --   let descend j = go j vs
-      --   in  case (v == t, i <= 0) of
-      --         (False, _    ) -> descend i
-      --         (True , False) -> descend (i - 1)
-      --         (True , True ) -> Just (TCISort e)
-      -- ConsKind t k vs ->
-      --   let descend j = go j vs <&> \case
-      --         TCISort e   -> TCISort e
-      --         TCIKind l a -> TCIKind (IS l)           a
-      --         TCIType l a -> TCIType (shiftIndex k l) (sShift a)
-      --   in  case (v == t, i <= 0) of
-      --         (False, _    ) -> descend i
-      --         (True , False) -> descend (i - 1)
-      --         (True , True ) -> Just (TCIKind IZ k)
-      ConsType t x vs ->
-        let descend j = go j vs <&> \case
-              TCISort l a -> TCISort l      a
-              TCIKind l a -> TCIKind l      a
-              TCIType l a -> TCIType (IS l) a
-        in  case (v == t, i <= 0) of
-              (False, _    ) -> descend i
-              (True , False) -> descend (i - 1)
-              (True , True ) -> Just (TCIType IZ x)
-
--- lookupCtx
---     :: Text
---     -> Integer
---     -> Context ts us vs
---     -> Maybe (ContextItem ts us vs)
--- lookupCtx v = go
 
 data TypeMessage = TM (D.TypeMessage () D.X)
                  | TMNoPolyKind

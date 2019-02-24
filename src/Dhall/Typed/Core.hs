@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs              #-}
 {-# LANGUAGE LambdaCase         #-}
 {-# LANGUAGE TypeInType         #-}
+{-# LANGUAGE TypeOperators      #-}
 
 -- I've split this out from "Dhall.Typed.Core.Internal" to help with
 -- recompilation.  Those singletons are pretty heavy duty.
@@ -13,10 +14,8 @@ module Dhall.Typed.Core (
     DSort(..)
   -- ** Kinds
   , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..)
-  , skNormalize
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..)
-  , stNormalize
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Mixed
@@ -27,11 +26,17 @@ module Dhall.Typed.Core (
   , sortOf, kindOf, typeOf
   , sortOfWith, kindOfWith, typeOfWith
   -- * Singletons
+  -- ** Types
   , SDSort(..)
   , SDKind(..), SNDKind(..)
   , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
+  -- ** Singleton Functions
+  , sShift, sShift1
+  , skNormalize
+  , stNormalize
+  -- ** Defunctionalization Symbols
   , KShiftSym, ShiftSym
   -- * Util
   , Map, MapSym
@@ -49,6 +54,18 @@ skNormalize = undefined
 
 stNormalize :: SDType ts us a x -> SDType ts us a (TNormalize ts us a x)
 stNormalize = undefined
+
+sShift
+    :: SInsert us qs a ins
+    -> SDType ts us b x
+    -> SDType ts qs b (Shift ts us qs a b ins x)
+sShift = undefined
+
+sShift1
+    :: SDType ts us b x
+    -> SDType ts (a ': us) b (Shift ts us (a ': us) a b 'InsZ x)
+sShift1 = sShift SInsZ
+
 
 sortOf :: DKind '[] a -> SDSort a
 sortOf = sortOfWith Ø
