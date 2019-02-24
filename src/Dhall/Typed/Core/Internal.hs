@@ -32,9 +32,9 @@ module Dhall.Typed.Core.Internal (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..)
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..)
+  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Shared
@@ -377,6 +377,13 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     --     TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
         'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
+    -- TNormalize
+    -- TPoly :: SingSing DSort t ('WS tt)
+    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
+    --       -> DType ts us ('KPi tt a)
+    -- TInst :: DType ts us ('KPi tt b)
+    --       -> SDKind ts t a
+    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
     TNormalize ts us 'Type 'Bool = 'Bool

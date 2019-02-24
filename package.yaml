@@ -60,8 +60,6 @@ library:
   - template-haskell
   - text
   - th-desugar
-  - th-lift
-  - these
 
 # executables:
 #   dhall-typed-exe:

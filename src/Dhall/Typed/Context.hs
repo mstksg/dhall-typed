@@ -57,7 +57,7 @@ lookupCtx v = go
       CtxNil       -> Nothing
       ConsSort t (s :: SDSort p) (vs :: Context ps' qs' rs') ->
         let descend :: Integer
-                    -> Maybe (ContextItem (p ': ps') 
+                    -> Maybe (ContextItem (p ': ps')
                                           (Map (KShiftSym ps' (p ': ps') p 'Kind 'InsZ) qs')
                                           (Map (ShiftSortSym ps' (p ': ps') qs' p 'InsZ) rs')
                              )
