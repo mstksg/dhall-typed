@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE QuantifiedConstraints  #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE StandaloneDeriving     #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
 {-# LANGUAGE TypeInType             #-}
 {-# LANGUAGE TypeOperators          #-}
@@ -61,6 +62,8 @@ class PolySingKind k where
 --         Disproved v -> Disproved $ \case SiSiRefl -> v Refl
 
 newtype WrappedSing k (x :: k) = WS { getWS :: PolySing k x }
+
+deriving instance Eq (PolySing k x) => Eq (WrappedSing k x)
 
 newtype SingSing k x :: WrappedSing k x -> Type where
     SiSi :: forall k x (ws :: WrappedSing k x). ()

@@ -92,6 +92,35 @@ toTyped ctx = \case
     D.Lam l m x    -> lamToTyped ctx l m x
     D.Pi  l m x    -> piToTyped ctx l m x
     D.App f x      -> appToTyped ctx f x
+    D.Annot x t    -> runEitherFail TMUnexpected $ liftEF (toTyped ctx x) >>= \case
+      SomeDExpr DEOrder -> throwError $ TM D.Untyped
+      SomeDExpr (DESort x') -> do
+        SomeDExpr DEOrder <- liftEF (toTyped ctx t) <?>
+              TM (D.AnnotMismatch x t (D.Const D.Sort))
+        pure . SomeDExpr . DESort $ x'
+      SomeDExpr (DEKind (SomeKind t' x')) ->
+            (<?> TM (D.AnnotMismatch x (D.normalize t) (fromDSort (fromPolySing t')))) $ do
+        SomeDExpr (DESort (toPolySing->SomePS t'')) <- liftEF (toTyped ctx t)
+        Proved _ <- pure $ singEq t' t''
+        pure . SomeDExpr . DEKind $ SomeKind t' x'
+      SomeDExpr (DEType (SomeType (NDK t') x')) -> do
+        let nt' = skNormalize t'
+            nt'Dhall = fromDKind . fromPolySing $ nt'
+        SomeDExpr (DEKind (SomeKind _ (toPolySing->SomePS t''))) <- liftEF (toTyped ctx t)
+          <?> TM (D.AnnotMismatch x (D.normalize t) nt'Dhall)
+        let nt'' = skNormalize t''
+        Proved _ <- pure (singEq t' t'')
+          <?> TM (D.AnnotMismatch x (fromDKind (fromPolySing nt'')) nt'Dhall)
+        pure . SomeDExpr . DEType $ SomeType (NDK t') x'
+      SomeDExpr (DETerm (SomeTerm (NDT t') x')) -> do
+        let nt' = stNormalize t'
+            nt'Dhall = fromDType . fromPolySing $ nt'
+        SomeDExpr (DEType (SomeType _ (toPolySing->SomePS t''))) <- liftEF (toTyped ctx t)
+          <?> TM (D.AnnotMismatch x (D.normalize t) nt'Dhall)
+        let nt'' = stNormalize t''
+        Proved _ <- pure (singEq t' t'')
+          <?> TM (D.AnnotMismatch x (fromDType (fromPolySing nt'')) nt'Dhall)
+        pure . SomeDExpr . DETerm $ SomeTerm (NDT t') x'
     D.Bool         -> pure . SomeDExpr . deType $ Bool
     D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
     D.Natural      -> pure . SomeDExpr . deType $ Natural
@@ -163,7 +192,10 @@ listLitToTyped
     => Context ts us vs
     -> Maybe (D.Expr () D.X)
     -> [D.Expr () D.X]
-    -> (forall a. SDType ts us 'Type a -> DTerm ts us vs ('List :$ TNormalize ts us 'Type a) -> Either TypeMessage r)
+    -> (forall a. SDType ts us 'Type a
+               -> DTerm ts us vs ('List :$ TNormalize ts us 'Type a)
+               -> Either TypeMessage r
+       )
     -> Either TypeMessage r
 listLitToTyped ctx mt xs f = runEitherFail TMUnexpected $ case mt of
     Nothing -> do
@@ -272,8 +304,6 @@ piToTyped ctx l m x = runEitherFail TMUnexpected $ liftEF (toTyped ctx m) >>= \c
     SomeDExpr DEOrder -> throwError $ TM D.Untyped
     SomeDExpr (DESort t0@(toPolySing->SomePS t)) -> liftEF (toTyped (ConsSort l t ctx) x) >>= \case
       SomeDExpr DEOrder -> throwError $ TM D.Untyped
-      -- Sorts have no variables, so if we have a forall (a : (t : Sort))
-      -- -> (u : Sort), it must ignore the variable.
       SomeDExpr (DESort x') -> pure . SomeDExpr $ DESort (t0 :*> x')
       SomeDExpr (DEKind (SomeKind tx x')) -> pure . SomeDExpr . DEKind $
         SomeKind tx (KPi t x')
@@ -379,22 +409,22 @@ appToTyped ctx f x = runEitherFail TMUnexpected $ liftEF (toTyped ctx f) >>= \ca
               (D.TypeMismatch f txDhall x (fromDType (fromPolySing tx')))
             pure . SomeDExpr . DETerm . SomeTerm (NDT ty) . normalizeTypeOf $
               App f' x'
-      SPi (SNDK (SiSi tt)) (tx :: SDType ts (u ': us) 'Type tx) -> do
-        let ttDhall = fromDKind . fromPolySing $ tt
-        liftEF (toTyped ctx x) >>= \case
-          SomeDExpr DEOrder -> throwError . TM $ D.Untyped
-          SomeDExpr (DESort _) -> throwError . TM $
-            D.TypeMismatch f ttDhall x (D.Const D.Sort)
-          SomeDExpr (DEKind (SomeKind tx' _)) -> throwError . TM $
-            D.TypeMismatch f ttDhall x (fromDSort (fromPolySing tx'))
-          SomeDExpr (DEType (SomeType (NDK tx') x')) -> do
-            Proved HRefl <- pure (singEq tt (skNormalize tx'))
-            SomePS x'' <- pure (toPolySing x')
-            undefined
-            -- pure . SomeDExpr . DETerm .  SomeTerm (NDT subbed) . normalizeTypeOf $
-            --   Inst (SNDK _) f' (NDT x'')
-          SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
-            D.TypeMismatch f ttDhall x (fromDType (fromPolySing tx'))
+      -- SPi (SNDK (SiSi tt)) (tx :: SDType ts (u ': us) 'Type tx) -> do
+      --   let ttDhall = fromDKind . fromPolySing $ tt
+      --   liftEF (toTyped ctx x) >>= \case
+      --     SomeDExpr DEOrder -> throwError . TM $ D.Untyped
+      --     SomeDExpr (DESort _) -> throwError . TM $
+      --       D.TypeMismatch f ttDhall x (D.Const D.Sort)
+      --     SomeDExpr (DEKind (SomeKind tx' _)) -> throwError . TM $
+      --       D.TypeMismatch f ttDhall x (fromDSort (fromPolySing tx'))
+      --     SomeDExpr (DEType (SomeType (NDK tx') x')) -> do
+      --       Proved HRefl <- pure (singEq tt (skNormalize tx'))
+      --       SomePS x'' <- pure (toPolySing x')
+      --       undefined
+      --       -- pure . SomeDExpr . DETerm .  SomeTerm (NDT subbed) . normalizeTypeOf $
+      --       --   Inst (SNDK _) f' (NDT x'')
+      --     SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
+      --       D.TypeMismatch f ttDhall x (fromDType (fromPolySing tx'))
       -- TODO: what about STVar?
       _   -> throwError . TM $ D.NotAFunction f (fromDType (fromPolySing tf))
 
