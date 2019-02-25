@@ -462,7 +462,50 @@ fromTyped = \case
 fromDTerm
     :: DTerm ts us vs a
     -> D.Expr () D.X
-fromDTerm = undefined
+fromDTerm = \case
+    Var i -> D.Var $ D.V "v" (fromIntegral (toNatural (indexN i)))
+    Lam (NDT t) x -> D.Lam "v" (fromDType (fromPolySing t)) (fromDTerm x)
+    App f x -> D.App (fromDTerm f) (fromDTerm x)
+    Poly (SNDK (SiSi t)) x -> D.Lam "u" (fromDKind (fromPolySing t)) (fromDTerm x)
+    Inst f x -> D.App (fromDTerm f) (fromDType (fromPolySing x))
+    P p xs -> fromPrim p xs
+    ListLit (NDT t) xs -> D.ListLit (Just $ fromDType (fromPolySing t))
+                                    (Seq.fromList $ fromDTerm <$> xs)
+    OptionalLit (NDT t) xs -> D.OptionalLit (fromDType (fromPolySing t))
+                                            (fromDTerm <$> xs)
+    RecordLit at xs -> D.RecordLit $ foldMapAggTypeProd
+        (\t _ x -> DM.singleton t (fromDTerm x))
+        (fromPolySing at) xs
+    UnionLit (fromPolySing->at) i x ->
+        let l = ixAggTypeLabel i at const
+        in  D.UnionLit l (fromDTerm x) $ (`foldMapAggType` at) $ \t y ->
+              if t == l
+                then mempty
+                else DM.singleton t (fromDType y)
+
+fromPrim
+    :: Prim ts us as a
+    -> Prod (DTerm ts us vs) as
+    -> D.Expr () D.X
+fromPrim = \case
+    BoolLit b -> \_ -> D.BoolLit b
+    BoolAnd   -> \case x :< y :< Ø -> D.BoolAnd (fromDTerm x) (fromDTerm y)
+    BoolOr    -> \case x :< y :< Ø -> D.BoolOr  (fromDTerm x) (fromDTerm y)
+    NaturalLit n -> \_ -> D.NaturalLit n
+    NaturalFold -> \_ -> D.NaturalFold
+    NaturalBuild -> \_ -> D.NaturalBuild
+    NaturalPlus  -> \case x :< y :< Ø -> D.NaturalPlus  (fromDTerm x) (fromDTerm y)
+    NaturalTimes -> \case x :< y :< Ø -> D.NaturalTimes (fromDTerm x) (fromDTerm y)
+    NaturalIsZero -> \_ -> D.NaturalIsZero
+    ListAppend _ -> \case x :< y :< Ø -> D.ListAppend (fromDTerm x) (fromDTerm y)
+    ListFold -> \_ -> D.ListFold
+    ListBuild -> \_ -> D.ListBuild
+    ListHead -> \_ -> D.ListHead
+    ListLast -> \_ -> D.ListLast
+    ListReverse -> \_ -> D.ListReverse
+    Some _ -> \case x :< Ø -> D.Some (fromDTerm x)
+    None   -> \_ -> D.None
+
 
 fromDType
     :: DType ts us a

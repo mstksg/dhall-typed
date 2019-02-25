@@ -309,7 +309,7 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
           -> DType ts us ('KPi tt a)
-    TInst :: DType ts us ('KPi tt b)
+    TInst :: DType ts us ('KPi tt b)        -- do we need SDSort t input?
           -> SDKind ts t a
           -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
@@ -481,9 +481,9 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
                          u 'Type 'InsZ) vs
                     ) a
          -> DTerm ts us vs ('Pi uu a)
-    Inst :: SNDKind ts 'Kind u uu
-         -> DTerm ts us vs ('Pi uu b)
-         -> NDType ts us u a
+    -- Inst :: SNDKind ts 'Kind u uu
+    Inst :: DTerm ts us vs ('Pi uu b)   -- do we need SNDKind ts 'Kind u uu?
+         -> SDType ts us u a
          -> DTerm ts us vs
               (Sub ts (u ': us) us u 'Type 'DelZ a b)
 
@@ -498,6 +498,7 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
                 -> Maybe (DTerm ts us vs a)
                 -> DTerm ts us vs ('Optional :$ a)
 
+    -- TODO: we need to normalize 'as'
     RecordLit
         :: SAggType (DType ts us 'Type) ls as at
         -> Prod (DTerm ts us vs) as
