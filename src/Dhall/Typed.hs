@@ -39,15 +39,20 @@ module Dhall.Typed (
 --   , ident, konst, konst', konst3, konst4, natBuild, listBuild
 --   ) where
 
+-- import qualified Language.Haskell.TH.Desugar.Lift as TH
+-- import qualified Language.Haskell.TH.Lift         as TH
+import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Except
 import           Data.Foldable
 import           Data.Functor
+import           Data.Functor.Product
 import           Data.Kind
-import           Data.Sequence                    (Seq(..))
+import           Data.Sequence                       (Seq(..))
 import           Data.Singletons
+import           GHC.Generics ((:*:)(..))
 import           Data.Singletons.Decide
-import           Data.Text                        (Text)
+import           Data.Text                           (Text)
 import           Data.Traversable
 import           Data.Type.Equality
 import           Data.Type.Predicate
@@ -59,15 +64,13 @@ import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons
 import           Unsafe.Coerce
-import qualified Data.Sequence                    as Seq
-import qualified Data.Text                        as T
-import qualified Dhall.Context                    as D
-import qualified Dhall.Core                       as D
-import qualified Dhall.TypeCheck                  as D
-import qualified Language.Haskell.TH              as TH
-import qualified Language.Haskell.TH.Desugar      as TH
--- import qualified Language.Haskell.TH.Desugar.Lift as TH
--- import qualified Language.Haskell.TH.Lift         as TH
+import qualified Data.Sequence                       as Seq
+import qualified Data.Text                           as T
+import qualified Dhall.Context                       as D
+import qualified Dhall.Core                          as D
+import qualified Dhall.TypeCheck                     as D
+import qualified Language.Haskell.TH                 as TH
+import qualified Language.Haskell.TH.Desugar         as TH
 
 data TypeMessage = TM (D.TypeMessage () D.X)
                  | TMNoPolyKind
@@ -123,16 +126,18 @@ toTyped ctx = \case
         pure . SomeDExpr . DETerm $ SomeTerm (NDT t') x'
     D.Bool         -> pure . SomeDExpr . deType $ Bool
     D.BoolLit b    -> pure . SomeDExpr . deTerm $ P (BoolLit b) Ø
+    D.BoolAnd x y -> runEitherFail (TM (D.CantAnd x y)) $
+      SomeDExpr . deTerm <$> toPrim ctx BoolAnd ( Const x :< Const y :< Ø )
+    D.BoolOr x y -> runEitherFail (TM (D.CantOr x y)) $
+      SomeDExpr . deTerm <$> toPrim ctx BoolOr ( Const x :< Const y :< Ø )
     D.Natural      -> pure . SomeDExpr . deType $ Natural
     D.NaturalLit n -> pure . SomeDExpr . deTerm $ P (NaturalLit n) Ø
     D.NaturalFold  -> pure . SomeDExpr . deTerm $ P NaturalFold Ø
     D.NaturalBuild -> pure . SomeDExpr . deTerm $ P NaturalBuild Ø
-    D.NaturalPlus x y -> runEitherFail (TM (D.CantAdd x y)) $ do
-      SomeDExpr (DETerm (SomeTerm (NDT t1) x')) <- liftEF $ toTyped ctx x
-      SomeDExpr (DETerm (SomeTerm (NDT t2) y')) <- liftEF $ toTyped ctx y
-      SNatural <- pure $ stNormalize t1
-      SNatural <- pure $ stNormalize t2
-      pure . SomeDExpr . deTerm $ P NaturalPlus (x' :< y' :< Ø)
+    D.NaturalPlus x y -> runEitherFail (TM (D.CantAdd x y)) $
+      SomeDExpr . deTerm <$> toPrim ctx NaturalPlus ( Const x :< Const y :< Ø )
+    D.NaturalTimes x y -> runEitherFail (TM (D.CantMultiply x y)) $
+      SomeDExpr . deTerm <$> toPrim ctx NaturalTimes ( Const x :< Const y :< Ø )
     D.NaturalIsZero -> pure . SomeDExpr . deTerm $ P NaturalIsZero Ø
     D.List          -> pure . SomeDExpr . deType $ List
     D.ListLit t xs -> listLitToTyped ctx t (toList xs) $ \t' xs' ->
@@ -186,6 +191,22 @@ toTyped ctx = \case
     D.Note _ x      -> toTyped ctx x
     D.ImportAlt x _ -> toTyped ctx x
     D.Embed v       -> D.absurd v
+
+toPrim
+    :: forall ts us vs as a. (PolySingI as)
+    => Context ts us vs
+    -> Prim ts us as a
+    -> Prod (Const (D.Expr () D.X)) as
+    -> EitherFail TypeMessage (DTerm ts us vs a)
+    -- Prod (DTerm ts us vs) as)
+toPrim ctx p xs = P p <$> traverseProd go (zipProd xs (singProd polySing))
+  where
+    go :: (Const (D.Expr () D.X) :*: SDType ts us 'Type) x
+       -> EitherFail TypeMessage (DTerm ts us vs x)
+    go (Const x :*: t) = do
+      SomeDExpr (DETerm (SomeTerm (NDT t') x')) <- liftEF $ toTyped ctx x
+      Proved HRefl <- pure $ t `singEq` stNormalize t'
+      pure x'
 
 listLitToTyped
     :: forall ts us vs r. ()

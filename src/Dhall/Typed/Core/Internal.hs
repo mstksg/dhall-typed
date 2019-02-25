@@ -271,6 +271,7 @@ instance PolySingI ('NDK t)
 -- instance PolySingOfI t => PolySingI ('NDK (t :: SDKind ts a x)) where
 
 instance PolySingI ('NDK 'SType) where
+    polySing = SNDK (SiSi SType)
     -- KVar  :: Index ts a -> DKind ts a
     -- KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
     -- KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
@@ -425,6 +426,8 @@ genPolySingWith defaultGPSO
 -- | Primitives of Dhall terms, built into the language.
 data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     BoolLit       :: Bool -> Prim ts us '[] 'Bool
+    BoolAnd       :: Prim ts us '[ 'Bool, 'Bool ] 'Bool
+    BoolOr        :: Prim ts us '[ 'Bool, 'Bool ] 'Bool
     NaturalLit    :: Natural -> Prim ts us '[] 'Natural
     NaturalFold   :: Prim ts us '[] ('Natural :-> 'Pi ('NDK 'SType) (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ))
     NaturalBuild  :: Prim ts us '[] ('Pi ('NDK 'SType) (('TVar 'IZ :-> 'TVar 'IZ) :-> 'TVar 'IZ :-> 'TVar 'IZ) :-> 'Natural)
