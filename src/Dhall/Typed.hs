@@ -469,12 +469,12 @@ fromDType
     -> D.Expr () D.X
 fromDType = \case
     TVar i -> D.Var $ D.V "u" (fromIntegral (toNatural (indexN i)))
-    TLam _ _ -> undefined
+    TLam (NDK t) x -> D.Lam "u" (fromDKind (fromPolySing t)) (fromDType x)
     TApp f x -> D.App (fromDType f) (fromDType x)
-    TPoly _ _ -> undefined
-    TInst _ _ -> undefined
+    TPoly (SiSi t) x -> D.Lam "t" (fromDSort (fromPolySing t)) (fromDType x)
+    TInst f x -> D.App (fromDType f) (fromDKind (fromPolySing x))
     x :-> y -> D.Pi "_" (fromDType x) (fromDType y)
-    Pi _ _ -> undefined
+    Pi (NDK t) x -> D.Pi "u" (fromDKind (fromPolySing t)) (fromDType x)
     Bool -> D.Bool
     Natural -> D.Natural
     List -> D.List
@@ -496,12 +496,37 @@ fromDType = \case
 fromDKind
     :: DKind ts a
     -> D.Expr () D.X
-fromDKind = undefined
+fromDKind = \case
+    KVar i  -> D.Var $ D.V "t" (fromIntegral (toNatural (indexN i)))
+    KLam t x -> D.Lam "t" (fromDSort (fromPolySing t)) (fromDKind x)
+    KApp f x -> D.App (fromDKind f) (fromDKind x)
+    KPi t x -> D.Pi "t" (fromDSort (fromPolySing t)) (fromDKind x)
+    Type    -> D.Const D.Type
+    x :~> y -> D.Pi "_" (fromDKind x) (fromDKind y)
+    TRecord at -> D.Record $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDKind x)
+    TUnion  at -> D.Union $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDKind x)
+    KRecordLit at xs -> D.RecordLit $ foldMapAggTypeProd
+        (\t _ x -> DM.singleton t (fromDKind x))
+        (fromPolySing at) xs
+    KUnionLit (fromPolySing->at) i x ->
+        let l = ixAggTypeLabel i at const
+        in  D.UnionLit l (fromDKind x) $ (`foldMapAggType` at) $ \t y ->
+              if t == l
+                then mempty
+                else DM.singleton t (fromDSort y)
 
 fromDSort
     :: DSort
     -> D.Expr () D.X
-fromDSort = undefined
+fromDSort = \case
+    Kind -> D.Const D.Kind
+    x :*> y -> D.Pi "_" (fromDSort x) (fromDSort y)
+    KRecord at -> D.Record $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDSort x)
+    KUnion  at -> D.Union $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDSort x)
 
 ixAggTypeLabel
     :: PolySingKind k
