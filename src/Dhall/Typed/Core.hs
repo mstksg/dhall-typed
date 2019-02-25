@@ -14,11 +14,13 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), withNormalizedKind, KSub
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
+  , normalizeKindOf
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
+  , normalizeTypeOf
   -- ** Mixed
   , DExpr(..), SomeDExpr(..), dExprType, deKind, deType, deTerm
   -- ** Shared
@@ -51,6 +53,7 @@ import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons
+import           Unsafe.Coerce
 
 skNormalize :: SDKind ts a x -> SDKind ts a (KNormalize ts a x)
 skNormalize = undefined
@@ -95,9 +98,6 @@ skSub1
     -> SDKind (a ': ts) b r
     -> SDKind ts        b (KSub (a ': ts) ts a b 'DelZ x r)
 skSub1 = skSub SDelZ
-    
--- type family KSub ts rs a b
---         (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b where
 
 sortOf :: DKind '[] a -> SDSort a
 sortOf = sortOfWith Ø
@@ -246,25 +246,8 @@ deType = DEType . toSomeType
 deTerm :: (PolySingI a, TNormalize ts us 'Type a ~ a) => DTerm ts us vs a -> DExpr ts us vs F0
 deTerm = DETerm . toSomeTerm
 
--- | In the continuation, @a@ is guaranteed to be normalized.  Wish there
--- was a way to ensure this in the type system.
-withNormalizedKind
-    :: SomeType ts us
-    -> (forall a. SDKind ts 'Kind a -> DType ts us a -> r)
-    -> r
-withNormalizedKind (SomeType (NDK k) x) f = case k of
-    SKVar i -> f (SKVar i) x
+normalizeKindOf :: DType ts us a -> DType ts us (KNormalize ts 'Kind a)
+normalizeKindOf = unsafeCoerce
 
--- data SomeType ts :: [DKind ts 'Kind] -> Type where
---     SomeType :: NDKind ts 'Kind a -> DType ts us a -> SomeType ts us
-
--- type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
---     KNormalize ts a          ('KVar i   ) = 'KVar i
---     KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
---     KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
---     KNormalize ts a ('KApp (f :: DKind ts (r ':*> a)) x) =
---       'KApp (KNormalize ts (r ':*> a) f) (KNormalize ts r x)
---     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
---     KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
---     KNormalize ts 'Kind      'Type        = 'Type
---     KNormalize ts a t = TL.TypeError ('TL.Text "No KNormalize")
+normalizeTypeOf :: DTerm ts us vs a -> DTerm ts us vs (TNormalize ts us 'Type a)
+normalizeTypeOf = unsafeCoerce
