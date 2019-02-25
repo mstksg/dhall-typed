@@ -170,15 +170,10 @@ genPolySingWith defaultGPSO
 data DSort :: Type where
     Kind    :: DSort
     (:*>)   :: DSort -> DSort -> DSort
-    KRecord :: AggType () ls as
+    KRecord :: AggType DSort ls as
             -> DSort
-    KUnion  :: AggType () ls as
+    KUnion  :: AggType DSort ls as
             -> DSort
-
-    -- TRecord :: AggType (DKind ts 'Kind) ls as
-    --         -> DKind ts 'Kind
-    -- TUnion  :: AggType (DKind ts 'Kind) ls as
-    --         -> DKind ts 'Kind
 
 genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind DSort |]
@@ -208,17 +203,20 @@ data DKind :: [DSort] -> DSort -> Type where
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
     KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
     Type  :: DKind ts 'Kind
+    TRecord :: AggType (DKind ts 'Kind) ls as
+            -> DKind ts 'Kind
+    TUnion  :: AggType (DKind ts 'Kind) ls as
+            -> DKind ts 'Kind
 
-    -- KRecordLit :: Prod (DKind ts) (ProdList ps)
-    --            -> DKind ts ('KRecord ps)
-    -- KUnionLit  :: Index (ProdList ps) a
-    --            -> DKind ts a
-    --            -> DKind ts ('KUnion ps)
-
-    -- TRecord :: AggType (DKind ts 'Kind) ls as
-    --         -> DKind ts 'Kind
-    -- TUnion  :: AggType (DKind ts 'Kind) ls as
-    --         -> DKind ts 'Kind
+    KRecordLit
+        :: SAggType DSort ls as at
+        -> Prod (DKind ts) as
+        -> DKind ts ('KRecord at)
+    KUnionLit
+        :: SAggType DSort ls as at
+        -> Index as a
+        -> DKind ts a
+        -> DKind ts ('KUnion at)
 
 type a :~> b = a ':~> b
 infixr 1 :~>
@@ -325,18 +323,20 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     List     :: DType ts us ('Type :~> 'Type)
     Optional :: DType ts us ('Type :~> 'Type)
 
-    -- TRecordLit :: SAggType (DKind ts 'Kind) ls as at
-    --            -> Prod (DType ts us) as
-    --            -> DType ts us ('TRecord at)
-    -- TUnionLit  :: SAggType (DKind ts 'Kind) ls as at
-    --            -> Index as a
-    --            -> DType ts us a
-    --            -> DType ts us ('TRecord at)
+    Record :: AggType (DType ts us 'Type) ls as
+           -> DType ts us 'Type
+    Union  :: AggType (DType ts us 'Type) ls as
+           -> DType ts us 'Type
 
-    -- Record :: AggType (DType ts us 'Type) ls as
-    --        -> DType ts us 'Type
-    -- Union  :: AggType (DType ts us 'Type) ls as
-    --        -> DType ts us 'Type
+    TRecordLit
+        :: SAggType (DKind ts 'Kind) ls as at
+        -> Prod (DType ts us) as
+        -> DType ts us ('TRecord at)
+    TUnionLit
+        :: SAggType (DKind ts 'Kind) ls as at
+        -> Index as a
+        -> DType ts us a
+        -> DType ts us ('TUnion at)
 
     -- TODO
     -- Pi2   :: SDSort t
@@ -498,13 +498,15 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
                 -> Maybe (DTerm ts us vs a)
                 -> DTerm ts us vs ('Optional :$ a)
 
-    -- RecordLit :: SAggType (DType ts us 'Type) ls as at
-    --           -> Prod (DTerm ts us vs) as
-    --           -> DTerm ts us vs ('Record at)
-    -- UnionLit  :: SAggType (DType ts us 'Type) ls as at
-    --           -> Index as a
-    --           -> DTerm ts us vs a
-    --           -> DTerm ts us vs ('Record at)
+    RecordLit
+        :: SAggType (DType ts us 'Type) ls as at
+        -> Prod (DTerm ts us vs) as
+        -> DTerm ts us vs ('Record at)
+    UnionLit
+        :: SAggType (DType ts us 'Type) ls as at
+        -> Index as a
+        -> DTerm ts us vs a
+        -> DTerm ts us vs ('Union at)
 
 genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind (DTerm ts us vs a) |]

@@ -19,6 +19,7 @@ module Dhall.Typed.Type.Prod (
     Prod(..)
   , traverseProd
   , mapProd
+  , foldMapProd
   , zipProd
   , singProd
   , prodSing
@@ -95,6 +96,18 @@ mapProd f = go
     go = \case
       Ø       -> Ø
       x :< xs -> f x :< go xs
+
+foldMapProd
+    :: forall f as m. Monoid m
+    => (forall x. f x -> m)
+    -> Prod f as
+    -> m
+foldMapProd f = go
+  where
+    go :: Prod f bs -> m
+    go = \case
+      Ø -> mempty
+      x :< xs -> f x <> go xs
 
 zipProd
     :: Prod f as

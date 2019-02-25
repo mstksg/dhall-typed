@@ -50,7 +50,6 @@ import           Data.Functor.Product
 import           Data.Kind
 import           Data.Sequence                       (Seq(..))
 import           Data.Singletons
-import           GHC.Generics ((:*:)(..))
 import           Data.Singletons.Decide
 import           Data.Text                           (Text)
 import           Data.Traversable
@@ -63,11 +62,13 @@ import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
 import           Dhall.Typed.Type.Prod
 import           Dhall.Typed.Type.Singletons
+import           GHC.Generics                        ((:*:)(..))
 import           Unsafe.Coerce
 import qualified Data.Sequence                       as Seq
 import qualified Data.Text                           as T
 import qualified Dhall.Context                       as D
 import qualified Dhall.Core                          as D
+import qualified Dhall.Map                           as DM
 import qualified Dhall.TypeCheck                     as D
 import qualified Language.Haskell.TH                 as TH
 import qualified Language.Haskell.TH.Desugar         as TH
@@ -193,12 +194,11 @@ toTyped ctx = \case
     D.Embed v       -> D.absurd v
 
 toPrim
-    :: forall ts us vs as a. (PolySingI as)
+    :: forall ts us vs as a. PolySingI as
     => Context ts us vs
     -> Prim ts us as a
     -> Prod (Const (D.Expr () D.X)) as
     -> EitherFail TypeMessage (DTerm ts us vs a)
-    -- Prod (DTerm ts us vs) as)
 toPrim ctx p xs = P p <$> traverseProd go (zipProd xs (singProd polySing))
   where
     go :: (Const (D.Expr () D.X) :*: SDType ts us 'Type) x
@@ -479,6 +479,19 @@ fromDType = \case
     Natural -> D.Natural
     List -> D.List
     Optional -> D.Optional
+    Record at -> D.Record $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDType x)
+    Union  at -> D.Union $ (`foldMapAggType` at) $ \t x ->
+      DM.singleton t (fromDType x)
+    TRecordLit at xs -> D.RecordLit $ foldMapAggTypeProd
+        (\t _ x -> DM.singleton t (fromDType x))
+        (fromPolySing at) xs
+    TUnionLit (fromPolySing->at) i x ->
+        let l = ixAggTypeLabel i at const
+        in  D.UnionLit l (fromDType x) $ (`foldMapAggType` at) $ \t y ->
+              if t == l
+                then mempty
+                else DM.singleton t (fromDKind y)
 
 fromDKind
     :: DKind ts a
@@ -489,6 +502,46 @@ fromDSort
     :: DSort
     -> D.Expr () D.X
 fromDSort = undefined
+
+ixAggTypeLabel
+    :: PolySingKind k
+    => Index as a
+    -> AggType k ls as
+    -> (Text -> k -> r)
+    -> r
+ixAggTypeLabel = \case
+    IZ -> \case
+      ATS l (WS x) _ -> \f -> f (fromPolySing l) (fromPolySing x)
+    IS i -> \case
+      ATS _ _ xs -> ixAggTypeLabel i xs
+
+foldMapAggType
+    :: forall k ls as m. (PolySingKind k, Monoid m)
+    => (Text -> k -> m)
+    -> AggType k ls as
+    -> m
+foldMapAggType f = go
+  where
+    go :: AggType k ms bs -> m
+    go = \case
+      ATZ -> mempty
+      ATS l (WS x) xs -> f (fromPolySing l) (fromPolySing x) <> go xs
+
+foldMapAggTypeProd
+    :: forall k ls as f m. Monoid m
+    => (forall a. Text -> PolySing k a -> f a -> m)
+    -> AggType k ls as
+    -> Prod f as
+    -> m
+foldMapAggTypeProd f = go
+  where
+    go :: AggType k ms bs -> Prod f bs -> m
+    go = \case
+      ATZ -> \case
+        Ø -> mempty
+      ATS l (WS x) xs -> \case
+        y :< ys -> f (fromPolySing l) x y <> go xs ys
+
 
 -- -- | Syntax tree for expressions
 -- data Expr s a
