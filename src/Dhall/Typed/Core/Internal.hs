@@ -143,7 +143,10 @@ type instance Apply (MapSym f) xs = Map f xs
 
 -- | Meta-level type describing a collection or aggregation of types.  Used
 -- for specifying records and unions.
--- data AggType k :: [Text] -> [k] -> Type where
+--
+-- Currently does not check for uniqueness.  But it should hopefully some
+-- day.  The tricky part is finding a witness type that works both at the
+-- term level and at the lifted type level.
 data AggType k (ls :: [Text]) (as :: [k]) where
     ATZ :: AggType k '[] '[]
     ATS :: SText l              -- TODO: add uniqueness
@@ -378,10 +381,12 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     --     TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
         'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
-    -- TNormalize
     -- TPoly :: SingSing DSort t ('WS tt)
     --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
     --       -> DType ts us ('KPi tt a)
+    -- TNormalize ts us ('KPi tt a)
+    --     ('TPoly (ss :: SingSing DSort t ('WS tt)) (x :: DType (t ': ts) qs a))
+    --     = 'TPoly ss x
     -- TInst :: DType ts us ('KPi tt b)
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)

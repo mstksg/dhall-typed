@@ -63,8 +63,15 @@ Todo
     implemented in old system, but not new.
 *   Add in uniqueness requirements for union and record fields.
 
+### Currently incomplete
+
+*   Uniqueness requirements for union and record fields
+*   Fully implement `TNormalize` for type normalization
+*   Fully implement `Sub` and `Shift` type families
+*   Implement all term and type constructors
+
+
 ### Would be nice
 
 *   Add notes and embeds.
 *   Use hybrid indices like Morte/Dhall, instead of pure De Bruijn ones.
-
