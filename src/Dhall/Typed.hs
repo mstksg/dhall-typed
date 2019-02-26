@@ -201,8 +201,8 @@ toPrim
     -> EitherFail TypeMessage (DTerm ts us vs a)
 toPrim ctx p xs = P p <$> traverseProd go (zipProd xs (singProd polySing))
   where
-    go :: (Const (D.Expr () D.X) :*: SDType ts us 'Type) x
-       -> EitherFail TypeMessage (DTerm ts us vs x)
+    go  :: (Const (D.Expr () D.X) :*: SDType ts us 'Type) x
+        -> EitherFail TypeMessage (DTerm ts us vs x)
     go (Const x :*: t) = do
       SomeDExpr (DETerm (SomeTerm (NDT t') x')) <- liftEF $ toTyped ctx x
       Proved HRefl <- pure $ t `singEq` stNormalize t'
@@ -407,7 +407,7 @@ appToTyped ctx f x = runEitherFail TMUnexpected $ liftEF (toTyped ctx f) >>= \ca
             SomePS x'' <- pure (toPolySing x')
             let subbed = skSub1 x'' tx
             pure . SomeDExpr . DEType .  SomeType (NDK subbed) . normalizeKindOf $
-              TInst f' x''
+              TInst (SiSi tx') f' x''
           SomeDExpr (DEType (SomeType (NDK tx') _)) -> throwError . TM $
             D.TypeMismatch f ttDhall x (fromDKind (fromPolySing tx'))
           SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
@@ -515,7 +515,7 @@ fromDType = \case
     TLam (NDK t) x -> D.Lam "u" (fromDKind (fromPolySing t)) (fromDType x)
     TApp f x -> D.App (fromDType f) (fromDType x)
     TPoly (SiSi t) x -> D.Lam "t" (fromDSort (fromPolySing t)) (fromDType x)
-    TInst f x -> D.App (fromDType f) (fromDKind (fromPolySing x))
+    TInst _ f x -> D.App (fromDType f) (fromDKind (fromPolySing x))
     x :-> y -> D.Pi "_" (fromDType x) (fromDType y)
     Pi (NDK t) x -> D.Pi "u" (fromDKind (fromPolySing t)) (fromDType x)
     Bool -> D.Bool

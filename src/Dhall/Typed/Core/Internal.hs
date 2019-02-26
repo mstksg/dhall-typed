@@ -309,10 +309,12 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts (u ': us) a
           -> DType ts us (u ':~> a)
     TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
+
     TPoly :: SingSing DSort t ('WS tt)
           -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
           -> DType ts us ('KPi tt a)
-    TInst :: DType ts us ('KPi tt b)        -- do we need SDSort t input?
+    TInst :: SingSing DSort t ('WS tt)
+          -> DType ts us ('KPi tt b)
           -> SDKind ts t a
           -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
@@ -381,13 +383,16 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     --     TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
         'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
-    -- TPoly :: SingSing DSort t ('WS tt)
-    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
-    --       -> DType ts us ('KPi tt a)
-    -- TNormalize ts us ('KPi tt a)
-    --     ('TPoly (ss :: SingSing DSort t ('WS tt)) (x :: DType (t ': ts) qs a))
-    --     = 'TPoly ss x
-    -- TInst :: DType ts us ('KPi tt b)
+    TNormalize ts us ('KPi tt a)
+        ('TPoly ('SiSi ss :: SingSing DSort t ('WS tt))
+                (x :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a)
+        )
+        = 'TPoly ('SiSi ss)     -- sorts are always normalized
+                 (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
+    -- TNormalize ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b) ('TInst (f :: DType ts us ('KPi tt b))
+    --             (x :: SDKind ts t a))
+    --     = 'TInst f x
+    -- TInst :: DType ts us ('KPi tt b)        -- do we need SDSort t input?
     --       -> SDKind ts t a
     --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y

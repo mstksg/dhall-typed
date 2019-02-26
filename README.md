@@ -55,20 +55,14 @@ Some important differences between this implementation and the standard:
 Todo
 ----
 
-### Before completion
-
-*   Implement all term and type constructors.
-*   Finish conversion functions between typed and untyped
-*   Finish converting from typed expression to normal Haskell values.  This was
-    implemented in old system, but not new.
-*   Add in uniqueness requirements for union and record fields.
-
 ### Currently incomplete
 
 *   Uniqueness requirements for union and record fields
 *   Fully implement `TNormalize` for type normalization
 *   Fully implement `Sub` and `Shift` type families
 *   Implement all term and type constructors
+    *   `Let`
+    *   Record/Union type-level operations (merge, etc.)
 
 
 ### Would be nice
