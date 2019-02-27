@@ -385,18 +385,6 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 
-type family SubKind
-            (ts :: [DSort])
-            (ps :: [DSort])
-            (us :: [DKind ts 'Kind])
-            (qs :: [DKind ps 'Kind])
-            (t  :: DSort)
-            (b :: DKind ts 'Kind)
-            (del :: Delete ts ps t)
-            (x :: DKind ps t)
-            (r :: DType ts us b)
-         :: DType ps qs (KSub ts ps t 'Kind del x b)
-
 -- | Shift all type variables in a type expression of kind @b@ to account
 -- for a new bound variable of kind @a@, to be inserted at the position
 -- indicated by the 'Insert'.
@@ -405,13 +393,16 @@ type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: D
 data Id :: a ~> a
 type instance Apply Id x = x
 
-type family SubItFools (ts :: [DSort]) (t :: DSort)
+type family SubItYouFools
+                (ts :: [DSort])
+                (t :: DSort)
                 (us :: [DKind ts 'Kind])
                 (a :: DKind ts t)
                 (b :: DKind (t ': ts) 'Kind)
                 (sk :: DKind ts 'Kind)
                 (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
-            :: DType ts us sk
+            :: DType ts us sk where
+    SubItYouFools ts t us a b sk f = TL.TypeError ('TL.Text "Why am I even trying")
 
 -- | Ideally we would want this to be encodable within the type.  But the
 -- main problem here is checking if the LHS of an application is a variable
@@ -441,22 +432,7 @@ type family TNormalize (ts :: [DSort])
                     )
                     (x :: SubbedKind ts t a b sk)
             )
-        = SubItFools ts t us a b sk f
-        -- SubKind (t ': ts) ts (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) us t b 'DelZ a f
-            -- 'TInst ('SiSi ss)
-            --      ('TPoly ('SiSi ss) f)
-            --      x
--- type family SubKind
---             (ts :: [DSort])
---             (ps :: [DSort])
---             (us :: [DKind ts 'Kind])
---             (qs :: [DKind ps 'Kind])
---             (b :: DKind ts 'Kind)
---             (del :: Delete ts ps 'Kind)
---             (x :: DKind ps 'Kind)
---             (r :: DType ts us b)
---          :: DType ps qs (KSub ts ps 'Kind 'Kind del x b)
-
+        = SubItYouFools ts t us a b sk f
     TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
                                 (f :: DType ts us ('KPi tt b))
                                 (x :: SubbedKind ts t a b sk)
