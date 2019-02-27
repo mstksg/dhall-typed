@@ -32,7 +32,7 @@ module Dhall.Typed.Core.Internal (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
   -- ** Terms
@@ -41,11 +41,11 @@ module Dhall.Typed.Core.Internal (
   , AggType(..)
   -- * Singletons
   , SDSort(..)
-  , SDKind(..), SNDKind(..)
+  , SDKind(..), SNDKind(..), SSubbedKind
   , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
-  , KShiftSym, ShiftSym
+  , KShiftSym, KSubSym, ShiftSym
   -- * Util
   , Map, MapSym
   ) where
@@ -233,6 +233,9 @@ genPolySingWith defaultGPSO
 -- @a@ indicated by the 'Delete' within a kind of osrt @b@.
 type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b where
 
+data KSubSym ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) :: DKind ts b ~> DKind rs b
+type instance Apply (KSubSym ts rs a b del x) r = KSub ts rs a b del x r
+
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
 
@@ -247,7 +250,8 @@ type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind 
 type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts a          ('KVar i   ) = 'KVar i
     KNormalize ts (t ':*> a) ('KLam tt x) = 'KLam tt (KNormalize (t ': ts) a x)
-    KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) = KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
+    KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) =
+      KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
     KNormalize ts a ('KApp (f :: DKind ts (r ':*> a)) x) =
       'KApp (KNormalize ts (r ':*> a) f) (KNormalize ts r x)
     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
@@ -279,6 +283,20 @@ instance PolySingI ('NDK 'SType) where
     -- (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
     -- KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
 
+data SubbedKind ts t
+        :: DKind ts t
+        -> DKind (t ': ts) 'Kind
+        -> DKind ts 'Kind
+        -> Type
+      where
+    SbKd :: { getSbKd :: SDKind ts t a }
+         -> SubbedKind ts t a b (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+
+genPolySingWith defaultGPSO
+  { gpsoPSK    = GOHead [d| instance PolySingKind (SubbedKind ts t a b ks) |]
+  , gpsoSingEq = GOHead [d| instance SingEq (SubbedKind ts t a b ks) (SubbedKind ts t c b js) |]
+  } ''SubbedKind
+            
 -- ---------
 -- > Types
 -- ---------
@@ -315,8 +333,8 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts us ('KPi tt a)
     TInst :: SingSing DSort t ('WS tt)
           -> DType ts us ('KPi tt b)
-          -> SDKind ts t a
-          -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+          -> SubbedKind ts t a b sk
+          -> DType ts us sk
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: NDKind ts 'Kind u
@@ -367,15 +385,42 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 
+type family SubKind
+            (ts :: [DSort])
+            (ps :: [DSort])
+            (us :: [DKind ts 'Kind])
+            (qs :: [DKind ps 'Kind])
+            (t  :: DSort)
+            (b :: DKind ts 'Kind)
+            (del :: Delete ts ps t)
+            (x :: DKind ps t)
+            (r :: DType ts us b)
+         :: DType ps qs (KSub ts ps t 'Kind del x b)
+
 -- | Shift all type variables in a type expression of kind @b@ to account
 -- for a new bound variable of kind @a@, to be inserted at the position
 -- indicated by the 'Insert'.
 type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: DType ts qs b where
 
+data Id :: a ~> a
+type instance Apply Id x = x
+
+type family SubItFools (ts :: [DSort]) (t :: DSort)
+                (us :: [DKind ts 'Kind])
+                (a :: DKind ts t)
+                (b :: DKind (t ': ts) 'Kind)
+                (sk :: DKind ts 'Kind)
+                (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+            :: DType ts us sk
+
 -- | Ideally we would want this to be encodable within the type.  But the
 -- main problem here is checking if the LHS of an application is a variable
 -- or not.  This is the next best thing?
-type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
+type family TNormalize (ts :: [DSort])
+                       (us :: [DKind ts 'Kind])
+                       (a  :: DKind ts 'Kind  )
+                       (x  :: DType ts us a   )
+                     :: DType ts us a where
     TNormalize ts us a          ('TVar i   ) = 'TVar i
     TNormalize ts us (u ':~> a) ('TLam (uu :: NDKind ts 'Kind u) x)
             = 'TLam uu (TNormalize ts (u ': us) a x)
@@ -389,12 +434,36 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
         )
         = 'TPoly ('SiSi ss)     -- sorts are always normalized
                  (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
-    -- TNormalize ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b) ('TInst (f :: DType ts us ('KPi tt b))
-    --             (x :: SDKind ts t a))
-    --     = 'TInst f x
-    -- TInst :: DType ts us ('KPi tt b)        -- do we need SDSort t input?
-    --       -> SDKind ts t a
-    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+    TNormalize ts us sk
+            ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
+                    ('TPoly ('SiSi ss)
+                            (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+                    )
+                    (x :: SubbedKind ts t a b sk)
+            )
+        = SubItFools ts t us a b sk f
+        -- SubKind (t ': ts) ts (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) us t b 'DelZ a f
+            -- 'TInst ('SiSi ss)
+            --      ('TPoly ('SiSi ss) f)
+            --      x
+-- type family SubKind
+--             (ts :: [DSort])
+--             (ps :: [DSort])
+--             (us :: [DKind ts 'Kind])
+--             (qs :: [DKind ps 'Kind])
+--             (b :: DKind ts 'Kind)
+--             (del :: Delete ts ps 'Kind)
+--             (x :: DKind ps 'Kind)
+--             (r :: DType ts us b)
+--          :: DType ps qs (KSub ts ps 'Kind 'Kind del x b)
+
+    TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
+                                (f :: DType ts us ('KPi tt b))
+                                (x :: SubbedKind ts t a b sk)
+                        )
+        = 'TInst ('SiSi ss)
+                 (TNormalize ts us ('KPi tt b) f)
+                 x
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
     TNormalize ts us 'Type 'Bool = 'Bool
@@ -403,16 +472,13 @@ type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a where
     TNormalize ts us ('Type ':~> 'Type) 'Optional = 'Optional
     TNormalize ts us a t = TL.TypeError ('TL.Text "No TNormalize")
 
-    -- TLam  :: SDKind ts 'Kind u
-    --       -> DType ts (KNormalize ts 'Kind u ': us) a
-    --       -> DType ts us (KNormalize ts 'Kind u ':~> a)
-    -- TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
     -- TPoly :: SingSing DSort t ('WS tt)
     --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
     --       -> DType ts us ('KPi tt a)
-    -- TInst :: DType ts us ('KPi tt b)
-    --       -> SDKind ts t a
-    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
+    -- TInst :: SingSing DSort t ('WS tt)
+    --       -> DType ts us ('KPi tt b)
+    --       -> SubbedKind ts t a b sk
+    --       -> DType ts us sk
 
 data TNormalizeSym ts us a :: DType ts us a ~> DType ts us a
 type instance Apply (TNormalizeSym ts us a) x = TNormalize ts us a x
@@ -491,8 +557,8 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
                          u 'Type 'InsZ) vs
                     ) a
          -> DTerm ts us vs ('Pi uu a)
-    -- Inst :: SNDKind ts 'Kind u uu
-    Inst :: DTerm ts us vs ('Pi uu b)   -- do we need SNDKind ts 'Kind u uu?
+    Inst :: SNDKind ts 'Kind u uu
+         -> DTerm ts us vs ('Pi uu b)
          -> SDType ts us u a
          -> DTerm ts us vs
               (Sub ts (u ': us) us u 'Type 'DelZ a b)

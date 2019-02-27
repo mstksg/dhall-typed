@@ -407,7 +407,7 @@ appToTyped ctx f x = runEitherFail TMUnexpected $ liftEF (toTyped ctx f) >>= \ca
             SomePS x'' <- pure (toPolySing x')
             let subbed = skSub1 x'' tx
             pure . SomeDExpr . DEType .  SomeType (NDK subbed) . normalizeKindOf $
-              TInst (SiSi tx') f' x''
+              TInst (SiSi tx') f' (SbKd x'')
           SomeDExpr (DEType (SomeType (NDK tx') _)) -> throwError . TM $
             D.TypeMismatch f ttDhall x (fromDKind (fromPolySing tx'))
           SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
@@ -467,7 +467,7 @@ fromDTerm = \case
     Lam (NDT t) x -> D.Lam "v" (fromDType (fromPolySing t)) (fromDTerm x)
     App f x -> D.App (fromDTerm f) (fromDTerm x)
     Poly (SNDK (SiSi t)) x -> D.Lam "u" (fromDKind (fromPolySing t)) (fromDTerm x)
-    Inst f x -> D.App (fromDTerm f) (fromDType (fromPolySing x))
+    Inst _ f x -> D.App (fromDTerm f) (fromDType (fromPolySing x))
     P p xs -> fromPrim p xs
     ListLit (NDT t) xs -> D.ListLit (Just $ fromDType (fromPolySing t))
                                     (Seq.fromList $ fromDTerm <$> xs)
@@ -515,7 +515,7 @@ fromDType = \case
     TLam (NDK t) x -> D.Lam "u" (fromDKind (fromPolySing t)) (fromDType x)
     TApp f x -> D.App (fromDType f) (fromDType x)
     TPoly (SiSi t) x -> D.Lam "t" (fromDSort (fromPolySing t)) (fromDType x)
-    TInst _ f x -> D.App (fromDType f) (fromDKind (fromPolySing x))
+    TInst _ f (SbKd x) -> D.App (fromDType f) (fromDKind (fromPolySing x))
     x :-> y -> D.Pi "_" (fromDType x) (fromDType y)
     Pi (NDK t) x -> D.Pi "u" (fromDKind (fromPolySing t)) (fromDType x)
     Bool -> D.Bool

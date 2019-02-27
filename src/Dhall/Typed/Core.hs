@@ -14,7 +14,7 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub
+  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
   -- ** Types
   , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
   , normalizeKindOf
@@ -31,7 +31,7 @@ module Dhall.Typed.Core (
   -- * Singletons
   -- ** Types
   , SDSort(..)
-  , SDKind(..), SNDKind(..)
+  , SDKind(..), SNDKind(..), SSubbedKind(..)
   , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
