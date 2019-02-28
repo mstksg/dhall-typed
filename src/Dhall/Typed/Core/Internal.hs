@@ -232,6 +232,34 @@ genPolySingWith defaultGPSO
 -- | Substitute in a kind for all occurrences of a kind variable of sort
 -- @a@ indicated by the 'Delete' within a kind of osrt @b@.
 type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b where
+    KSub ts rs a 'Kind del x (r ':~> u) = KSub ts rs a 'Kind del x r ':~> KSub ts rs a 'Kind del x r
+    KSub ts rs a 'Kind del x 'Type = 'Type
+    KSub ts rs a 'Kind del x ('TRecord (at :: AggType (DKind ts 'Kind) ls as))
+                = 'TRecord (KSubAT ts rs a del ls as x at)
+    KSub ts rs a 'Kind del x ('TUnion (at :: AggType (DKind ts 'Kind) ls as))
+                = 'TUnion (KSubAT ts rs a del ls as x at)
+    -- KVar  :: Index ts a -> DKind ts a
+    -- KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
+    -- KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
+    -- KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
+    -- KRecordLit
+    --     :: SAggType DSort ls as at
+    --     -> Prod (DKind ts) as
+    --     -> DKind ts ('KRecord at)
+    -- KUnionLit
+    --     :: SAggType DSort ls as at
+    --     -> Index as a
+    --     -> DKind ts a
+    --     -> DKind ts ('KUnion at)
+
+
+
+type family KSubAT ts rs a (del :: Delete ts rs a) ls as x (at :: AggType (DKind ts 'Kind) ls as)
+        :: AggType (DKind rs 'Kind) ls (Map (KSubSym ts rs a 'Kind del x) as)
+             where
+    KSubAT ts rs a del '[] '[] x 'ATZ = 'ATZ
+    KSubAT ts rs a del (l ': ls) (b ': bs) x ('ATS m ('WS (r :: SDKind ts 'Kind b)) at)
+        = 'ATS m ('WS (TL.TypeError ('TL.Text "this might be a problem"))) (KSubAT ts rs a del ls bs x at)
 
 data KSubSym ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) :: DKind ts b ~> DKind rs b
 type instance Apply (KSubSym ts rs a b del x) r = KSub ts rs a b del x r
@@ -296,7 +324,7 @@ genPolySingWith defaultGPSO
   { gpsoPSK    = GOHead [d| instance PolySingKind (SubbedKind ts t a b ks) |]
   , gpsoSingEq = GOHead [d| instance SingEq (SubbedKind ts t a b ks) (SubbedKind ts t c b js) |]
   } ''SubbedKind
-            
+
 -- ---------
 -- > Types
 -- ---------
@@ -335,6 +363,10 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts us ('KPi tt b)
           -> SubbedKind ts t a b sk
           -> DType ts us sk
+    -- TInst2 :: SingSing DSort t ('WS tt)
+    --       -> DType ts us ('KPi tt b)
+    --       -> SDKind ts t a
+    --       -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: NDKind ts 'Kind u
@@ -393,16 +425,53 @@ type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: D
 data Id :: a ~> a
 type instance Apply Id x = x
 
-type family SubItYouFools
-                (ts :: [DSort])
-                (t :: DSort)
-                (us :: [DKind ts 'Kind])
-                (a :: DKind ts t)
-                (b :: DKind (t ': ts) 'Kind)
-                (sk :: DKind ts 'Kind)
-                (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
-            :: DType ts us sk where
-    SubItYouFools ts t us a b sk f = TL.TypeError ('TL.Text "Why am I even trying")
+-- type family SubItYouFools
+--                 (ts :: [DSort])
+--                 (t :: DSort)
+--                 (us :: [DKind ts 'Kind])
+--                 (a :: DKind ts t)
+--                 (b :: DKind (t ': ts) 'Kind)
+--                 (sk :: DKind ts 'Kind)
+--                 (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+--             :: DType ts us sk where
+--     SubItYouFools ts t us a b sk f = TL.TypeError ('TL.Text "Why am I even trying")
+
+type family SubInst2 ts
+                    t
+                    tt
+                    us
+                    a
+                    b
+                    sk
+                    (s :: SingSing DSort t ('WS tt))
+                    (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+                    (x :: SubbedKind ts t a b sk)
+                :: DType ts us sk where
+    -- SubInst2 ts t tt us a 'Type 'Type ss 'Bool x = 'Bool
+
+-- type family SubInst (s :: SingSing DSort t ('WS tt))
+--                     (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+--                     (x :: SDKind ts t xx)
+--                 :: DType ts us b where
+
+-- type family SubInst (s :: SingSing DSort t ('WS tt))
+--                     (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+--                     (x :: SubbedKind ts t a b sk)
+--                 :: DType ts us sk where
+--     -- SubInst ss 'Bool x = 'Bool
+
+-- type family SubInst2 (ts :: [DSort])
+--                      (us :: [DKind ts 'Kind])
+--                      (a :: DKind ts 'Kind)
+--                      (ss :: SingSing DSort t ('WS tt))
+--                      (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) (KShift ts (t ': ts) t 'Kind 'InsZ a))
+--                      (x :: DKind ts t)
+--                     :: DType ts us a
+-- -- (s :: SingSing DSort t ('WS tt))
+-- --                      a
+-- --                      (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+-- --                      x
+
 
 -- | Ideally we would want this to be encodable within the type.  But the
 -- main problem here is checking if the LHS of an application is a variable
@@ -425,14 +494,18 @@ type family TNormalize (ts :: [DSort])
         )
         = 'TPoly ('SiSi ss)     -- sorts are always normalized
                  (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
-    TNormalize ts us sk
-            ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
-                    ('TPoly ('SiSi ss)
-                            (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
-                    )
-                    (x :: SubbedKind ts t a b sk)
-            )
-        = SubItYouFools ts t us a b sk f
+    -- TNormalize ts us a ('TInst2 ss ('TPoly ss f) (x :: SDKind ts t xx)) = SubInst2 ts us a ss f xx
+    -- TNormalize ts us a ('TInst ss ('TPoly ss f) x) = SubInst ss f x
+    -- TNormalize '[] us 'Type ('TInst ss ('TPoly ss 'Bool) ('SbKd 'SType)) = 'Bool
+    TNormalize ts us a ('TInst ss ('TPoly ss f) x) = TL.TypeError ('TL.Text "hi")
+    -- TNormalize ts us sk
+    --         ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
+    --                 ('TPoly ('SiSi ss)
+    --                         (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b)
+    --                 )
+    --                 (x :: SubbedKind ts t a b sk)
+    --         )
+    --     = SubItYouFools ts t us a b sk f
     TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
                                 (f :: DType ts us ('KPi tt b))
                                 (x :: SubbedKind ts t a b sk)

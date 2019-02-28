@@ -431,21 +431,23 @@ appToTyped ctx f x = runEitherFail TMUnexpected $ liftEF (toTyped ctx f) >>= \ca
             pure . SomeDExpr . DETerm . SomeTerm (NDT ty) . normalizeTypeOf $
               App f' x'
       -- SPi (SNDK (SiSi tt)) (tx :: SDType ts (u ': us) 'Type tx) -> do
-      --   let ttDhall = fromDKind . fromPolySing $ tt
-      --   liftEF (toTyped ctx x) >>= \case
-      --     SomeDExpr DEOrder -> throwError . TM $ D.Untyped
-      --     SomeDExpr (DESort _) -> throwError . TM $
-      --       D.TypeMismatch f ttDhall x (D.Const D.Sort)
-      --     SomeDExpr (DEKind (SomeKind tx' _)) -> throwError . TM $
-      --       D.TypeMismatch f ttDhall x (fromDSort (fromPolySing tx'))
-      --     SomeDExpr (DEType (SomeType (NDK tx') x')) -> do
-      --       Proved HRefl <- pure (singEq tt (skNormalize tx'))
-      --       SomePS x'' <- pure (toPolySing x')
-      --       undefined
-      --       -- pure . SomeDExpr . DETerm .  SomeTerm (NDT subbed) . normalizeTypeOf $
-      --       --   Inst (SNDK _) f' (NDT x'')
-      --     SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
-      --       D.TypeMismatch f ttDhall x (fromDType (fromPolySing tx'))
+      SPi (SNDK (SiSi tt)) (_ :: SDType ts (u ': us) 'Type tx) -> do
+        let ttDhall = fromDKind . fromPolySing $ tt
+        liftEF (toTyped ctx x) >>= \case
+          SomeDExpr DEOrder -> throwError . TM $ D.Untyped
+          SomeDExpr (DESort _) -> throwError . TM $
+            D.TypeMismatch f ttDhall x (D.Const D.Sort)
+          SomeDExpr (DEKind (SomeKind tx' _)) -> throwError . TM $
+            D.TypeMismatch f ttDhall x (fromDSort (fromPolySing tx'))
+          SomeDExpr (DEType _) -> undefined
+          -- SomeDExpr (DEType (SomeType (NDK tx') x')) -> do
+          --   Proved HRefl <- pure (singEq tt (skNormalize tx'))
+          --   SomePS x'' <- pure (toPolySing x')
+          --   let subbed = sSub1 x'' tx
+          --   pure . SomeDExpr . DETerm .  SomeTerm (NDT subbed) . normalizeTypeOf $
+          --     Inst (SNDK _) f' x''
+          SomeDExpr (DETerm (SomeTerm (NDT tx') _)) -> throwError . TM $
+            D.TypeMismatch f ttDhall x (fromDType (fromPolySing tx'))
       -- TODO: what about STVar?
       _   -> throwError . TM $ D.NotAFunction f (fromDType (fromPolySing tf))
 
