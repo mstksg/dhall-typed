@@ -474,6 +474,39 @@ genPolySingWith defaultGPSO
 -- | Substitute in a type for all occurrences of a type variable of kind
 -- @a@ indicated by the 'Delete' within a type of kind @b@.
 type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: DType ts us b) :: DType ts qs b where
+    -- TVar  :: Index us a -> DType ts us a
+    -- TLam  :: NDKind ts 'Kind u
+    --       -> DType ts (u ': us) a
+    --       -> DType ts us (u ':~> a)
+    -- TApp  :: DType ts us (a ':~> b) -> DType ts us a -> DType ts us b
+    -- TPoly :: SingSing DSort t ('WS tt)
+    --       -> DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a
+    --       -> DType ts us ('KPi tt a)
+    -- TInst :: SingSing DSort t ('WS tt)
+    --       -> DType ts us ('KPi tt b)
+    --       -> SubbedKind ts t a b sk
+    --       -> DType ts us sk
+    -- (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
+    -- Pi    :: NDKind ts 'Kind u
+    --       -> DType ts (u ': us) a
+    --       -> DType ts us a
+    -- Bool     :: DType ts us 'Type
+    -- Natural  :: DType ts us 'Type
+    -- List     :: DType ts us ('Type :~> 'Type)
+    -- Optional :: DType ts us ('Type :~> 'Type)
+    -- Record :: AggType (DType ts us 'Type) ls as
+    --        -> DType ts us 'Type
+    -- Union  :: AggType (DType ts us 'Type) ls as
+    --        -> DType ts us 'Type
+    -- TRecordLit
+    --     :: SAggType (DKind ts 'Kind) ls as at
+    --     -> Prod (DType ts us) as
+    --     -> DType ts us ('TRecord at)
+    -- TUnionLit
+    --     :: SAggType (DKind ts 'Kind) ls as at
+    --     -> Index as a
+    --     -> DType ts us a
+    --     -> DType ts us ('TUnion at)
 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
@@ -500,23 +533,23 @@ type family TNormalize (ts :: [DSort])
             = 'TLam uu (TNormalize ts (u ': us) a x)
     -- TNormalize ts us a ('TApp ('TLam (NDK (uu :: SDKind ts 'Kind u)) f) x)
     --     = TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
-    -- HELLO THIIS IS WRONG!!!!!
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
-        'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
+            TL.TypeError ('TL.Text "Normalization of type function application not yet supported.")
+    --     'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
     TNormalize ts us ('KPi tt a)
         ('TPoly ('SiSi ss :: SingSing DSort t ('WS tt))
                 (x :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a)
         )
         = 'TPoly ('SiSi ss)     -- sorts are always normalized
                  (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
-    -- HELLO THIIS IS WRONG!!!!!
     TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
                                 (f :: DType ts us ('KPi tt b))
                                 (x :: SubbedKind ts t a b sk)
                         )
-        = 'TInst ('SiSi ss)
-                 (TNormalize ts us ('KPi tt b) f)
-                 x
+        = TL.TypeError ('TL.Text "Normalization of kind-polymorphic type function application not yet supported.")
+    --     = 'TInst ('SiSi ss)
+    --              (TNormalize ts us ('KPi tt b) f)
+    --              x
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
     TNormalize ts us 'Type 'Bool = 'Bool
@@ -534,7 +567,7 @@ data NDType ts us a :: DType ts us a -> Type where
         -> NDType ts us a (TNormalize ts us a x)
 
 genPolySingWith defaultGPSO
-  { gpsoSingI = False
+  { gpsoSingI  = False
   , gpsoPSK    = GOHead [d| instance PolySingKind (NDType ts us a x) |]
   , gpsoSingEq = GOHead [d| instance SingEq (NDType ts us a x) (NDType ts us b y) |]
   } ''NDType

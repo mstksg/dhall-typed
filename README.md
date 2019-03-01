@@ -47,6 +47,10 @@ Some important differences between this implementation and the standard:
     supported.  I haven't quite figured out the implementation yet.  However,
     all of the other rule pairs (term-term, type-term, type-type, kind-type,
     kind-kind) are implemented.
+*   Although we can manipulate type-level functions (and kind-polymorphic
+    types), we can't yet create values of those types.  The main difficulty is
+    in the implementation of `TNormalize`, which normalizes types.  It could be
+    that type families are not expressive enough to implement this.
 *   For some reason, Dhall forbids kind-records if any of the fields
     aren't `Kind` (so `Kind -> Kind` fields are not allowed).  This
     implementation allows them, and it would be somewhat complicated to
@@ -55,7 +59,7 @@ Some important differences between this implementation and the standard:
 Todo
 ----
 
-### Currently incomplete
+### Currently incomplete, but just a matter of work
 
 *   Uniqueness requirements for union and record fields
 *   Fully implement `TNormalize` for type normalization
@@ -64,6 +68,13 @@ Todo
     *   `Let`
     *   Record/Union type-level operations (merge, etc.)
 
+### Conceptual issues
+
+*   Normalization of type function application, which allows for values of
+    such types.  This is pretty important, and comes up a lot in Dhall, so this
+    is a pretty critical deficiency.
+*   Kind-polymorphic values.  This isn't as big a deal, but it would be nice to
+    figure out how to implement this.
 
 ### Would be nice
 
