@@ -47,20 +47,6 @@ class PolySingKind k where
     fromPolySing :: PolySing k x -> k
     toPolySing   :: k -> SomePolySing k
 
--- data SameSingSing k a b :: WrappedSing k a -> WrappedSing k b -> Type where
---     SiSiRefl :: SameSingSing k a a x x
-
--- sameSingSing
---     :: PolySingKind k
---     => SingSing k a x
---     -> SingSing k b y
---     -> Decision (SameSingSing k a b x y)
--- sameSingSing = \case
---     SiSi x -> \case
---       SiSi y -> case eqPS x y of
---         Proved Refl -> Proved $ unsafeCoerce Refl
---         Disproved v -> Disproved $ \case SiSiRefl -> v Refl
-
 newtype WrappedSing k (x :: k) = WS { getWS :: PolySing k x }
 
 deriving instance Eq (PolySing k x) => Eq (WrappedSing k x)
@@ -77,9 +63,8 @@ instance PolySingI x => PolySingI ('WS (y :: PolySing k x)) where
 instance PolySingKind (WrappedSing k b) where
     fromPolySing (SiSi x) = WS x
     toPolySing (WS x) = SomePS (SiSi x)
-    -- eqPS x y = case sameSingSing x y of
-    --   Proved SiSiRefl -> Proved Refl
-    --   Disproved v     -> Disproved $ \case Refl -> v SiSiRefl
+
+type family ToPolySing (x :: k) :: SomePolySing k
 
 class SingEq f g where
     singEq :: forall x y. PolySing f x -> PolySing g y -> Decision (x :~~: y)
@@ -116,6 +101,12 @@ data SBool :: Bool -> Type where
     STrue  :: SBool 'True
 
 type instance PolySing Bool = SBool
+
+-- type instance ToPolySing 'False = 'SomePS 'SFalse
+-- type instance ToPolySing 'True = 'SomePS 'STrue
+
+-- type instance ToPolySing 'False = 'WS 'SFalse
+-- type instance ToPolySing 'True  = 'WS 'STrue
 
 instance PolySingKind Bool where
     fromPolySing = \case
