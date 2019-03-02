@@ -14,9 +14,15 @@ module Dhall.Typed.Core (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
+  , KBindings(..)
+  , DKind(..)
+  , SomeKind(..)
+  , type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
+  , TBindings(..)
+  , DType(..)
+  , SomeType(..)
+  , type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub, ShiftSort
   , normalizeKindOf
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
@@ -42,7 +48,7 @@ module Dhall.Typed.Core (
   , skNormalize
   , stNormalize
   -- ** Defunctionalization Symbols
-  , KShiftSym, ShiftSym
+  , KShiftSym, ShiftSym, ShiftSortSym
   -- * Util
   , Map, MapSym
   ) where
@@ -72,7 +78,6 @@ sShift1
     -> SDType ts (a ': us) b (Shift ts us (a ': us) a b 'InsZ x)
 sShift1 = sShift SInsZ
 
--- type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: DType ts us b) :: DType ts qs b where
 sSub
     :: SDelete us qs a del
     -> SDType ts qs a x
@@ -140,6 +145,8 @@ kindOfWith us = \case
 primType :: Prim ts us as a -> (Prod (SDType ts us 'Type) as, SDType ts us 'Type a)
 primType = \case
     BoolLit _     -> (Ø, SBool   )
+    BoolAnd       -> (SBool :< SBool :< Ø, SBool)
+    BoolOr        -> (SBool :< SBool :< Ø, SBool)
     NaturalLit _  -> (Ø, SNatural)
     NaturalFold   -> (Ø, polySing)
     NaturalBuild  -> (Ø, polySing)

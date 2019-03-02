@@ -32,42 +32,29 @@ module Dhall.Typed.Core.Internal (
   -- ** Sorts
     DSort(..)
   -- ** Kinds
-  , DKind(..), SomeKind(..), type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
+  , KBindings(..)
+  , DKind(..)
+  , SomeKind(..)
+  , type (:~>), KShift, toSomeKind, KNormalize, NDKind(..), KSub, SubbedKind(..)
   -- ** Types
-  , DType(..), SomeType(..), type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub
+  , TBindings(..)
+  , DType(..)
+  , SomeType(..)
+  , type (:$), type (:->), Shift, toSomeType, TNormalize, NDType(..), Sub, ShiftSort
   -- ** Terms
-  , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
+  , Prim(..), Bindings(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Shared
-  , AggType(..), Bindings(..)
+  , AggType(..)
   -- * Singletons
   , SDSort(..)
   , SDKind(..), SNDKind(..), SSubbedKind(..)
   , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
-  , KShiftSym, KSubSym, ShiftSym
+  , KShiftSym, KSubSym, ShiftSym, ShiftSortSym
   -- * Util
   , Map, MapSym
   ) where
-
--- module Dhall.Typed.Core (
---   -- * Kinds
---     DKind(..), SDKind(..), SDKindI(..), sameDKind
---   -- * Types
---   , DType(..), SomeType(..), SDType(..), SDTypeI(..), sameDType, sameDTypeWith, kindOf, kindOfWith
---   , Sub, Shift, MapShift
---   -- * Terms
---   , DTerm(..), Bindings(..), SomeTerm(..), SDTerm(..), SeqListEq(..), typeOf, typeOfWith
---   -- * Expr
---   , SomeExpr(..)
---   -- * Evaluation
---   , DTypeRep, Forall(..), ForallTC(..), DTypeRepVal(..)
---   , fromTerm, fromTermWith, toTerm
---   -- * Manipulation
---   , sShift, sShift_, subIns, subIns2, sSub, sSub_, shiftProd
---   -- * Singletons
---   , Sing(SDK, getSDK, SDTy, getSDTy, SDTe, getSDTe)
---   ) where
 
 import           Data.Kind
 import           Data.Sequence                      (Seq(..))
@@ -160,10 +147,10 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) |]
   } ''AggType
 
--- | A non-empty series of /Let/ bindings.
-data Bindings k :: ([k] -> k -> Type) -> [k] -> [k] -> Type where
-    BNil  :: f vs a -> Bindings k f vs (a ': vs)
-    (:<?) :: f vs a -> Bindings k f (a ': vs) us -> Bindings k f vs us
+-- -- | A non-empty series of /Let/ bindings.
+-- data Bindings k :: ([k] -> k -> Type) -> [k] -> [k] -> Type where
+--     BNil  :: f vs a -> Bindings k f vs (a ': vs)
+--     (:<?) :: f vs a -> Bindings k f (a ': vs) us -> Bindings k f vs us
 
 
 -- ---------
@@ -195,6 +182,17 @@ genPolySingWith defaultGPSO
 -- > Kinds
 -- ---------
 
+-- | Kind-level let-bindings.  Potentially empty, for simplicity.
+--
+-- We also need to allow for terms and types.  So maybe in the future we
+-- need a high-level Let layer uniting all kinds, types, terms, etc.
+data KBindings (ts :: [DSort]) (ps :: [DSort]) where
+    KBNil  :: KBindings ts ts
+    KBKind :: DKind ts t
+           -> KBindings (t ': ts) ps
+           -> KBindings ts ps
+            
+
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
 -- @
@@ -208,7 +206,7 @@ genPolySingWith defaultGPSO
 -- variables.
 data DKind :: [DSort] -> DSort -> Type where
     KVar  :: Index ts a -> DKind ts a
-    KLet  :: Bindings DSort DKind ts ps
+    KLet  :: KBindings ts ps
           -> DKind ps a
           -> DKind ts a
     KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
@@ -403,6 +401,23 @@ genPolySingWith defaultGPSO
 -- > Types
 -- ---------
 
+-- | Type-level let-bindings.  Potentially empty, for simplicity.
+--
+-- We also need to allow for terms.  So maybe in the future we need
+-- a high-level Let layer uniting all kinds, types, terms, etc.
+data TBindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (a :: DKind ts 'Kind)
+               (ps :: [DSort]) (qs :: [DKind ps 'Kind]) (b :: DKind ps 'Kind) where
+    TBNil  :: TBindings ts us a ts us a
+    TBKind :: DKind ts t
+           -> TBindings (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
+                                  (KShift ts (t ': ts) t 'Kind 'InsZ a)
+                                  ps qs b
+           -> TBindings ts us a ps qs b
+    TBType :: DType ts us u
+           -> TBindings ts (u ': us) a ps qs b
+           -> TBindings ts us a ps qs b
+            
+
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
 -- @
@@ -425,8 +440,8 @@ genPolySingWith defaultGPSO
 -- automatically, but it's possible create nonsensical types with 'TVar'.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
-    TLet  :: Bindings (DKind ts 'Kind) (DType ts) us qs
-          -> DType ts qs a
+    TLet  :: TBindings ts us a qs rs b
+          -> DType qs rs b
           -> DType ts us a
     TLam  :: NDKind ts 'Kind u
           -> DType ts (u ': us) a
@@ -528,6 +543,16 @@ type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 -- indicated by the 'Insert'.
 type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: DType ts qs b where
 
+type family ShiftSort ts ps us a (ins :: Insert ts ps a) (x :: DType ts us 'Type)
+                        :: DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type where
+
+
+data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
+                  :: DType ts us 'Type
+                  ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
+-- type instance Apply (ShiftSortSym ts ps us a ins) x = ShiftSort ts ps us a ins x
+
+
 -- | Ideally we would want this to be encodable within the type.  But the
 -- main problem here is checking if the LHS of an application is a variable
 -- or not.  This is the next best thing?
@@ -620,6 +645,26 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq (Prim ts us as a) (Prim ts us bs b) |]
   } ''Prim
 
+-- | Term-level let-bindings.  Potentially empty, for simplicity.
+data Bindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (vs :: [DType ts us 'Type]) (a :: DType ts us 'Type)
+              (ps :: [DSort]) (qs :: [DKind ps 'Kind]) (rs :: [DType ps qs 'Type]) (b :: DType ps qs 'Type) where
+    BNil  :: Bindings ts us vs a ts us vs a
+    BKind :: DKind ts t
+          -> Bindings (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
+                                (Map (ShiftSortSym ts (t ': ts) us t 'InsZ) vs)
+                                (ShiftSort ts (t ': ts) us t 'InsZ a)
+                                ps qs rs b
+          -> Bindings ts us vs a ps qs rs b
+    BType :: DType ts us u
+          -> Bindings ts (u ': us)
+                      (Map (ShiftSym ts us (u ': us) u 'Type 'InsZ) vs)
+                      (Shift ts us (u ': us) u 'Type 'InsZ a)
+                      ps qs rs b
+          -> Bindings ts us vs a ps qs rs b
+    BTerm :: DTerm ts us vs v
+          -> Bindings ts us (v ': vs) a ps qs rs b
+          -> Bindings ts us       vs  a ps qs rs b
+            
 -- | Represents the possible terms encountered in Dhall.  A value of type
 --
 -- @
@@ -639,8 +684,8 @@ genPolySingWith defaultGPSO
 -- terms) are not yet supported.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Var  :: Index vs a -> DTerm ts us vs a
-    Let  :: Bindings (DType ts us 'Type) (DTerm ts us) vs rs
-         -> DTerm ts us rs a
+    Let  :: Bindings ts us vs a ps qs rs b
+         -> DTerm ps qs rs b
          -> DTerm ts us vs a
     Lam  :: NDType ts us 'Type v
          -> DTerm ts us (v ': vs) a
@@ -759,114 +804,6 @@ toSomeTerm = SomeTerm (NDT (polySing @_ @a))
 --    DTypeRep us p ('Type ':~> 'Type) 'List      = Seq
 --    DTypeRep us p ('Type ':~> 'Type) 'Optional  = Maybe
 --    DTypeRep us p k                  x          = TL.TypeError ('TL.Text "No DTypeRep: " 'TL.:<>: 'TL.ShowType '(k, x))
-
---type family MaybeVar a b (x :: DType vs a) (i :: Maybe (Index vs b)) :: DType vs b where
---    MaybeVar a a x 'Nothing  = x
---    MaybeVar a b x ('Just i) = 'TVar i
---    MaybeVar a b x i = TL.TypeError ('TL.Text "No Maybe: " 'TL.:<>: 'TL.ShowType '(x, i))
-
----- | Shift all variables to accomodate for a new bound variable.
---type family Shift as bs a b (ins :: Insert as bs a) (x :: DType as b) :: DType bs b where
---    Shift as bs a b   ins ('TVar i) = 'TVar (Ins as bs a b ins i)
---    Shift as bs a b   ins ('Pi (u :: SDKind k) e) = 'Pi u (Shift (k ': as) (k ': bs) a b ('InsS ins) e)
---    Shift as bs a r i ((u :: DType as (k ':~> r)) ':$ (v :: DType as k))
---        = Shift as bs a (k ':~> r) i u ':$ Shift as bs a k i v
---    Shift as bs a 'Type              i (u ':-> v) = Shift as bs a 'Type i u ':-> Shift as bs a 'Type i v
---    Shift as bs a 'Type              i 'Bool     = 'Bool
---    Shift as bs a 'Type              i 'Natural  = 'Natural
---    Shift as bs a ('Type ':~> 'Type) i 'List     = 'List
---    Shift as bs a ('Type ':~> 'Type) i 'Optional = 'Optional
---    Shift as bs a b ins x = TL.TypeError ('TL.Text "No Shift: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, ins, x))
-
----- | Substitute in a value for a given variable.
---type family Sub as bs a b (d :: Delete as bs a) (x :: DType bs a) (r :: DType as b) :: DType bs b where
---    Sub as bs a b                  d x ('TVar i)
---        = MaybeVar a b x (Del as bs a b d i)
---    Sub as bs a b                  d x ('Pi (u :: SDKind k) e)
---        = 'Pi u (Sub (k ': as) (k ': bs) a b ('DS d) (Shift bs (k ': bs) k a 'InsZ x) e)
---    Sub as bs a b                  d x ((i :: DType as (k ':~> b)) ':$ (j :: DType as k))
---        = Sub as bs a (k ':~> b) d x i ':$ Sub as bs a k d x j
---    Sub as bs a 'Type              d x (i ':-> j)
---        = Sub as bs a 'Type d x i ':-> Sub as bs a 'Type d x j
---    Sub as bs a 'Type              d x 'Bool
---        = 'Bool
---    Sub as bs a 'Type              d x 'Natural
---        = 'Natural
---    Sub as bs a ('Type ':~> 'Type) d x 'List
---        = 'List
---    Sub as bs a ('Type ':~> 'Type) d x 'Optional
---        = 'Optional
---    Sub as bs a b d x r
---        = TL.TypeError ('TL.Text "No Sub: " 'TL.:<>: 'TL.ShowType '(as, bs, a, b, d, x, r))
-
----- | Find the kind of a type singleton with no free variables.
---kindOf :: SDType '[] k t -> SDKind k
---kindOf = kindOfWith Ø
-
----- | Find the kind of a type singleton with free variables by providing the
----- kinds of each free variable.
---kindOfWith :: Prod SDKind us -> SDType us k t -> SDKind k
---kindOfWith vs = \case
---    STVar i -> ixProd vs (fromSIndex i)
---    SPi u e -> kindOfWith (u :< vs) e
---    f :%$ _ -> case kindOfWith vs f of
---      _ :%~> r -> r
---    _ :%-> _ -> SType
---    SBool -> SType
---    SNatural -> SType
---    SList -> SType :%~> SType
---    SOptional -> SType :%~> SType
-
---type family MapShift (k :: DKind) (us :: [DKind]) (vs :: [DType us 'Type]) :: [DType (k ': us) 'Type] where
---    MapShift k us '[]       = '[]
---    MapShift k us (v ': vs) = Shift us (k ': us) k 'Type 'InsZ v ': MapShift k us vs
-
---data SomeTerm us :: [DType us 'Type] -> Type where
---    SomeTerm :: SDType us 'Type a
---             -> DTerm us vs a
---             -> SomeTerm us vs
-
----- | Find the type of a term singleton with no free variables.
---typeOf :: SDTerm '[] '[] a x -> SDType '[] 'Type a
---typeOf = typeOfWith Ø
-
----- | Find the type of a term singleton with free variables by providing the
----- type of each free variable.
---typeOfWith :: Prod (SDType us 'Type) vs -> SDTerm us vs a x -> SDType us 'Type a
---typeOfWith vs = \case
---    SVar i            -> ixProd vs (fromSIndex i)
---    SLam t x          -> t :%-> typeOfWith (t :< vs) x
---    SApp f _          -> case typeOfWith vs f of
---      _ :%-> r -> r
---    STLam u x         -> SPi u $ typeOfWith (shiftProd vs) x
---    STApp f x         -> case typeOfWith vs f of
---      SPi _ g  -> sSub x g
---    SBoolLit _        -> SBool
---    SNaturalLit _     -> SNatural
---    SNaturalFold      -> SNatural :%-> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ)
---    SNaturalBuild     -> SPi SType ((STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> SNatural
---    SNaturalPlus _ _  -> SNatural
---    SNaturalTimes _ _ -> SNatural
---    SNaturalIsZero    -> SNatural :%-> SBool
---    SListLit _ a _    -> SList :%$ a
---    SListFold         -> SPi SType (SList :%$ STVar SIZ :%-> SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ))
---    SListBuild        -> SPi SType (SPi SType ((STVar (SIS SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> STVar SIZ :%-> STVar SIZ) :%-> SList :%$ STVar SIZ)
---    SListAppend xs _  -> typeOfWith vs xs
---    SListHead         -> SPi SType (SList :%$ STVar SIZ :%-> SOptional :%$ STVar SIZ)
---    SListLast         -> SPi SType (SList :%$ STVar SIZ :%-> SOptional :%$ STVar SIZ)
---    SListReverse      -> SPi SType (SList :%$ STVar SIZ :%-> SList     :%$ STVar SIZ)
---    SOptionalLit a _  -> SOptional :%$ a
---    SSome x           -> SOptional :%$ typeOfWith vs x
---    SNone             -> SPi SType (SOptional :%$ STVar SIZ)
-
---shiftProd
---    :: forall us vs k. ()
---    => Prod (SDType us        'Type) vs
---    -> Prod (SDType (k ': us) 'Type) (MapShift k us vs)
---shiftProd = \case
---    Ø       -> Ø
---    x :< xs -> sShift x :< shiftProd xs
-
 
 ---- | Turn a 'DTerm' with no free variables into a Haskell value of the
 ---- appropriate type.

@@ -19,10 +19,6 @@ import           Data.Text              (Text)
 import           Dhall.Typed.Core
 import           Dhall.Typed.Type.Index
 
-data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
-                  :: DType ts us 'Type
-                  ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
-
 data Context ts us :: [DType ts us 'Type] -> Type where
     CtxNil    :: Context '[] '[] '[]
     ConsSort  :: Text
