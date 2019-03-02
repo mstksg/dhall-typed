@@ -38,10 +38,10 @@ module Dhall.Typed.Core.Internal (
   -- ** Terms
   , Prim(..), DTerm(..), SomeTerm(..), toSomeTerm
   -- ** Shared
-  , AggType(..)
+  , AggType(..), Bindings(..)
   -- * Singletons
   , SDSort(..)
-  , SDKind(..), SNDKind(..), SSubbedKind
+  , SDKind(..), SNDKind(..), SSubbedKind(..)
   , SDType(..), SNDType(..)
   , SPrim(..), SDTerm(..)
   , SAggType(..)
@@ -160,6 +160,12 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq k k => SingEq (AggType k ls as) (AggType k ms bs) |]
   } ''AggType
 
+-- | A non-empty series of /Let/ bindings.
+data Bindings k :: ([k] -> k -> Type) -> [k] -> [k] -> Type where
+    BNil  :: f vs a -> Bindings k f vs (a ': vs)
+    (:<?) :: f vs a -> Bindings k f (a ': vs) us -> Bindings k f vs us
+
+
 -- ---------
 -- > Sorts
 -- ---------
@@ -202,6 +208,9 @@ genPolySingWith defaultGPSO
 -- variables.
 data DKind :: [DSort] -> DSort -> Type where
     KVar  :: Index ts a -> DKind ts a
+    KLet  :: Bindings DSort DKind ts ps
+          -> DKind ps a
+          -> DKind ts a
     KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
     KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
@@ -416,6 +425,9 @@ genPolySingWith defaultGPSO
 -- automatically, but it's possible create nonsensical types with 'TVar'.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
+    TLet  :: Bindings (DKind ts 'Kind) (DType ts) us qs
+          -> DType ts qs a
+          -> DType ts us a
     TLam  :: NDKind ts 'Kind u
           -> DType ts (u ': us) a
           -> DType ts us (u ':~> a)
@@ -520,9 +532,9 @@ type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: D
 -- main problem here is checking if the LHS of an application is a variable
 -- or not.  This is the next best thing?
 --
--- Normalizing /applications/ of type functions (both 'TApp' and 'TInst')
--- is not yet supported. Practically, this means that we can't yet have any
--- values of types that are applications of type functions.
+-- Normalizing /applications/ of anonymous type functions (both 'TApp' and
+-- 'TInst') is not yet supported. Practically, this means that we can't yet
+-- have any values of types that are applications of type functions.
 type family TNormalize (ts :: [DSort])
                        (us :: [DKind ts 'Kind])
                        (a  :: DKind ts 'Kind  )
@@ -531,11 +543,12 @@ type family TNormalize (ts :: [DSort])
     TNormalize ts us a          ('TVar i   ) = 'TVar i
     TNormalize ts us (u ':~> a) ('TLam (uu :: NDKind ts 'Kind u) x)
             = 'TLam uu (TNormalize ts (u ': us) a x)
+    TNormalize ts us a ('TApp ('TLam u f) x)
+            = TL.TypeError ('TL.Text "Normalization of anonymous type function application not yet supported.")
     -- TNormalize ts us a ('TApp ('TLam (NDK (uu :: SDKind ts 'Kind u)) f) x)
     --     = TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
-            TL.TypeError ('TL.Text "Normalization of type function application not yet supported.")
-    --     'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
+        'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
     TNormalize ts us ('KPi tt a)
         ('TPoly ('SiSi ss :: SingSing DSort t ('WS tt))
                 (x :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a)
@@ -543,13 +556,17 @@ type family TNormalize (ts :: [DSort])
         = 'TPoly ('SiSi ss)     -- sorts are always normalized
                  (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
     TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
+                                ('TPoly ('SiSi ss) f)
+                                (x :: SubbedKind ts t a b sk)
+                        )
+        = TL.TypeError ('TL.Text "Normalization of anonymous kind-polymorphic type function application not yet supported.")
+    TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
                                 (f :: DType ts us ('KPi tt b))
                                 (x :: SubbedKind ts t a b sk)
                         )
-        = TL.TypeError ('TL.Text "Normalization of kind-polymorphic type function application not yet supported.")
-    --     = 'TInst ('SiSi ss)
-    --              (TNormalize ts us ('KPi tt b) f)
-    --              x
+        = 'TInst ('SiSi ss)
+                 (TNormalize ts us ('KPi tt b) f)
+                 x
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
     TNormalize ts us 'Type 'Bool = 'Bool
@@ -622,6 +639,9 @@ genPolySingWith defaultGPSO
 -- terms) are not yet supported.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Var  :: Index vs a -> DTerm ts us vs a
+    Let  :: Bindings (DType ts us 'Type) (DTerm ts us) vs rs
+         -> DTerm ts us rs a
+         -> DTerm ts us vs a
     Lam  :: NDType ts us 'Type v
          -> DTerm ts us (v ': vs) a
          -> DTerm ts us vs (v ':-> a)

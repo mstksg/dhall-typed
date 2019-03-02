@@ -24,7 +24,7 @@ module Dhall.Typed.Core (
   -- ** Mixed
   , DExpr(..), SomeDExpr(..), dExprType, deKind, deType, deTerm
   -- ** Shared
-  , AggType(..)
+  , AggType(..), Bindings(..)
   -- * Type manipulation
   , sortOf, kindOf, typeOf
   , sortOfWith, kindOfWith, typeOfWith
