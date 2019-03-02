@@ -18,6 +18,9 @@ Be warned -- the implementation gets extremely deep into type-level Haskell,
 and involves things like singletons of GADTs, and singletons of singletons of
 GADTs.
 
+The end goal is to have a one-to-one correspondence between untyped dhall AST
+values and typed dhall AST values.
+
 Some notes:
 
 *   Only a limited set of term and type constructors are currently implemented,
@@ -55,9 +58,23 @@ Some important differences between this implementation and the standard:
     aren't `Kind` (so `Kind -> Kind` fields are not allowed).  This
     implementation allows them, and it would be somewhat complicated to
     special-case this limitation.
+*   Let statements cannot bind anything lower-level than their final result.
+    This means that things like `let x = 10 in Natural` is disallowed.  If
+    your `let` produces a type, then you can't bind terms; if you produce a
+    kind, you can't bind types or terms, etc.  In practice this should not be
+    too big of a deal because, while this is allowed in Dhall, you can never
+    actually *use* such a binding in the result anyway.
 
 Todo
 ----
+
+### Critical conceptual issues
+
+*   Normalization of type function application, which allows for values of
+    such types.  This is pretty important, and comes up a lot in Dhall, so this
+    is a pretty critical deficiency.
+*   Kind-polymorphic values.  This isn't as big a deal, but it still seems
+    important to an extent.
 
 ### Currently incomplete, but just a matter of work
 
@@ -68,15 +85,10 @@ Todo
     *   `Let`
     *   Record/Union type-level operations (merge, etc.)
 
-### Conceptual issues
-
-*   Normalization of type function application, which allows for values of
-    such types.  This is pretty important, and comes up a lot in Dhall, so this
-    is a pretty critical deficiency.
-*   Kind-polymorphic values.  This isn't as big a deal, but it would be nice to
-    figure out how to implement this.
-
 ### Would be nice
 
 *   Add notes and embeds.
 *   Use hybrid indices like Morte/Dhall, instead of pure De Bruijn ones.
+*   `let` statements being able to bind values "lower-level" than the final
+    result.  This is never technically necessary, but it would be nice to have
+    a 1-to-1 correspondence with Dhall terms.
