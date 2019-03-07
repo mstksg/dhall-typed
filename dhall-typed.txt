@@ -22,7 +22,7 @@ fromNatural :: Natural -> N
 toNatural :: N -> Natural
 type ZSym0 = Z
 data SSym0 :: (~>) N N
-type SSym1 (t6989586621679138827 :: N) = S t6989586621679138827
+type SSym1 (t6989586621679139462 :: N) = S t6989586621679139462
 data IsLength :: [k] -> N -> Type
 [ILZ] :: IsLength '[]  'Z
 [ILS] :: IsLength as n -> IsLength (a : as) ( 'S n)
@@ -59,13 +59,13 @@ instance GHC.Classes.Ord Dhall.Typed.Type.N.N
 instance GHC.Classes.Eq Dhall.Typed.Type.N.N
 instance Data.Singletons.ShowSing.ShowSing Dhall.Typed.Type.N.N => GHC.Show.Show (Data.Singletons.Internal.Sing z)
 instance Data.Singletons.Prelude.Eq.PEq Dhall.Typed.Type.N.N
-instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings Dhall.Typed.Type.N.ShowsPrec_6989586621679144336Sym0
+instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings Dhall.Typed.Type.N.ShowsPrec_6989586621679144971Sym0
 instance Data.Singletons.Prelude.Show.PShow Dhall.Typed.Type.N.N
-instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.ShowsPrec_6989586621679144336Sym1 a6989586621679144333)
-instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.ShowsPrec_6989586621679144336Sym2 a6989586621679144334 a6989586621679144333)
-instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings Dhall.Typed.Type.N.Compare_6989586621679140792Sym0
+instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.ShowsPrec_6989586621679144971Sym1 a6989586621679144968)
+instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.ShowsPrec_6989586621679144971Sym2 a6989586621679144969 a6989586621679144968)
+instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings Dhall.Typed.Type.N.Compare_6989586621679141427Sym0
 instance Data.Singletons.Prelude.Ord.POrd Dhall.Typed.Type.N.N
-instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.Compare_6989586621679140792Sym1 a6989586621679140790)
+instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings (Dhall.Typed.Type.N.Compare_6989586621679141427Sym1 a6989586621679141425)
 instance Data.Singletons.SuppressUnusedWarnings.SuppressUnusedWarnings Dhall.Typed.Type.N.SSym0
 instance Data.Singletons.Internal.SingI Dhall.Typed.Type.N.SSym0
 instance Data.Singletons.Internal.SingKind Dhall.Typed.Type.N.N
@@ -123,11 +123,11 @@ newtype SingSing k x :: WrappedSing k x -> Type
 type PolySingOfI (x :: PolySing k y) = PolySingI y
 class SingEq f g
 singEq :: forall x y. SingEq f g => PolySing f x -> PolySing g y -> Decision (x :~~: y)
-data SConst (a_axGx :: Type) (b_axGy :: k_axGw) (x_a1sr5 :: Const (a_axGx :: Type) (b_axGy :: k_axGw))
-[SConst] :: forall (a_axGx :: Type) (b_axGy :: k_axGw) x_a1sr6. () => {sGetConst :: PolySing a_axGx x_a1sr6} -> SConst (a_axGx :: Type) (b_axGy :: k_axGw) ( 'Const x_a1sr6)
-data SMaybe (a_11 :: Type) (x_a1swW :: Maybe (a_11 :: Type))
+data SConst (a_axQM :: Type) (b_axQN :: k_axQL) (x_a1sEs :: Const (a_axQM :: Type) (b_axQN :: k_axQL))
+[SConst] :: forall (a_axQM :: Type) (b_axQN :: k_axQL) x_a1sEt. () => {sGetConst :: PolySing a_axQM x_a1sEt} -> SConst (a_axQM :: Type) (b_axQN :: k_axQL) ( 'Const x_a1sEt)
+data SMaybe (a_11 :: Type) (x_a1sKj :: Maybe (a_11 :: Type))
 [SNothing] :: forall (a_11 :: Type). () => SMaybe (a_11 :: Type)  'Nothing
-[SJust] :: forall (a_11 :: Type) x_a1swX. () => PolySing a_11 x_a1swX -> SMaybe (a_11 :: Type) ( 'Just x_a1swX)
+[SJust] :: forall (a_11 :: Type) x_a1sKk. () => PolySing a_11 x_a1sKk -> SMaybe (a_11 :: Type) ( 'Just x_a1sKk)
 data SList k :: [k] -> Type
 [:%] :: PolySing k x -> SList k xs -> SList k (x : xs)
 [SNil] :: SList k '[]
@@ -137,8 +137,8 @@ data STup2 a b :: (a, b) -> Type
 data SBool :: Bool -> Type
 [SFalse] :: SBool  'False
 [STrue] :: SBool  'True
-data SProxy (t_a1iG6 :: k_a1iG5) (x_a1sBo :: Proxy (t_a1iG6 :: k_a1iG5))
-[SProxy] :: forall (t_a1iG6 :: k_a1iG5). () => SProxy (t_a1iG6 :: k_a1iG5)  'Proxy
+data SProxy (t_a1iTt :: k_a1iTs) (x_a1sOL :: Proxy (t_a1iTt :: k_a1iTs))
+[SProxy] :: forall (t_a1iTt :: k_a1iTs). () => SProxy (t_a1iTt :: k_a1iTs)  'Proxy
 data STup0 :: () -> Type
 [STup0] :: STup0  '()
 type family ToNat (n :: Natural) = (m :: Nat) | m -> n
@@ -174,56 +174,58 @@ module Dhall.Typed.Type.Index
 data Index (a :: [k]) (b :: k) :: forall k. () => [k] -> k -> Type
 [IZ] :: forall k (a :: [k]) (b :: k) (as :: [k]). () => Index (b : as) b
 [IS] :: forall k (a :: [k]) (b :: k) (bs :: [k]) (b1 :: k). () => Index bs b -> Index (b1 : bs) b
-data SIndex (a_a1vVk :: [k_a1vVj]) (b_a1vVl :: k_a1vVj) (x_a1vVz :: Index (a_a1vVk :: [k_a1vVj]) (b_a1vVl :: k_a1vVj))
-[SIZ] :: forall (k_a1vVj :: Type) (b_a1vVl :: k_a1vVj) (as_a1vVm :: [k_a1vVj]). () => SIndex ( '(:) b_a1vVl as_a1vVm) b_a1vVl  'IZ
-[SIS] :: forall (k_a1vVj :: Type) (bs_a1vVp :: [k_a1vVj]) (b_a1vVl :: k_a1vVj) (b1_a1vVq :: k_a1vVj) x_a1vVA. () => SIndex bs_a1vVp b_a1vVl x_a1vVA -> SIndex ( '(:) b1_a1vVq bs_a1vVp) b_a1vVl ( 'IS x_a1vVA)
-sSameIx :: SIndex as a i -> SIndex as a j -> Maybe (i :~: j)
-fromSIndex :: SIndex as a i -> Index as a
-data SSIndex (a_a1vVk :: [k_a1vVj]) (b_a1vVl :: k_a1vVj) (x_a1vVz :: Index a_a1vVk b_a1vVl) (x_a1w2s :: SIndex (a_a1vVk :: [k_a1vVj]) (b_a1vVl :: k_a1vVj) (x_a1vVz :: Index a_a1vVk b_a1vVl))
-[SSIZ] :: forall (k_a1vVj :: Type) (b_a1vVl :: k_a1vVj) (as_X1vVn :: [k_a1vVj]). () => SSIndex ( '(:) b_a1vVl as_X1vVn) b_a1vVl ( 'IZ :: Index ( '(:) b_a1vVl as_X1vVn) b_a1vVl)  'SIZ
-[SSIS] :: forall (k_a1vVj :: Type) (bs_X1vVq :: [k_a1vVj]) (b_a1vVl :: k_a1vVj) (b1_X1vVs :: k_a1vVj) (x_X1vVD :: Index bs_X1vVq b_a1vVl) x_a1w2t. () => SingSing (Index bs_X1vVq b_a1vVl) x_X1vVD ( 'WS x_a1w2t) -> SSIndex ( '(:) b1_X1vVs bs_X1vVq) b_a1vVl ( 'IS x_X1vVD :: Index ( '(:) b1_X1vVs bs_X1vVq) b_a1vVl) ( 'SIS x_a1w2t)
+
+-- | Kind-indexed singleton for <a>Index</a>. Provided as a separate data
+--   declaration to allow you to use these at the type level. However, the
+--   main interface is still provided through the newtype wrapper
+--   <a>SIndex'</a>, which has an actual proper <a>Sing</a> instance.
+data SIndex (as :: [k]) (a :: k) (b :: Index as a) :: forall k (as :: [k]) (a :: k). () => Index as a -> Type
+[SIZ] :: forall k (as :: [k]) (a :: k) (b :: Index as a) (as1 :: [k]). () => SIndex (a : as1) a (IZ :: Index (a : as1) a)
+[SIS] :: forall k (as :: [k]) (a :: k) (b :: Index as a) (bs :: [k]) (i :: Index bs a) (b1 :: k). () => SIndex bs a i -> SIndex (b1 : bs) a (IS i :: Index (b1 : bs) a)
 indexN :: Index as a -> N
-data Delete :: [k] -> [k] -> k -> Type
-[DelZ] :: Delete (a : as) as a
-[DelS] :: Delete as bs c -> Delete (a : as) (a : bs) c
-del :: Delete as bs a -> Index as b -> Maybe (Index bs b)
-type family ISMaybe (i :: Maybe (Index as a)) :: Maybe (Index (b : as) a)
-type family Del as bs a b (d :: Delete as bs a) (i :: Index as b) :: Maybe (Index bs b)
-data SDelete (a_a1wav :: [k_a1w3d]) (b_a1waw :: [k_a1w3d]) (c_a1wax :: k_a1w3d) (x_a1wge :: Delete (a_a1wav :: [k_a1w3d]) (b_a1waw :: [k_a1w3d]) (c_a1wax :: k_a1w3d))
-[SDelZ] :: forall (k_a1wa5 :: Type) (a_a1w3e :: k_a1wa5) (as_a1w3f :: [k_a1wa5]). () => SDelete ( '(:) a_a1w3e as_a1w3f) as_a1w3f a_a1w3e  'DelZ
-[SDelS] :: forall (a_a1wam :: Type) (as_X1w3h :: [a_a1wam]) (bs_X1w3j :: [a_a1wam]) (c_a1w3i :: a_a1wam) (a_X1w3m :: a_a1wam) x_a1wgf. () => SDelete as_X1w3h bs_X1w3j c_a1w3i x_a1wgf -> SDelete ( '(:) a_X1w3m as_X1w3h) ( '(:) a_X1w3m bs_X1w3j) c_a1w3i ( 'DelS x_a1wgf)
-sDel :: SDelete as bs a del -> SIndex as b i -> GetDeleted as bs a b del i
-data GetDeleted as bs a b :: Delete as bs a -> Index as b -> Type
-[GotDeleted] :: Del as bs a b del i ~  'Nothing => (a :~: b) -> GetDeleted as bs a b del i
-[ThatsToxic] :: Del as bs a b del i ~  'Just j => SIndex bs b j -> GetDeleted as bs a b del i
 
--- | This is just flipped delete, heh.
-data Insert :: [k] -> [k] -> k -> Type
-[InsZ] :: Insert as (a : as) a
-[InsS] :: Insert as bs c -> Insert (a : as) (a : bs) c
-insert :: Insert as bs a -> Index as b -> Index bs b
-type family Ins as bs a b (ins :: Insert as bs a) (i :: Index as b) :: Index bs b
-sIns :: forall as bs a b ins i. () => SInsert as bs a ins -> SIndex as b i -> SIndex bs b (Ins as bs a b ins i)
-data SInsert (a_a1wtJ :: [k_a1wgS]) (b_a1wtK :: [k_a1wgS]) (c_a1wtL :: k_a1wgS) (x_a1wzh :: Insert (a_a1wtJ :: [k_a1wgS]) (b_a1wtK :: [k_a1wgS]) (c_a1wtL :: k_a1wgS))
-[SInsZ] :: forall (a_a1wtk :: Type) (as_a1wgT :: [a_a1wtk]) (a_a1wgU :: a_a1wtk). () => SInsert as_a1wgT ( '(:) a_a1wgU as_a1wgT) a_a1wgU  'InsZ
-[SInsS] :: forall (a_a1wtA :: Type) (as_X1wgW :: [a_a1wtA]) (bs_X1wgY :: [a_a1wtA]) (c_a1wgX :: a_a1wtA) (a_X1wh1 :: a_a1wtA) x_a1wzi. () => SInsert as_X1wgW bs_X1wgY c_a1wgX x_a1wzi -> SInsert ( '(:) a_X1wh1 as_X1wgW) ( '(:) a_X1wh1 bs_X1wgY) c_a1wgX ( 'InsS x_a1wzi)
+-- | A <tt><a>Delete</a> as bs x</tt> is a witness that you can delete item
+--   <tt>x</tt> from <tt>as</tt> to produce the list <tt>bs</tt>. It is
+--   essentially <a>Insert</a> flipped.
+--   
+--   Some examples:
+--   
+--   <pre>
+--   DelZ             :: Delete '[1,2,3] '[2,3] 1
+--   DelS DelZ        :: Delete '[1,2,3] '[2,3] 2
+--   DelS (DelS DelZ) :: Delete '[1,2,3] '[1,2] 3
+--   </pre>
+--   
+--   <tt>bs</tt> will always be exactly one item shorter than <tt>as</tt>.
+data Delete (a :: [k]) (b :: [k]) (c :: k) :: forall k. () => [k] -> [k] -> k -> Type
+[DelZ] :: forall k (a :: [k]) (b :: [k]) (c :: k). () => Delete (c : b) b c
+[DelS] :: forall k (a :: [k]) (b :: [k]) (c :: k) (as :: [k]) (bs :: [k]) (a1 :: k). () => Delete as bs c -> Delete (a1 : as) (a1 : bs) c
 
--- | The singleton kind-indexed data family.
-data family Sing (a :: k) :: Type
-instance forall a1 (as :: [a1]) (a2 :: a1). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Dhall.Typed.Type.Index.InsZ
-instance forall a1 (a2 :: a1) (as :: [a1]) (bs :: [a1]) (c :: a1) (x :: Dhall.Typed.Type.Index.Insert as bs c). Dhall.Typed.Type.Singletons.Internal.PolySingI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Dhall.Typed.Type.Index.InsS x)
-instance forall k (a :: [k]) (b :: [k]) (c :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Dhall.Typed.Type.Index.Insert a b c)
-instance forall k (a1 :: [k]) (a2 :: [k]) (a3 :: k) (b :: k). Dhall.Typed.Type.Singletons.Internal.SingEq (Dhall.Typed.Type.Index.Insert a1 a2 a3) (Dhall.Typed.Type.Index.Insert a1 a2 b)
-instance forall k (a :: k) (as :: [k]). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Dhall.Typed.Type.Index.DelZ
-instance forall a1 (a2 :: a1) (as :: [a1]) (bs :: [a1]) (c :: a1) (x :: Dhall.Typed.Type.Index.Delete as bs c). Dhall.Typed.Type.Singletons.Internal.PolySingI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Dhall.Typed.Type.Index.DelS x)
-instance forall k (a :: [k]) (b :: [k]) (c :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Dhall.Typed.Type.Index.Delete a b c)
-instance forall k (a1 :: [k]) (a2 :: [k]) (a3 :: k) (b1 :: [k]) (b2 :: k). Dhall.Typed.Type.Singletons.Internal.SingEq (Dhall.Typed.Type.Index.Delete a1 a2 a3) (Dhall.Typed.Type.Index.Delete a1 b1 b2)
-instance forall k (as :: [k]) (a :: k) (i :: Data.Type.Universe.Index as a). GHC.Show.Show (Dhall.Typed.Type.Index.SIndex as a i)
-instance forall k (b :: k) (as :: [k]). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Dhall.Typed.Type.Index.SIZ
-instance forall k (b1 :: k) (bs :: [k]) (b :: k) (y :: Data.Type.Universe.Index bs b) (x :: Dhall.Typed.Type.Index.SIndex bs b y). Dhall.Typed.Type.Singletons.Internal.PolySingOfI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Dhall.Typed.Type.Index.SIS x)
-instance forall k (as :: [k]) (a :: k) (x :: Data.Type.Universe.Index as a). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Dhall.Typed.Type.Index.SIndex as a x)
-instance forall k (as :: [k]) (a :: k) (x :: Data.Type.Universe.Index as a) (b :: k) (y :: Data.Type.Universe.Index as b). Dhall.Typed.Type.Singletons.Internal.SingEq (Dhall.Typed.Type.Index.SIndex as a x) (Dhall.Typed.Type.Index.SIndex as b y)
-instance forall k (as :: [k]) (a :: k). Data.Singletons.Internal.SingKind (Data.Type.Universe.Index as a)
+-- | An <tt><a>Insert</a> as bs x</tt> is a witness that you can insert
+--   <tt>x</tt> into some position in list <tt>as</tt> to produce list
+--   <tt>bs</tt>. It is essentially <a>Delete</a> flipped.
+--   
+--   Some examples:
+--   
+--   <pre>
+--   InsZ                   :: Insert '[1,2,3] '[4,1,2,3] 4
+--   InsS InsZ              :: Insert '[1,2,3] '[1,4,2,3] 4
+--   InsS (InsS InsZ)       :: Insert '[1,2,3] '[1,2,4,3] 4
+--   InsS (InsS (InsS InsZ) :: Insert '[1,2,3] '[1,2,3,4] 4
+--   </pre>
+--   
+--   <tt>bs</tt> will always be exactly one item longer than <tt>as</tt>.
+data Insert (a :: [k]) (b :: [k]) (c :: k) :: forall k. () => [k] -> [k] -> k -> Type
+[InsZ] :: forall k (a :: [k]) (b :: [k]) (c :: k). () => Insert a (c : a) c
+[InsS] :: forall k (a :: [k]) (b :: [k]) (c :: k) (as :: [k]) (bs :: [k]) (a1 :: k). () => Insert as bs c -> Insert (a1 : as) (a1 : bs) c
+instance forall k (c :: k) (b :: [k]). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Data.Type.List.Edit.DelZ
+instance forall k (a1 :: k) (as :: [k]) (bs :: [k]) (c :: k) (x :: Data.Type.List.Edit.Delete as bs c). Dhall.Typed.Type.Singletons.Internal.PolySingI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Data.Type.List.Edit.DelS x)
+instance forall k (a :: [k]) (b :: [k]) (c :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Data.Type.List.Edit.Delete a b c)
+instance forall k (a1 :: [k]) (a2 :: [k]) (a3 :: k) (b1 :: [k]) (b2 :: k). Dhall.Typed.Type.Singletons.Internal.SingEq (Data.Type.List.Edit.Delete a1 a2 a3) (Data.Type.List.Edit.Delete a1 b1 b2)
+instance forall k (a :: [k]) (c :: k). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Data.Type.List.Edit.InsZ
+instance forall k (a1 :: k) (as :: [k]) (bs :: [k]) (c :: k) (x :: Data.Type.List.Edit.Insert as bs c). Dhall.Typed.Type.Singletons.Internal.PolySingI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Data.Type.List.Edit.InsS x)
+instance forall k (a :: [k]) (b :: [k]) (c :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Data.Type.List.Edit.Insert a b c)
+instance forall k (a1 :: [k]) (a2 :: [k]) (a3 :: k) (b :: k). Dhall.Typed.Type.Singletons.Internal.SingEq (Data.Type.List.Edit.Insert a1 a2 a3) (Data.Type.List.Edit.Insert a1 a2 b)
 instance forall k (b :: k) (as :: [k]). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Data.Type.Universe.IZ
 instance forall k (b1 :: k) (bs :: [k]) (b :: k) (x :: Data.Type.Universe.Index bs b). Dhall.Typed.Type.Singletons.Internal.PolySingI x => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Data.Type.Universe.IS x)
 instance forall k (as :: [k]) (a :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (Data.Type.Universe.Index as a)
@@ -236,6 +238,7 @@ data Prod :: (k -> Type) -> [k] -> Type
 infixr 5 :<
 traverseProd :: forall f g h as. Applicative h => (forall x. f x -> h (g x)) -> Prod f as -> h (Prod g as)
 mapProd :: forall f g as. () => (forall x. f x -> g x) -> Prod f as -> Prod g as
+foldMapProd :: forall f as m. Monoid m => (forall x. f x -> m) -> Prod f as -> m
 zipProd :: Prod f as -> Prod g as -> Prod (f :*: g) as
 singProd :: SList k as -> Prod (PolySing k) as
 prodSing :: Prod (PolySing k) as -> SList k as
@@ -243,17 +246,17 @@ ixProd :: Prod f as -> Index as a -> f a
 data SeqListEq :: Seq a -> [a] -> Type
 [SeqListEq] :: SeqListEq xs ys
 type family IxProd f as b (p :: Prod f as) (i :: Index as b) :: f b
-data SProd (a_a1xYQ :: k_a1xXY -> Type) (b_a1xYR :: [k_a1xXY]) (x_a1y1H :: Prod (a_a1xYQ :: k_a1xXY -> Type) (b_a1xYR :: [k_a1xXY]))
-[SØ] :: forall (k_a1xYp :: Type) (f_a1xXZ :: k_a1xYp -> Type). () => SProd f_a1xXZ ('[] :: [k_a1xYp])  'Ø
-[:%<] :: forall (a_a1xYH :: Type) (f_a1xY0 :: a_a1xYH -> Type) (a_X1xY2 :: a_a1xYH) (as_X1xY4 :: [a_a1xYH]) x_a1y1I x_a1y1J. () => PolySing (f_a1xY0 a_X1xY2) x_a1y1I -> SProd f_a1xY0 as_X1xY4 x_a1y1J -> SProd f_a1xY0 ( '(:) a_X1xY2 as_X1xY4) ( '(:<) x_a1y1I x_a1y1J)
+data SProd (a_a1x9v :: k_a1x8D -> Type) (b_a1x9w :: [k_a1x8D]) (x_a1xcm :: Prod (a_a1x9v :: k_a1x8D -> Type) (b_a1x9w :: [k_a1x8D]))
+[SØ] :: forall (k_a1x94 :: Type) (f_a1x8E :: k_a1x94 -> Type). () => SProd f_a1x8E ('[] :: [k_a1x94])  'Ø
+[:%<] :: forall (a_a1x9m :: Type) (f_a1x8F :: a_a1x9m -> Type) (a_X1x8H :: a_a1x9m) (as_X1x8J :: [a_a1x9m]) x_a1xcn x_a1xco. () => PolySing (f_a1x8F a_X1x8H) x_a1xcn -> SProd f_a1x8F as_X1x8J x_a1xco -> SProd f_a1x8F ( '(:) a_X1x8H as_X1x8J) ( '(:<) x_a1xcn x_a1xco)
 sIxProd :: SProd f as xs -> SIndex as a i -> PolySing (f a) (IxProd f as a xs i)
 type family ProdList (xs :: Prod (Const k) ys) :: [k]
 data BiProd :: (k -> Type) -> (j -> Type) -> [k] -> [j] -> Type
 [BZ] :: BiProd f g '[] '[]
 [BS] :: f a -> g b -> BiProd f g as bs -> BiProd f g (a : as) (b : bs)
-data SBiProd (a_a1y8j :: k_a1y2y -> Type) (b_a1y8k :: j_a1y2z -> Type) (c_a1y8l :: [k_a1y2y]) (d_a1y8m :: [j_a1y2z]) (x_a1ydO :: BiProd (a_a1y8j :: k_a1y2y -> Type) (b_a1y8k :: j_a1y2z -> Type) (c_a1y8l :: [k_a1y2y]) (d_a1y8m :: [j_a1y2z]))
-[SBZ] :: forall (k_a1y7H :: Type) (j_a1y7I :: Type) (f_a1y2A :: k_a1y7H -> Type) (g_a1y2B :: j_a1y7I -> Type). () => SBiProd f_a1y2A g_a1y2B ('[] :: [k_a1y7H]) ('[] :: [j_a1y7I])  'BZ
-[SBS] :: forall (a_a1y89 :: Type) (a_a1y8a :: Type) (f_a1y2C :: a_a1y89 -> Type) (a_X1y2E :: a_a1y89) (g_a1y2E :: a_a1y8a -> Type) (b_X1y2H :: a_a1y8a) (as_X1y2J :: [a_a1y89]) (bs_X1y2L :: [a_a1y8a]) x_a1ydP x_a1ydQ x_a1ydR. () => PolySing (f_a1y2C a_X1y2E) x_a1ydP -> PolySing (g_a1y2E b_X1y2H) x_a1ydQ -> SBiProd f_a1y2C g_a1y2E as_X1y2J bs_X1y2L x_a1ydR -> SBiProd f_a1y2C g_a1y2E ( '(:) a_X1y2E as_X1y2J) ( '(:) b_X1y2H bs_X1y2L) ( 'BS x_a1ydP x_a1ydQ x_a1ydR)
+data SBiProd (a_a1xiY :: k_a1xdd -> Type) (b_a1xiZ :: j_a1xde -> Type) (c_a1xj0 :: [k_a1xdd]) (d_a1xj1 :: [j_a1xde]) (x_a1xot :: BiProd (a_a1xiY :: k_a1xdd -> Type) (b_a1xiZ :: j_a1xde -> Type) (c_a1xj0 :: [k_a1xdd]) (d_a1xj1 :: [j_a1xde]))
+[SBZ] :: forall (k_a1xim :: Type) (j_a1xin :: Type) (f_a1xdf :: k_a1xim -> Type) (g_a1xdg :: j_a1xin -> Type). () => SBiProd f_a1xdf g_a1xdg ('[] :: [k_a1xim]) ('[] :: [j_a1xin])  'BZ
+[SBS] :: forall (a_a1xiO :: Type) (a_a1xiP :: Type) (f_a1xdh :: a_a1xiO -> Type) (a_X1xdj :: a_a1xiO) (g_a1xdj :: a_a1xiP -> Type) (b_X1xdm :: a_a1xiP) (as_X1xdo :: [a_a1xiO]) (bs_X1xdq :: [a_a1xiP]) x_a1xou x_a1xov x_a1xow. () => PolySing (f_a1xdh a_X1xdj) x_a1xou -> PolySing (g_a1xdj b_X1xdm) x_a1xov -> SBiProd f_a1xdh g_a1xdj as_X1xdo bs_X1xdq x_a1xow -> SBiProd f_a1xdh g_a1xdj ( '(:) a_X1xdj as_X1xdo) ( '(:) b_X1xdm bs_X1xdq) ( 'BS x_a1xou x_a1xov x_a1xow)
 instance forall k (f :: k -> *) j (g :: j -> *). Dhall.Typed.Type.Singletons.Internal.PolySingI 'Dhall.Typed.Type.Prod.BZ
 instance forall a1 (as :: [a1]) a2 (bs :: [a2]) (g :: a2 -> *) (b :: a2) (f :: a1 -> *) (a3 :: a1) (x1 :: f a3) (x2 :: g b) (x3 :: Dhall.Typed.Type.Prod.BiProd f g as bs). (Dhall.Typed.Type.Singletons.Internal.PolySingI x1, Dhall.Typed.Type.Singletons.Internal.PolySingI x2, Dhall.Typed.Type.Singletons.Internal.PolySingI x3) => Dhall.Typed.Type.Singletons.Internal.PolySingI ('Dhall.Typed.Type.Prod.BS x1 x2 x3)
 instance forall j k (f :: k -> *) (g :: j -> *) (as :: [k]) (bs :: [j]). (forall (a :: k). Dhall.Typed.Type.Singletons.Internal.PolySingKind (f a), forall (a :: j). Dhall.Typed.Type.Singletons.Internal.PolySingKind (g a)) => Dhall.Typed.Type.Singletons.Internal.PolySingKind (Dhall.Typed.Type.Prod.BiProd f g as bs)
@@ -341,8 +344,16 @@ module Dhall.Typed.Core
 data DSort :: Type
 [Kind] :: DSort
 [:*>] :: DSort -> DSort -> DSort
-[KRecord] :: AggType () ls as -> DSort
-[KUnion] :: AggType () ls as -> DSort
+[KRecord] :: AggType DSort ls as -> DSort
+[KUnion] :: AggType DSort ls as -> DSort
+
+-- | Kind-level let-bindings. Potentially empty, for simplicity.
+--   
+--   We also need to allow for terms and types. So maybe in the future we
+--   need a high-level Let layer uniting all kinds, types, terms, etc.
+data KBindings (ts :: [DSort]) (ps :: [DSort])
+[KBNil] :: KBindings ts ts
+[KBKind] :: DKind ts t -> KBindings (t : ts) ps -> KBindings ts ps
 
 -- | Represents the possible types encountered in Dhall. A value of type
 --   
@@ -362,6 +373,10 @@ data DKind :: [DSort] -> DSort -> Type
 [:~>] :: DKind ts  'Kind -> DKind ts  'Kind -> DKind ts  'Kind
 [KPi] :: SDSort t -> DKind (t : ts) a -> DKind ts a
 [Type] :: DKind ts  'Kind
+[TRecord] :: AggType (DKind ts  'Kind) ls as -> DKind ts  'Kind
+[TUnion] :: AggType (DKind ts  'Kind) ls as -> DKind ts  'Kind
+[KRecordLit] :: SAggType DSort ls as at -> Prod (DKind ts) as -> DKind ts ( 'KRecord at)
+[KUnionLit] :: SAggType DSort ls as at -> Index as a -> DKind ts a -> DKind ts ( 'KUnion at)
 infixr 1 :~>
 data SomeKind :: [DSort] -> Type
 [SomeKind] :: SDSort a -> DKind ts a -> SomeKind ts
@@ -386,7 +401,18 @@ data NDKind ts a :: DKind ts a -> Type
 -- | Substitute in a kind for all occurrences of a kind variable of sort
 --   <tt>a</tt> indicated by the <a>Delete</a> within a kind of osrt
 --   <tt>b</tt>.
-type family KSub ts rs a b (del :: Delete ts rs a) (x :: DKind rs a) (r :: DKind ts b) :: DKind rs b
+type family KSub ts ps a b (del :: Delete ts ps a) (x :: DKind ps a) (r :: DKind ts b) :: DKind ps b
+data SubbedKind ts t :: DKind ts t -> DKind (t : ts) 'Kind -> DKind ts 'Kind -> Type
+[SbKd] :: {getSbKd :: SDKind ts t a} -> SubbedKind ts t a b (KSub (t : ts) ts t  'Kind  'DelZ a b)
+
+-- | Type-level let-bindings. Potentially empty, for simplicity.
+--   
+--   We also need to allow for terms. So maybe in the future we need a
+--   high-level Let layer uniting all kinds, types, terms, etc.
+data TBindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (a :: DKind ts 'Kind) (ps :: [DSort]) (qs :: [DKind ps 'Kind]) (b :: DKind ps 'Kind)
+[TBNil] :: TBindings ts us a ts us a
+[TBKind] :: DKind ts t -> TBindings (t : ts) (Map (KShiftSym ts (t : ts) t  'Kind  'InsZ) us) (KShift ts (t : ts) t  'Kind  'InsZ a) ps qs b -> TBindings ts us a ps qs b
+[TBType] :: DType ts us u -> TBindings ts (u : us) a ps qs b -> TBindings ts us a ps qs b
 
 -- | Represents the possible types encountered in Dhall. A value of type
 --   
@@ -416,13 +442,17 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type
 [TLam] :: NDKind ts  'Kind u -> DType ts (u : us) a -> DType ts us (u :~> a)
 [TApp] :: DType ts us (a :~> b) -> DType ts us a -> DType ts us b
 [TPoly] :: SingSing DSort t ( 'WS tt) -> DType (t : ts) (Map (KShiftSym ts (t : ts) t  'Kind  'InsZ) us) a -> DType ts us ( 'KPi tt a)
-[TInst] :: DType ts us ( 'KPi tt b) -> SDKind ts t a -> DType ts us (KSub (t : ts) ts t  'Kind  'DelZ a b)
+[TInst] :: SingSing DSort t ( 'WS tt) -> DType ts us ( 'KPi tt b) -> SubbedKind ts t a b sk -> DType ts us sk
 [:->] :: DType ts us  'Type -> DType ts us  'Type -> DType ts us  'Type
 [Pi] :: NDKind ts  'Kind u -> DType ts (u : us) a -> DType ts us a
 [Bool] :: DType ts us  'Type
 [Natural] :: DType ts us  'Type
 [List] :: DType ts us ( 'Type :~>  'Type)
 [Optional] :: DType ts us ( 'Type :~>  'Type)
+[Record] :: AggType (DType ts us  'Type) ls as -> DType ts us  'Type
+[Union] :: AggType (DType ts us  'Type) ls as -> DType ts us  'Type
+[TRecordLit] :: SAggType (DKind ts  'Kind) ls as at -> Prod (DType ts us) as -> DType ts us ( 'TRecord at)
+[TUnionLit] :: SAggType (DKind ts  'Kind) ls as at -> Index as a -> DType ts us a -> DType ts us ( 'TUnion at)
 infixr 0 :->
 infixl 9 `TApp`
 data SomeType ts :: [DKind ts 'Kind] -> Type
@@ -441,7 +471,12 @@ toSomeType :: forall ts us a. (PolySingI a, KNormalize ts  'Kind a ~ a) => DType
 -- | Ideally we would want this to be encodable within the type. But the
 --   main problem here is checking if the LHS of an application is a
 --   variable or not. This is the next best thing?
-type family TNormalize ts us a (x :: DType ts us a) :: DType ts us a
+--   
+--   Normalizing <i>applications</i> of anonymous type functions (both
+--   <a>TApp</a> and <a>TInst</a>) is not yet supported. Practically, this
+--   means that we can't yet have any values of types that are applications
+--   of type functions.
+type family TNormalize (ts :: [DSort]) (us :: [DKind ts  'Kind]) (a :: DKind ts  'Kind) (x :: DType ts us a) :: DType ts us a
 
 -- | Version of <a>SDType</a> that exposes itself in normal form.
 data NDType ts us a :: DType ts us a -> Type
@@ -451,11 +486,14 @@ data NDType ts us a :: DType ts us a -> Type
 --   <tt>a</tt> indicated by the <a>Delete</a> within a type of kind
 --   <tt>b</tt>.
 type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: DType ts us b) :: DType ts qs b
+type family ShiftSort ts ps us a (ins :: Insert ts ps a) (x :: DType ts us  'Type) :: DType ps (Map (KShiftSym ts ps a  'Kind ins) us)  'Type
 normalizeKindOf :: DType ts us a -> DType ts us (KNormalize ts  'Kind a)
 
 -- | Primitives of Dhall terms, built into the language.
 data Prim ts us :: [DType ts us 'Type] -> DType ts us 'Type -> Type
 [BoolLit] :: Bool -> Prim ts us '[]  'Bool
+[BoolAnd] :: Prim ts us '[ 'Bool,  'Bool]  'Bool
+[BoolOr] :: Prim ts us '[ 'Bool,  'Bool]  'Bool
 [NaturalLit] :: Natural -> Prim ts us '[]  'Natural
 [NaturalFold] :: Prim ts us '[] ( 'Natural :->  'Pi ( 'NDK  'SType) (( 'TVar  'IZ :->  'TVar  'IZ) :-> ( 'TVar  'IZ :->  'TVar  'IZ)))
 [NaturalBuild] :: Prim ts us '[] ( 'Pi ( 'NDK  'SType) (( 'TVar  'IZ :->  'TVar  'IZ) :-> ( 'TVar  'IZ :->  'TVar  'IZ)) :->  'Natural)
@@ -495,10 +533,12 @@ data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Ty
 [Lam] :: NDType ts us  'Type v -> DTerm ts us (v : vs) a -> DTerm ts us vs (v :-> a)
 [App] :: DTerm ts us vs (a :-> b) -> DTerm ts us vs a -> DTerm ts us vs b
 [Poly] :: SNDKind ts  'Kind u uu -> DTerm ts (u : us) (Map (ShiftSym ts us (u : us) u  'Type  'InsZ) vs) a -> DTerm ts us vs ( 'Pi uu a)
-[Inst] :: SNDKind ts  'Kind u uu -> DTerm ts us vs ( 'Pi uu b) -> NDType ts us u a -> DTerm ts us vs (Sub ts (u : us) us u  'Type  'DelZ a b)
+[Inst] :: SNDKind ts  'Kind u uu -> DTerm ts us vs ( 'Pi uu b) -> SDType ts us u a -> DTerm ts us vs (Sub ts (u : us) us u  'Type  'DelZ a b)
 [P] :: Prim ts us as a -> Prod (DTerm ts us vs) as -> DTerm ts us vs a
 [ListLit] :: NDType ts us  'Type a -> [DTerm ts us vs a] -> DTerm ts us vs ( 'List :$ a)
 [OptionalLit] :: NDType ts us  'Type a -> Maybe (DTerm ts us vs a) -> DTerm ts us vs ( 'Optional :$ a)
+[RecordLit] :: SAggType (DType ts us  'Type) ls as at -> Prod (DTerm ts us vs) as -> DTerm ts us vs ( 'Record at)
+[UnionLit] :: SAggType (DType ts us  'Type) ls as at -> Index as a -> DTerm ts us vs a -> DTerm ts us vs ( 'Union at)
 data SomeTerm ts us :: [DType ts us 'Type] -> Type
 [SomeTerm] :: NDType ts us  'Type a -> DTerm ts us vs a -> SomeTerm ts us vs
 toSomeTerm :: forall ts us vs a. (PolySingI a, TNormalize ts us  'Type a ~ a) => DTerm ts us vs a -> SomeTerm ts us vs
@@ -567,73 +607,97 @@ deType :: (PolySingI a, KNormalize ts  'Kind a ~ a) => DType ts us a -> DExpr ts
 deTerm :: (PolySingI a, TNormalize ts us  'Type a ~ a) => DTerm ts us vs a -> DExpr ts us vs F0
 
 -- | Meta-level type describing a collection or aggregation of types. Used
---   for specifying records and unions. data AggType k :: [Text] -&gt; [k]
---   -&gt; Type where
+--   for specifying records and unions.
+--   
+--   Currently does not check for uniqueness. But it should hopefully some
+--   day. The tricky part is finding a witness type that works both at the
+--   term level and at the lifted type level.
 data AggType k (ls :: [Text]) (as :: [k])
 [ATZ] :: AggType k '[] '[]
 [ATS] :: SText l -> WrappedSing k (a :: k) -> AggType k ls as -> AggType k (l : ls) (a : as)
+
+-- | Term-level let-bindings. Potentially empty, for simplicity.
+data Bindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (vs :: [DType ts us 'Type]) (a :: DType ts us 'Type) (ps :: [DSort]) (qs :: [DKind ps 'Kind]) (rs :: [DType ps qs 'Type]) (b :: DType ps qs 'Type)
+[BNil] :: Bindings ts us vs a ts us vs a
+[BKind] :: DKind ts t -> Bindings (t : ts) (Map (KShiftSym ts (t : ts) t  'Kind  'InsZ) us) (Map (ShiftSortSym ts (t : ts) us t  'InsZ) vs) (ShiftSort ts (t : ts) us t  'InsZ a) ps qs rs b -> Bindings ts us vs a ps qs rs b
+[BType] :: DType ts us u -> Bindings ts (u : us) (Map (ShiftSym ts us (u : us) u  'Type  'InsZ) vs) (Shift ts us (u : us) u  'Type  'InsZ a) ps qs rs b -> Bindings ts us vs a ps qs rs b
+[BTerm] :: DTerm ts us vs v -> Bindings ts us (v : vs) a ps qs rs b -> Bindings ts us vs a ps qs rs b
 sortOf :: DKind '[] a -> SDSort a
 kindOf :: DType ts '[] a -> SDKind ts  'Kind a
 typeOf :: DTerm ts us '[] a -> SDType ts us  'Type a
 sortOfWith :: Prod SDSort ts -> DKind ts a -> SDSort a
 kindOfWith :: Prod (SDKind ts  'Kind) us -> DType ts us a -> SDKind ts  'Kind a
 typeOfWith :: Prod (SDType ts us  'Type) vs -> DTerm ts us vs a -> SDType ts us  'Type a
-data SDSort (x_a1BFA :: DSort)
+data SDSort (x_a1ATZ :: DSort)
 [SKind] :: SDSort  'Kind
-[:%*>] :: forall x_a1BFB x_a1BFC. () => SDSort x_a1BFB -> SDSort x_a1BFC -> SDSort ( '(:*>) x_a1BFB x_a1BFC)
-[SKRecord] :: forall (ls_X1Byj :: [Text]) (as_X1Byl :: [()]) x_a1BFD. () => PolySing (AggType () ls_X1Byj as_X1Byl) x_a1BFD -> SDSort ( 'KRecord x_a1BFD)
-[SKUnion] :: forall (ls_X1Byl :: [Text]) (as_X1Byn :: [()]) x_a1BFG. () => PolySing (AggType () ls_X1Byl as_X1Byn) x_a1BFG -> SDSort ( 'KUnion x_a1BFG)
-data SDKind (a_a1BLr :: [DSort]) (b_a1BLs :: DSort) (x_a1BPl :: DKind (a_a1BLr :: [DSort]) (b_a1BLs :: DSort))
-[SKVar] :: forall (ts_a1BGY :: [DSort]) (a_a1BGZ :: DSort) x_a1BPm. () => PolySing (Index ts_a1BGY a_a1BGZ) x_a1BPm -> SDKind ts_a1BGY a_a1BGZ ( 'KVar x_a1BPm)
-[SKLam] :: forall (t_X1BH1 :: DSort) (ts_a1BH1 :: [DSort]) (a_X1BH4 :: DSort) x_a1BPr x_a1BPs. () => SingSing DSort t_X1BH1 ( 'WS x_a1BPr) -> SDKind ( '(:) t_X1BH1 ts_a1BH1) a_X1BH4 x_a1BPs -> SDKind ts_a1BH1 ( '(:*>) t_X1BH1 a_X1BH4) ( 'KLam x_a1BPr x_a1BPs)
-[SKApp] :: forall (ts_a1BH3 :: [DSort]) (a_X1BH5 :: DSort) (b_a1BH5 :: DSort) x_a1BPC x_a1BPM. () => SDKind ts_a1BH3 ( '(:*>) a_X1BH5 b_a1BH5) x_a1BPC -> SDKind ts_a1BH3 a_X1BH5 x_a1BPM -> SDKind ts_a1BH3 b_a1BH5 ( 'KApp x_a1BPC x_a1BPM)
-[:%~>] :: forall (ts_a1BH6 :: [DSort]) x_a1BPW x_a1BQ6. () => SDKind ts_a1BH6  'Kind x_a1BPW -> SDKind ts_a1BH6  'Kind x_a1BQ6 -> SDKind ts_a1BH6  'Kind ( '(:~>) x_a1BPW x_a1BQ6)
-[SKPi] :: forall (t_X1BH8 :: DSort) (ts_a1BH8 :: [DSort]) (a_a1BH9 :: DSort) x_a1BQg x_a1BQh. () => SingSing DSort t_X1BH8 ( 'WS x_a1BQg) -> SDKind ( '(:) t_X1BH8 ts_a1BH8) a_a1BH9 x_a1BQh -> SDKind ts_a1BH8 a_a1BH9 ( 'KPi x_a1BQg x_a1BQh)
-[SType] :: forall (ts_a1BHa :: [DSort]). () => SDKind ts_a1BHa  'Kind  'Type
-data SNDKind (ts_a1BTw :: [DSort]) (a_a1BTx :: DSort) (b_a1C6Q :: DKind ts_a1BTw a_a1BTx) (x_a1Cbq :: NDKind (ts_a1BTw :: [DSort]) (a_a1BTx :: DSort) (b_a1C6Q :: DKind ts_a1BTw a_a1BTx))
-[SNDK] :: forall (ts_a1BTy :: [DSort]) (a_a1BTz :: DSort) (x_X1BTB :: DKind ts_a1BTy a_a1BTz) x_a1Cbr. () => SingSing (DKind ts_a1BTy a_a1BTz) x_X1BTB ( 'WS x_a1Cbr) -> SNDKind ts_a1BTy a_a1BTz (KNormalize ts_a1BTy a_a1BTz x_X1BTB) ( 'NDK x_a1Cbr)
-data SDType (ts_a1Ccf :: [DSort]) (a_a1Ckh :: [DKind ts_a1Ccf 'Kind]) (b_a1Cki :: DKind ts_a1Ccf 'Kind) (x_a1Cpj :: DType (ts_a1Ccf :: [DSort]) (a_a1Ckh :: [DKind ts_a1Ccf 'Kind]) (b_a1Cki :: DKind ts_a1Ccf 'Kind))
-[STVar] :: forall (ts_a1Cci :: [DSort]) (us_a1Ccg :: [DKind ts_a1Cci  'Kind]) (a_a1Cch :: DKind ts_a1Cci  'Kind) x_a1Cpk. () => PolySing (Index us_a1Ccg a_a1Cch) x_a1Cpk -> SDType ts_a1Cci us_a1Ccg a_a1Cch ( 'TVar x_a1Cpk)
-[STLam] :: forall (ts_a1Ccj :: [DSort]) (u_X1Ccl :: DKind ts_a1Ccj  'Kind) (us_a1Ccl :: [DKind ts_a1Ccj  'Kind]) (a_X1Cco :: DKind ts_a1Ccj  'Kind) x_a1Cpp x_a1Cps. () => PolySing (NDKind ts_a1Ccj  'Kind u_X1Ccl) x_a1Cpp -> SDType ts_a1Ccj ( '(:) u_X1Ccl us_a1Ccl) a_X1Cco x_a1Cps -> SDType ts_a1Ccj us_a1Ccl ( '(:~>) u_X1Ccl a_X1Cco) ( 'TLam x_a1Cpp x_a1Cps)
-[STApp] :: forall (ts_a1Ccn :: [DSort]) (us_a1Cco :: [DKind ts_a1Ccn  'Kind]) (a_X1Ccq :: DKind ts_a1Ccn  'Kind) (b_a1Ccq :: DKind ts_a1Ccn  'Kind) x_a1CpS x_a1Cqi. () => SDType ts_a1Ccn us_a1Cco ( '(:~>) a_X1Ccq b_a1Ccq) x_a1CpS -> SDType ts_a1Ccn us_a1Cco a_X1Ccq x_a1Cqi -> SDType ts_a1Ccn us_a1Cco b_a1Ccq ( 'TApp x_a1CpS x_a1Cqi)
-[STPoly] :: forall (t_X1Ccs :: DSort) (tt_X1Ccu :: SDSort t_X1Ccs) (ts_a1Cct :: [DSort]) (us_a1Ccu :: [DKind ts_a1Cct  'Kind]) (a_X1Ccy :: DKind ( '(:) t_X1Ccs ts_a1Cct)  'Kind) x_a1CqI x_a1CqM. () => SingSing (WrappedSing DSort t_X1Ccs) ( 'WS tt_X1Ccu) ( 'WS x_a1CqI) -> SDType ( '(:) t_X1Ccs ts_a1Cct) (Map (KShiftSym ts_a1Cct ( '(:) t_X1Ccs ts_a1Cct) t_X1Ccs  'Kind ( 'InsZ :: Insert ts_a1Cct ( '(:) t_X1Ccs ts_a1Cct) t_X1Ccs)) us_a1Ccu) a_X1Ccy x_a1CqM -> SDType ts_a1Cct us_a1Ccu ( 'KPi tt_X1Ccu a_X1Ccy) ( 'TPoly x_a1CqI x_a1CqM)
-[STInst] :: forall (ts_a1Ccw :: [DSort]) (us_a1Ccx :: [DKind ts_a1Ccw  'Kind]) (t_X1CcB :: DSort) (tt_X1CcA :: SDSort t_X1CcB) (b_X1CcC :: DKind ( '(:) t_X1CcB ts_a1Ccw)  'Kind) (a_X1CcF :: DKind ts_a1Ccw t_X1CcB) x_a1CFt x_a1CFT. () => SDType ts_a1Ccw us_a1Ccx ( 'KPi tt_X1CcA b_X1CcC) x_a1CFt -> SingSing (DKind ts_a1Ccw t_X1CcB) a_X1CcF ( 'WS x_a1CFT) -> SDType ts_a1Ccw us_a1Ccx (KSub ( '(:) t_X1CcB ts_a1Ccw) ts_a1Ccw t_X1CcB  'Kind ( 'DelZ :: Delete ( '(:) t_X1CcB ts_a1Ccw) ts_a1Ccw t_X1CcB) a_X1CcF b_X1CcC) ( 'TInst x_a1CFt x_a1CFT)
-[:%->] :: forall (ts_a1CcC :: [DSort]) (us_a1CcD :: [DKind ts_a1CcC  'Kind]) x_a1CG3 x_a1CHM. () => SDType ts_a1CcC us_a1CcD ( 'Type :: DKind ts_a1CcC  'Kind) x_a1CG3 -> SDType ts_a1CcC us_a1CcD ( 'Type :: DKind ts_a1CcC  'Kind) x_a1CHM -> SDType ts_a1CcC us_a1CcD ( 'Type :: DKind ts_a1CcC  'Kind) ( '(:->) x_a1CG3 x_a1CHM)
-[SPi] :: forall (ts_a1CcE :: [DSort]) (u_X1CcG :: DKind ts_a1CcE  'Kind) (us_a1CcG :: [DKind ts_a1CcE  'Kind]) (a_a1CcH :: DKind ts_a1CcE  'Kind) x_a1CJv x_a1CJy. () => PolySing (NDKind ts_a1CcE  'Kind u_X1CcG) x_a1CJv -> SDType ts_a1CcE ( '(:) u_X1CcG us_a1CcG) a_a1CcH x_a1CJy -> SDType ts_a1CcE us_a1CcG a_a1CcH ( 'Pi x_a1CJv x_a1CJy)
-[SBool] :: forall (ts_a1CcI :: [DSort]) (us_a1CcJ :: [DKind ts_a1CcI  'Kind]). () => SDType ts_a1CcI us_a1CcJ ( 'Type :: DKind ts_a1CcI  'Kind)  'Bool
-[SNatural] :: forall (ts_a1CcK :: [DSort]) (us_a1CcL :: [DKind ts_a1CcK  'Kind]). () => SDType ts_a1CcK us_a1CcL ( 'Type :: DKind ts_a1CcK  'Kind)  'Natural
-[SList] :: forall (ts_a1CcM :: [DSort]) (us_a1CcN :: [DKind ts_a1CcM  'Kind]). () => SDType ts_a1CcM us_a1CcN ((:~>) ( 'Type :: DKind ts_a1CcM  'Kind) ( 'Type :: DKind ts_a1CcM  'Kind))  'List
-[SOptional] :: forall (ts_a1CcO :: [DSort]) (us_a1CcP :: [DKind ts_a1CcO  'Kind]). () => SDType ts_a1CcO us_a1CcP ((:~>) ( 'Type :: DKind ts_a1CcO  'Kind) ( 'Type :: DKind ts_a1CcO  'Kind))  'Optional
-data SNDType (ts_a1CQX :: [DSort]) (us_a1CQY :: [DKind ts_a1CQX 'Kind]) (a_a1CQZ :: DKind ts_a1CQX 'Kind) (b_a1Det :: DType ts_a1CQX us_a1CQY a_a1CQZ) (x_a1Dl9 :: NDType (ts_a1CQX :: [DSort]) (us_a1CQY :: [DKind ts_a1CQX 'Kind]) (a_a1CQZ :: DKind ts_a1CQX 'Kind) (b_a1Det :: DType ts_a1CQX us_a1CQY a_a1CQZ))
-[SNDT] :: forall (ts_a1CR0 :: [DSort]) (us_a1CR1 :: [DKind ts_a1CR0  'Kind]) (a_a1CR2 :: DKind ts_a1CR0  'Kind) (x_X1CR4 :: DType ts_a1CR0 us_a1CR1 a_a1CR2) x_a1Dla. () => SingSing (DType ts_a1CR0 us_a1CR1 a_a1CR2) x_X1CR4 ( 'WS x_a1Dla) -> SNDType ts_a1CR0 us_a1CR1 a_a1CR2 (TNormalize ts_a1CR0 us_a1CR1 a_a1CR2 x_X1CR4) ( 'NDT x_a1Dla)
-data SPrim (ts_a1Dmi :: [DSort]) (us_a1Dmj :: [DKind ts_a1Dmi 'Kind]) (a_a1DGS :: [DType ts_a1Dmi us_a1Dmj ( 'Type :: DKind ts_a1Dmi 'Kind)]) (b_a1DGT :: DType ts_a1Dmi us_a1Dmj ( 'Type :: DKind ts_a1Dmi 'Kind)) (x_a1DLx :: Prim (ts_a1Dmi :: [DSort]) (us_a1Dmj :: [DKind ts_a1Dmi 'Kind]) (a_a1DGS :: [DType ts_a1Dmi us_a1Dmj ( 'Type :: DKind ts_a1Dmi 'Kind)]) (b_a1DGT :: DType ts_a1Dmi us_a1Dmj ( 'Type :: DKind ts_a1Dmi 'Kind)))
-[SBoolLit] :: forall (ts_a1Dmk :: [DSort]) (us_a1Dml :: [DKind ts_a1Dmk  'Kind]) x_a1DLy. () => PolySing Bool x_a1DLy -> SPrim ts_a1Dmk us_a1Dml ('[] :: [DType ts_a1Dmk us_a1Dml ( 'Type :: DKind ts_a1Dmk  'Kind)]) ( 'Bool :: DType ts_a1Dmk us_a1Dml ( 'Type :: DKind ts_a1Dmk  'Kind)) ( 'BoolLit x_a1DLy)
-[SNaturalLit] :: forall (ts_a1Dmm :: [DSort]) (us_a1Dmn :: [DKind ts_a1Dmm  'Kind]) x_a1DLz. () => PolySing Natural x_a1DLz -> SPrim ts_a1Dmm us_a1Dmn ('[] :: [DType ts_a1Dmm us_a1Dmn ( 'Type :: DKind ts_a1Dmm  'Kind)]) ( 'Natural :: DType ts_a1Dmm us_a1Dmn ( 'Type :: DKind ts_a1Dmm  'Kind)) ( 'NaturalLit x_a1DLz)
-[SNaturalFold] :: forall (ts_a1Dmo :: [DSort]) (us_a1Dmp :: [DKind ts_a1Dmo  'Kind]). () => SPrim ts_a1Dmo us_a1Dmp ('[] :: [DType ts_a1Dmo us_a1Dmp ( 'Type :: DKind ts_a1Dmo  'Kind)]) ((:->) ( 'Natural :: DType ts_a1Dmo us_a1Dmp ( 'Type :: DKind ts_a1Dmo  'Kind)) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Dmo  'Kind ( 'Type :: DKind ts_a1Dmo  'Kind))) ((:->) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmo  'Kind) us_a1Dmp) ( 'Type :: DKind ts_a1Dmo  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmo  'Kind) us_a1Dmp) ( 'Type :: DKind ts_a1Dmo  'Kind)))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmo  'Kind) us_a1Dmp) ( 'Type :: DKind ts_a1Dmo  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmo  'Kind) us_a1Dmp) ( 'Type :: DKind ts_a1Dmo  'Kind)))))))  'NaturalFold
-[SNaturalBuild] :: forall (ts_a1Dmq :: [DSort]) (us_a1Dmr :: [DKind ts_a1Dmq  'Kind]). () => SPrim ts_a1Dmq us_a1Dmr ('[] :: [DType ts_a1Dmq us_a1Dmr ( 'Type :: DKind ts_a1Dmq  'Kind)]) ((:->) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Dmq  'Kind ( 'Type :: DKind ts_a1Dmq  'Kind))) ((:->) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmq  'Kind) us_a1Dmr) ( 'Type :: DKind ts_a1Dmq  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmq  'Kind) us_a1Dmr) ( 'Type :: DKind ts_a1Dmq  'Kind)))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmq  'Kind) us_a1Dmr) ( 'Type :: DKind ts_a1Dmq  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmq  'Kind) us_a1Dmr) ( 'Type :: DKind ts_a1Dmq  'Kind)))))) ( 'Natural :: DType ts_a1Dmq us_a1Dmr ( 'Type :: DKind ts_a1Dmq  'Kind)))  'NaturalBuild
-[SNaturalPlus] :: forall (ts_a1Dms :: [DSort]) (us_a1Dmt :: [DKind ts_a1Dms  'Kind]). () => SPrim ts_a1Dms us_a1Dmt ( '(:) ( 'Natural :: DType ts_a1Dms us_a1Dmt ( 'Type :: DKind ts_a1Dms  'Kind)) ( '(:) ( 'Natural :: DType ts_a1Dms us_a1Dmt ( 'Type :: DKind ts_a1Dms  'Kind)) ('[] :: [DType ts_a1Dms us_a1Dmt ( 'Type :: DKind ts_a1Dms  'Kind)]))) ( 'Natural :: DType ts_a1Dms us_a1Dmt ( 'Type :: DKind ts_a1Dms  'Kind))  'NaturalPlus
-[SNaturalTimes] :: forall (ts_a1Dmu :: [DSort]) (us_a1Dmv :: [DKind ts_a1Dmu  'Kind]). () => SPrim ts_a1Dmu us_a1Dmv ( '(:) ( 'Natural :: DType ts_a1Dmu us_a1Dmv ( 'Type :: DKind ts_a1Dmu  'Kind)) ( '(:) ( 'Natural :: DType ts_a1Dmu us_a1Dmv ( 'Type :: DKind ts_a1Dmu  'Kind)) ('[] :: [DType ts_a1Dmu us_a1Dmv ( 'Type :: DKind ts_a1Dmu  'Kind)]))) ( 'Natural :: DType ts_a1Dmu us_a1Dmv ( 'Type :: DKind ts_a1Dmu  'Kind))  'NaturalTimes
-[SNaturalIsZero] :: forall (ts_a1Dmw :: [DSort]) (us_a1Dmx :: [DKind ts_a1Dmw  'Kind]). () => SPrim ts_a1Dmw us_a1Dmx ('[] :: [DType ts_a1Dmw us_a1Dmx ( 'Type :: DKind ts_a1Dmw  'Kind)]) ((:->) ( 'Natural :: DType ts_a1Dmw us_a1Dmx ( 'Type :: DKind ts_a1Dmw  'Kind)) ( 'Bool :: DType ts_a1Dmw us_a1Dmx ( 'Type :: DKind ts_a1Dmw  'Kind)))  'NaturalIsZero
-[SListFold] :: forall (ts_a1Dmy :: [DSort]) (us_a1Dmz :: [DKind ts_a1Dmy  'Kind]). () => SPrim ts_a1Dmy us_a1Dmz ('[] :: [DType ts_a1Dmy us_a1Dmz ( 'Type :: DKind ts_a1Dmy  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Dmy  'Kind ( 'Type :: DKind ts_a1Dmy  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1Dmy ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz) ((:~>) ( 'Type :: DKind ts_a1Dmy  'Kind) ( 'Type :: DKind ts_a1Dmy  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz) ( 'Type :: DKind ts_a1Dmy  'Kind)))) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Dmy  'Kind ( 'Type :: DKind ts_a1Dmy  'Kind))) ((:->) ((:->) ( 'TVar ( 'IS ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz) ( 'Type :: DKind ts_a1Dmy  'Kind)) :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz)) ( 'Type :: DKind ts_a1Dmy  'Kind))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz)) ( 'Type :: DKind ts_a1Dmy  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz)) ( 'Type :: DKind ts_a1Dmy  'Kind))))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz)) ( 'Type :: DKind ts_a1Dmy  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) ( '(:) ( 'Type :: DKind ts_a1Dmy  'Kind) us_a1Dmz)) ( 'Type :: DKind ts_a1Dmy  'Kind))))))))  'ListFold
-[SListBuild] :: forall (ts_a1DmA :: [DSort]) (us_a1DmB :: [DKind ts_a1DmA  'Kind]). () => SPrim ts_a1DmA us_a1DmB ('[] :: [DType ts_a1DmA us_a1DmB ( 'Type :: DKind ts_a1DmA  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmA  'Kind ( 'Type :: DKind ts_a1DmA  'Kind))) ((:->) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmA  'Kind ( 'Type :: DKind ts_a1DmA  'Kind))) ((:->) ((:->) ( 'TVar ( 'IS ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB) ( 'Type :: DKind ts_a1DmA  'Kind)) :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB)) ( 'Type :: DKind ts_a1DmA  'Kind))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB)) ( 'Type :: DKind ts_a1DmA  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB)) ( 'Type :: DKind ts_a1DmA  'Kind))))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB)) ( 'Type :: DKind ts_a1DmA  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB)) ( 'Type :: DKind ts_a1DmA  'Kind)))))) ((:$) ( 'List :: DType ts_a1DmA ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB) ((:~>) ( 'Type :: DKind ts_a1DmA  'Kind) ( 'Type :: DKind ts_a1DmA  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmA  'Kind) us_a1DmB) ( 'Type :: DKind ts_a1DmA  'Kind))))))  'ListBuild
-[SListAppend] :: forall (ts_a1DmC :: [DSort]) (us_a1DmD :: [DKind ts_a1DmC  'Kind]) (a_X1DmF :: DType ts_a1DmC us_a1DmD ( 'Type :: DKind ts_a1DmC  'Kind)) x_a1DLB. () => SingSing (DType ts_a1DmC us_a1DmD ( 'Type :: DKind ts_a1DmC  'Kind)) a_X1DmF ( 'WS x_a1DLB) -> SPrim ts_a1DmC us_a1DmD ( '(:) ((:$) ( 'List :: DType ts_a1DmC us_a1DmD ((:~>) ( 'Type :: DKind ts_a1DmC  'Kind) ( 'Type :: DKind ts_a1DmC  'Kind))) a_X1DmF) ( '(:) ((:$) ( 'List :: DType ts_a1DmC us_a1DmD ((:~>) ( 'Type :: DKind ts_a1DmC  'Kind) ( 'Type :: DKind ts_a1DmC  'Kind))) a_X1DmF) ('[] :: [DType ts_a1DmC us_a1DmD ( 'Type :: DKind ts_a1DmC  'Kind)]))) ((:$) ( 'List :: DType ts_a1DmC us_a1DmD ((:~>) ( 'Type :: DKind ts_a1DmC  'Kind) ( 'Type :: DKind ts_a1DmC  'Kind))) a_X1DmF) ( 'ListAppend x_a1DLB)
-[SListHead] :: forall (ts_a1DmF :: [DSort]) (us_a1DmG :: [DKind ts_a1DmF  'Kind]). () => SPrim ts_a1DmF us_a1DmG ('[] :: [DType ts_a1DmF us_a1DmG ( 'Type :: DKind ts_a1DmF  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmF  'Kind ( 'Type :: DKind ts_a1DmF  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1DmF ( '(:) ( 'Type :: DKind ts_a1DmF  'Kind) us_a1DmG) ((:~>) ( 'Type :: DKind ts_a1DmF  'Kind) ( 'Type :: DKind ts_a1DmF  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmF  'Kind) us_a1DmG) ( 'Type :: DKind ts_a1DmF  'Kind)))) ((:$) ( 'Optional :: DType ts_a1DmF ( '(:) ( 'Type :: DKind ts_a1DmF  'Kind) us_a1DmG) ((:~>) ( 'Type :: DKind ts_a1DmF  'Kind) ( 'Type :: DKind ts_a1DmF  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmF  'Kind) us_a1DmG) ( 'Type :: DKind ts_a1DmF  'Kind))))))  'ListHead
-[SListLast] :: forall (ts_a1DmH :: [DSort]) (us_a1DmI :: [DKind ts_a1DmH  'Kind]). () => SPrim ts_a1DmH us_a1DmI ('[] :: [DType ts_a1DmH us_a1DmI ( 'Type :: DKind ts_a1DmH  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmH  'Kind ( 'Type :: DKind ts_a1DmH  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1DmH ( '(:) ( 'Type :: DKind ts_a1DmH  'Kind) us_a1DmI) ((:~>) ( 'Type :: DKind ts_a1DmH  'Kind) ( 'Type :: DKind ts_a1DmH  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmH  'Kind) us_a1DmI) ( 'Type :: DKind ts_a1DmH  'Kind)))) ((:$) ( 'Optional :: DType ts_a1DmH ( '(:) ( 'Type :: DKind ts_a1DmH  'Kind) us_a1DmI) ((:~>) ( 'Type :: DKind ts_a1DmH  'Kind) ( 'Type :: DKind ts_a1DmH  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmH  'Kind) us_a1DmI) ( 'Type :: DKind ts_a1DmH  'Kind))))))  'ListLast
-[SListReverse] :: forall (ts_a1DmJ :: [DSort]) (us_a1DmK :: [DKind ts_a1DmJ  'Kind]). () => SPrim ts_a1DmJ us_a1DmK ('[] :: [DType ts_a1DmJ us_a1DmK ( 'Type :: DKind ts_a1DmJ  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmJ  'Kind ( 'Type :: DKind ts_a1DmJ  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1DmJ ( '(:) ( 'Type :: DKind ts_a1DmJ  'Kind) us_a1DmK) ((:~>) ( 'Type :: DKind ts_a1DmJ  'Kind) ( 'Type :: DKind ts_a1DmJ  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmJ  'Kind) us_a1DmK) ( 'Type :: DKind ts_a1DmJ  'Kind)))) ((:$) ( 'List :: DType ts_a1DmJ ( '(:) ( 'Type :: DKind ts_a1DmJ  'Kind) us_a1DmK) ((:~>) ( 'Type :: DKind ts_a1DmJ  'Kind) ( 'Type :: DKind ts_a1DmJ  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmJ  'Kind) us_a1DmK) ( 'Type :: DKind ts_a1DmJ  'Kind))))))  'ListReverse
-[SSome] :: forall (ts_a1DmL :: [DSort]) (us_a1DmM :: [DKind ts_a1DmL  'Kind]) (a_X1DmO :: DType ts_a1DmL us_a1DmM ( 'Type :: DKind ts_a1DmL  'Kind)) x_a1DNk. () => SingSing (DType ts_a1DmL us_a1DmM ( 'Type :: DKind ts_a1DmL  'Kind)) a_X1DmO ( 'WS x_a1DNk) -> SPrim ts_a1DmL us_a1DmM ( '(:) a_X1DmO ('[] :: [DType ts_a1DmL us_a1DmM ( 'Type :: DKind ts_a1DmL  'Kind)])) ((:$) ( 'Optional :: DType ts_a1DmL us_a1DmM ((:~>) ( 'Type :: DKind ts_a1DmL  'Kind) ( 'Type :: DKind ts_a1DmL  'Kind))) a_X1DmO) ( 'Some x_a1DNk)
-[SNone] :: forall (ts_a1DmO :: [DSort]) (us_a1DmP :: [DKind ts_a1DmO  'Kind]). () => SPrim ts_a1DmO us_a1DmP ('[] :: [DType ts_a1DmO us_a1DmP ( 'Type :: DKind ts_a1DmO  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1DmO  'Kind ( 'Type :: DKind ts_a1DmO  'Kind))) ((:$) ( 'Optional :: DType ts_a1DmO ( '(:) ( 'Type :: DKind ts_a1DmO  'Kind) us_a1DmP) ((:~>) ( 'Type :: DKind ts_a1DmO  'Kind) ( 'Type :: DKind ts_a1DmO  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1DmO  'Kind) us_a1DmP) ( 'Type :: DKind ts_a1DmO  'Kind)))))  'None
-data SDTerm (ts_a1DVF :: [DSort]) (us_a1DVG :: [DKind ts_a1DVF 'Kind]) (a_a1Evt :: [DType ts_a1DVF us_a1DVG ( 'Type :: DKind ts_a1DVF 'Kind)]) (b_a1Evu :: DType ts_a1DVF us_a1DVG ( 'Type :: DKind ts_a1DVF 'Kind)) (x_a1EDs :: DTerm (ts_a1DVF :: [DSort]) (us_a1DVG :: [DKind ts_a1DVF 'Kind]) (a_a1Evt :: [DType ts_a1DVF us_a1DVG ( 'Type :: DKind ts_a1DVF 'Kind)]) (b_a1Evu :: DType ts_a1DVF us_a1DVG ( 'Type :: DKind ts_a1DVF 'Kind)))
-[SVar] :: forall (ts_a1DVJ :: [DSort]) (us_a1DVK :: [DKind ts_a1DVJ  'Kind]) (vs_a1DVH :: [DType ts_a1DVJ us_a1DVK ( 'Type :: DKind ts_a1DVJ  'Kind)]) (a_a1DVI :: DType ts_a1DVJ us_a1DVK ( 'Type :: DKind ts_a1DVJ  'Kind)) x_a1EDt. () => PolySing (Index vs_a1DVH a_a1DVI) x_a1EDt -> SDTerm ts_a1DVJ us_a1DVK vs_a1DVH a_a1DVI ( 'Var x_a1EDt)
-[SLam] :: forall (ts_a1DVL :: [DSort]) (us_a1DVM :: [DKind ts_a1DVL  'Kind]) (v_X1DVO :: DType ts_a1DVL us_a1DVM ( 'Type :: DKind ts_a1DVL  'Kind)) (vs_a1DVO :: [DType ts_a1DVL us_a1DVM ( 'Type :: DKind ts_a1DVL  'Kind)]) (a_X1DVR :: DType ts_a1DVL us_a1DVM ( 'Type :: DKind ts_a1DVL  'Kind)) x_a1EDy x_a1EEV. () => PolySing (NDType ts_a1DVL us_a1DVM ( 'Type :: DKind ts_a1DVL  'Kind) v_X1DVO) x_a1EDy -> SDTerm ts_a1DVL us_a1DVM ( '(:) v_X1DVO vs_a1DVO) a_X1DVR x_a1EEV -> SDTerm ts_a1DVL us_a1DVM vs_a1DVO ( '(:->) v_X1DVO a_X1DVR) ( 'Lam x_a1EDy x_a1EEV)
-[SApp] :: forall (ts_a1DVQ :: [DSort]) (us_a1DVR :: [DKind ts_a1DVQ  'Kind]) (vs_a1DVS :: [DType ts_a1DVQ us_a1DVR ( 'Type :: DKind ts_a1DVQ  'Kind)]) (a_X1DVU :: DType ts_a1DVQ us_a1DVR ( 'Type :: DKind ts_a1DVQ  'Kind)) (b_a1DVU :: DType ts_a1DVQ us_a1DVR ( 'Type :: DKind ts_a1DVQ  'Kind)) x_a1EFn x_a1EFP. () => SDTerm ts_a1DVQ us_a1DVR vs_a1DVS ( '(:->) a_X1DVU b_a1DVU) x_a1EFn -> SDTerm ts_a1DVQ us_a1DVR vs_a1DVS a_X1DVU x_a1EFP -> SDTerm ts_a1DVQ us_a1DVR vs_a1DVS b_a1DVU ( 'App x_a1EFn x_a1EFP)
-[SPoly] :: forall (ts_a1DVV :: [DSort]) (u_X1DVX :: DKind ts_a1DVV  'Kind) (uu_X1DVZ :: NDKind ts_a1DVV  'Kind u_X1DVX) (us_a1DVY :: [DKind ts_a1DVV  'Kind]) (vs_a1DVZ :: [DType ts_a1DVV us_a1DVY ( 'Type :: DKind ts_a1DVV  'Kind)]) (a_X1DW3 :: DType ts_a1DVV ( '(:) u_X1DVX us_a1DVY) ( 'Type :: DKind ts_a1DVV  'Kind)) x_a1EGh x_a1EGk. () => SingSing (NDKind ts_a1DVV  'Kind u_X1DVX) uu_X1DVZ ( 'WS x_a1EGh) -> SDTerm ts_a1DVV ( '(:) u_X1DVX us_a1DVY) (Map (ShiftSym ts_a1DVV us_a1DVY ( '(:) u_X1DVX us_a1DVY) u_X1DVX ( 'Type :: DKind ts_a1DVV  'Kind) ( 'InsZ :: Insert us_a1DVY ( '(:) u_X1DVX us_a1DVY) u_X1DVX)) vs_a1DVZ) a_X1DW3 x_a1EGk -> SDTerm ts_a1DVV us_a1DVY vs_a1DVZ ( 'Pi uu_X1DVZ a_X1DW3) ( 'Poly x_a1EGh x_a1EGk)
-[SInst] :: forall (ts_a1DW1 :: [DSort]) (u_X1DW3 :: DKind ts_a1DW1  'Kind) (uu_X1DW5 :: NDKind ts_a1DW1  'Kind u_X1DW3) (us_a1DW4 :: [DKind ts_a1DW1  'Kind]) (vs_a1DW5 :: [DType ts_a1DW1 us_a1DW4 ( 'Type :: DKind ts_a1DW1  'Kind)]) (b_X1DW9 :: DType ts_a1DW1 ( '(:) u_X1DW3 us_a1DW4) ( 'Type :: DKind ts_a1DW1  'Kind)) (a_X1DWb :: DType ts_a1DW1 us_a1DW4 u_X1DW3) x_a1FjA x_a1FjD x_a1Fk5. () => SingSing (NDKind ts_a1DW1  'Kind u_X1DW3) uu_X1DW5 ( 'WS x_a1FjA) -> SDTerm ts_a1DW1 us_a1DW4 vs_a1DW5 ( 'Pi uu_X1DW5 b_X1DW9) x_a1FjD -> PolySing (NDType ts_a1DW1 us_a1DW4 u_X1DW3 a_X1DWb) x_a1Fk5 -> SDTerm ts_a1DW1 us_a1DW4 vs_a1DW5 (Sub ts_a1DW1 ( '(:) u_X1DW3 us_a1DW4) us_a1DW4 u_X1DW3 ( 'Type :: DKind ts_a1DW1  'Kind) ( 'DelZ :: Delete ( '(:) u_X1DW3 us_a1DW4) us_a1DW4 u_X1DW3) a_X1DWb b_X1DW9) ( 'Inst x_a1FjA x_a1FjD x_a1Fk5)
-[SP] :: forall (ts_a1DW8 :: [DSort]) (us_a1DW9 :: [DKind ts_a1DW8  'Kind]) (as_X1DWb :: [DType ts_a1DW8 us_a1DW9 ( 'Type :: DKind ts_a1DW8  'Kind)]) (a_a1DWb :: DType ts_a1DW8 us_a1DW9 ( 'Type :: DKind ts_a1DW8  'Kind)) (vs_a1DWc :: [DType ts_a1DW8 us_a1DW9 ( 'Type :: DKind ts_a1DW8  'Kind)]) x_a1Fk9 x_a1FkE. () => PolySing (Prim ts_a1DW8 us_a1DW9 as_X1DWb a_a1DWb) x_a1Fk9 -> PolySing (Prod (DTerm ts_a1DW8 us_a1DW9 vs_a1DWc) as_X1DWb) x_a1FkE -> SDTerm ts_a1DW8 us_a1DW9 vs_a1DWc a_a1DWb ( 'P x_a1Fk9 x_a1FkE)
-[SListLit] :: forall (ts_a1DWd :: [DSort]) (us_a1DWe :: [DKind ts_a1DWd  'Kind]) (a_X1DWg :: DType ts_a1DWd us_a1DWe ( 'Type :: DKind ts_a1DWd  'Kind)) (vs_a1DWg :: [DType ts_a1DWd us_a1DWe ( 'Type :: DKind ts_a1DWd  'Kind)]) x_a1FoE x_a1Fq1. () => PolySing (NDType ts_a1DWd us_a1DWe ( 'Type :: DKind ts_a1DWd  'Kind) a_X1DWg) x_a1FoE -> PolySing [DTerm ts_a1DWd us_a1DWe vs_a1DWg a_X1DWg] x_a1Fq1 -> SDTerm ts_a1DWd us_a1DWe vs_a1DWg ((:$) ( 'List :: DType ts_a1DWd us_a1DWe ((:~>) ( 'Type :: DKind ts_a1DWd  'Kind) ( 'Type :: DKind ts_a1DWd  'Kind))) a_X1DWg) ( 'ListLit x_a1FoE x_a1Fq1)
-[SOptionalLit] :: forall (ts_a1DWh :: [DSort]) (us_a1DWi :: [DKind ts_a1DWh  'Kind]) (a_X1DWk :: DType ts_a1DWh us_a1DWi ( 'Type :: DKind ts_a1DWh  'Kind)) (vs_a1DWk :: [DType ts_a1DWh us_a1DWi ( 'Type :: DKind ts_a1DWh  'Kind)]) x_a1Fxt x_a1FyQ. () => PolySing (NDType ts_a1DWh us_a1DWi ( 'Type :: DKind ts_a1DWh  'Kind) a_X1DWk) x_a1Fxt -> PolySing (Maybe (DTerm ts_a1DWh us_a1DWi vs_a1DWk a_X1DWk)) x_a1FyQ -> SDTerm ts_a1DWh us_a1DWi vs_a1DWk ((:$) ( 'Optional :: DType ts_a1DWh us_a1DWi ((:~>) ( 'Type :: DKind ts_a1DWh  'Kind) ( 'Type :: DKind ts_a1DWh  'Kind))) a_X1DWk) ( 'OptionalLit x_a1Fxt x_a1FyQ)
-data SAggType (k_a1Bsd :: Type) (ls_a1Bse :: [Text]) (as_a1Bsf :: [k_a1Bsd]) (x_a1Bxi :: AggType (k_a1Bsd :: Type) (ls_a1Bse :: [Text]) (as_a1Bsf :: [k_a1Bsd]))
-[SATZ] :: forall (k_a1Bsg :: Type). () => SAggType k_a1Bsg ('[] :: [Text]) ('[] :: [k_a1Bsg])  'ATZ
-[SATS] :: forall (k_a1Bsh :: Type) (l_X1Bsj :: Text) (a_X1Bsl :: k_a1Bsh) (ls_X1Bsn :: [Text]) (as_X1Bsp :: [k_a1Bsh]) x_a1Bxj x_a1Bxl x_a1Bxo. () => SingSing Text l_X1Bsj ( 'WS x_a1Bxj) -> PolySing (WrappedSing k_a1Bsh a_X1Bsl) x_a1Bxl -> SAggType k_a1Bsh ls_X1Bsn as_X1Bsp x_a1Bxo -> SAggType k_a1Bsh ( '(:) l_X1Bsj ls_X1Bsn) ( '(:) a_X1Bsl as_X1Bsp) ( 'ATS x_a1Bxj x_a1Bxl x_a1Bxo)
+[:%*>] :: forall x_a1AU0 x_a1AU1. () => SDSort x_a1AU0 -> SDSort x_a1AU1 -> SDSort ( '(:*>) x_a1AU0 x_a1AU1)
+[SKRecord] :: forall (ls_X1AMI :: [Text]) (as_X1AMK :: [DSort]) x_a1AU2. () => PolySing (AggType DSort ls_X1AMI as_X1AMK) x_a1AU2 -> SDSort ( 'KRecord x_a1AU2)
+[SKUnion] :: forall (ls_X1AMK :: [Text]) (as_X1AMM :: [DSort]) x_a1AU5. () => PolySing (AggType DSort ls_X1AMK as_X1AMM) x_a1AU5 -> SDSort ( 'KUnion x_a1AU5)
+data SDKind (a_a1B1c :: [DSort]) (b_a1B1d :: DSort) (x_a1B6F :: DKind (a_a1B1c :: [DSort]) (b_a1B1d :: DSort))
+[SKVar] :: forall (ts_a1AVu :: [DSort]) (a_a1AVv :: DSort) x_a1B6G. () => PolySing (Index ts_a1AVu a_a1AVv) x_a1B6G -> SDKind ts_a1AVu a_a1AVv ( 'KVar x_a1B6G)
+[SKLam] :: forall (t_X1AVx :: DSort) (ts_a1AVx :: [DSort]) (a_X1AVA :: DSort) x_a1B6L x_a1B6M. () => SingSing DSort t_X1AVx ( 'WS x_a1B6L) -> SDKind ( '(:) t_X1AVx ts_a1AVx) a_X1AVA x_a1B6M -> SDKind ts_a1AVx ( '(:*>) t_X1AVx a_X1AVA) ( 'KLam x_a1B6L x_a1B6M)
+[SKApp] :: forall (ts_a1AVz :: [DSort]) (a_X1AVB :: DSort) (b_a1AVB :: DSort) x_a1B70 x_a1B7e. () => SDKind ts_a1AVz ( '(:*>) a_X1AVB b_a1AVB) x_a1B70 -> SDKind ts_a1AVz a_X1AVB x_a1B7e -> SDKind ts_a1AVz b_a1AVB ( 'KApp x_a1B70 x_a1B7e)
+[:%~>] :: forall (ts_a1AVC :: [DSort]) x_a1B7s x_a1B7G. () => SDKind ts_a1AVC  'Kind x_a1B7s -> SDKind ts_a1AVC  'Kind x_a1B7G -> SDKind ts_a1AVC  'Kind ( '(:~>) x_a1B7s x_a1B7G)
+[SKPi] :: forall (t_X1AVE :: DSort) (ts_a1AVE :: [DSort]) (a_a1AVF :: DSort) x_a1B7U x_a1B7V. () => SingSing DSort t_X1AVE ( 'WS x_a1B7U) -> SDKind ( '(:) t_X1AVE ts_a1AVE) a_a1AVF x_a1B7V -> SDKind ts_a1AVE a_a1AVF ( 'KPi x_a1B7U x_a1B7V)
+[SType] :: forall (ts_a1AVG :: [DSort]). () => SDKind ts_a1AVG  'Kind  'Type
+[STRecord] :: forall (ts_a1AVH :: [DSort]) (ls_X1AVJ :: [Text]) (as_X1AVL :: [DKind ts_a1AVH  'Kind]) x_a1B89. () => PolySing (AggType (DKind ts_a1AVH  'Kind) ls_X1AVJ as_X1AVL) x_a1B89 -> SDKind ts_a1AVH  'Kind ( 'TRecord x_a1B89)
+[STUnion] :: forall (ts_a1AVK :: [DSort]) (ls_X1AVM :: [Text]) (as_X1AVO :: [DKind ts_a1AVK  'Kind]) x_a1B9f. () => PolySing (AggType (DKind ts_a1AVK  'Kind) ls_X1AVM as_X1AVO) x_a1B9f -> SDKind ts_a1AVK  'Kind ( 'TUnion x_a1B9f)
+[SKRecordLit] :: forall (ls_X1AVO :: [Text]) (as_X1AVQ :: [DSort]) (at_X1AVS :: AggType DSort ls_X1AVO as_X1AVQ) (ts_a1AVQ :: [DSort]) x_a1Bal x_a1Bao. () => SingSing (AggType DSort ls_X1AVO as_X1AVQ) at_X1AVS ( 'WS x_a1Bal) -> PolySing (Prod (DKind ts_a1AVQ) as_X1AVQ) x_a1Bao -> SDKind ts_a1AVQ ( 'KRecord at_X1AVS) ( 'KRecordLit x_a1Bal x_a1Bao)
+[SKUnionLit] :: forall (ls_X1AVS :: [Text]) (as_X1AVU :: [DSort]) (at_X1AVW :: AggType DSort ls_X1AVS as_X1AVU) (a_X1AVY :: DSort) (ts_a1AVV :: [DSort]) x_a1Bb6 x_a1Bb9 x_a1Bbe. () => SingSing (AggType DSort ls_X1AVS as_X1AVU) at_X1AVW ( 'WS x_a1Bb6) -> PolySing (Index as_X1AVU a_X1AVY) x_a1Bb9 -> SDKind ts_a1AVV a_X1AVY x_a1Bbe -> SDKind ts_a1AVV ( 'KUnion at_X1AVW) ( 'KUnionLit x_a1Bb6 x_a1Bb9 x_a1Bbe)
+data SNDKind (ts_a1Bim :: [DSort]) (a_a1Bin :: DSort) (b_a1C4H :: DKind ts_a1Bim a_a1Bin) (x_a1Cb0 :: NDKind (ts_a1Bim :: [DSort]) (a_a1Bin :: DSort) (b_a1C4H :: DKind ts_a1Bim a_a1Bin))
+[SNDK] :: forall (ts_a1Bio :: [DSort]) (a_a1Bip :: DSort) (x_X1Bir :: DKind ts_a1Bio a_a1Bip) x_a1Cb1. () => SingSing (DKind ts_a1Bio a_a1Bip) x_X1Bir ( 'WS x_a1Cb1) -> SNDKind ts_a1Bio a_a1Bip (KNormalize ts_a1Bio a_a1Bip x_X1Bir) ( 'NDK x_a1Cb1)
+data SSubbedKind (ts_a1CbG :: [DSort]) (t_a1CbH :: DSort) (a_a1Cfs :: DKind ts_a1CbG t_a1CbH) (b_a1Cft :: DKind ( '(:) t_a1CbH ts_a1CbG) 'Kind) (c_a1Cfu :: DKind ts_a1CbG 'Kind) (x_a1Cj6 :: SubbedKind (ts_a1CbG :: [DSort]) (t_a1CbH :: DSort) (a_a1Cfs :: DKind ts_a1CbG t_a1CbH) (b_a1Cft :: DKind ( '(:) t_a1CbH ts_a1CbG) 'Kind) (c_a1Cfu :: DKind ts_a1CbG 'Kind))
+[SSbKd] :: forall (ts_a1CbI :: [DSort]) (t_a1CbJ :: DSort) (a_a1CbK :: DKind ts_a1CbI t_a1CbJ) (b_a1CbL :: DKind ( '(:) t_a1CbJ ts_a1CbI)  'Kind) x_a1Cj7. () => {sGetSbKd :: SingSing (DKind ts_a1CbI t_a1CbJ) a_a1CbK ( 'WS x_a1Cj7)} -> SSubbedKind ts_a1CbI t_a1CbJ a_a1CbK b_a1CbL (KSub ( '(:) t_a1CbJ ts_a1CbI) ts_a1CbI t_a1CbJ  'Kind ( 'DelZ :: Delete ( '(:) t_a1CbJ ts_a1CbI) ts_a1CbI t_a1CbJ) a_a1CbK b_a1CbL) ( 'SbKd x_a1Cj7)
+data SDType (ts_a1Ckh :: [DSort]) (a_a1CvY :: [DKind ts_a1Ckh 'Kind]) (b_a1CvZ :: DKind ts_a1Ckh 'Kind) (x_a1CEf :: DType (ts_a1Ckh :: [DSort]) (a_a1CvY :: [DKind ts_a1Ckh 'Kind]) (b_a1CvZ :: DKind ts_a1Ckh 'Kind))
+[STVar] :: forall (ts_a1Ckk :: [DSort]) (us_a1Cki :: [DKind ts_a1Ckk  'Kind]) (a_a1Ckj :: DKind ts_a1Ckk  'Kind) x_a1CEg. () => PolySing (Index us_a1Cki a_a1Ckj) x_a1CEg -> SDType ts_a1Ckk us_a1Cki a_a1Ckj ( 'TVar x_a1CEg)
+[STLam] :: forall (ts_a1Ckl :: [DSort]) (u_X1Ckn :: DKind ts_a1Ckl  'Kind) (us_a1Ckn :: [DKind ts_a1Ckl  'Kind]) (a_X1Ckq :: DKind ts_a1Ckl  'Kind) x_a1CEl x_a1CEo. () => PolySing (NDKind ts_a1Ckl  'Kind u_X1Ckn) x_a1CEl -> SDType ts_a1Ckl ( '(:) u_X1Ckn us_a1Ckn) a_X1Ckq x_a1CEo -> SDType ts_a1Ckl us_a1Ckn ( '(:~>) u_X1Ckn a_X1Ckq) ( 'TLam x_a1CEl x_a1CEo)
+[STApp] :: forall (ts_a1Ckp :: [DSort]) (us_a1Ckq :: [DKind ts_a1Ckp  'Kind]) (a_X1Cks :: DKind ts_a1Ckp  'Kind) (b_a1Cks :: DKind ts_a1Ckp  'Kind) x_a1CEX x_a1CFw. () => SDType ts_a1Ckp us_a1Ckq ( '(:~>) a_X1Cks b_a1Cks) x_a1CEX -> SDType ts_a1Ckp us_a1Ckq a_X1Cks x_a1CFw -> SDType ts_a1Ckp us_a1Ckq b_a1Cks ( 'TApp x_a1CEX x_a1CFw)
+[STPoly] :: forall (t_X1Cku :: DSort) (tt_X1Ckw :: SDSort t_X1Cku) (ts_a1Ckv :: [DSort]) (us_a1Ckw :: [DKind ts_a1Ckv  'Kind]) (a_X1CkA :: DKind ( '(:) t_X1Cku ts_a1Ckv)  'Kind) x_a1CG5 x_a1CG9. () => SingSing (WrappedSing DSort t_X1Cku) ( 'WS tt_X1Ckw) ( 'WS x_a1CG5) -> SDType ( '(:) t_X1Cku ts_a1Ckv) (Map (KShiftSym ts_a1Ckv ( '(:) t_X1Cku ts_a1Ckv) t_X1Cku  'Kind ( 'InsZ :: Insert ts_a1Ckv ( '(:) t_X1Cku ts_a1Ckv) t_X1Cku)) us_a1Ckw) a_X1CkA x_a1CG9 -> SDType ts_a1Ckv us_a1Ckw ( 'KPi tt_X1Ckw a_X1CkA) ( 'TPoly x_a1CG5 x_a1CG9)
+[STInst] :: forall (t_X1Ckz :: DSort) (tt_X1CkB :: SDSort t_X1Ckz) (ts_a1CkA :: [DSort]) (us_a1CkB :: [DKind ts_a1CkA  'Kind]) (b_X1CkF :: DKind ( '(:) t_X1Ckz ts_a1CkA)  'Kind) (a_X1CkH :: DKind ts_a1CkA t_X1Ckz) (sk_a1CkE :: DKind ts_a1CkA  'Kind) x_a1CUZ x_a1CV3 x_a1CVC. () => SingSing (WrappedSing DSort t_X1Ckz) ( 'WS tt_X1CkB) ( 'WS x_a1CUZ) -> SDType ts_a1CkA us_a1CkB ( 'KPi tt_X1CkB b_X1CkF) x_a1CV3 -> PolySing (SubbedKind ts_a1CkA t_X1Ckz a_X1CkH b_X1CkF sk_a1CkE) x_a1CVC -> SDType ts_a1CkA us_a1CkB sk_a1CkE ( 'TInst x_a1CUZ x_a1CV3 x_a1CVC)
+[:%->] :: forall (ts_a1CkF :: [DSort]) (us_a1CkG :: [DKind ts_a1CkF  'Kind]) x_a1CVH x_a1CY9. () => SDType ts_a1CkF us_a1CkG ( 'Type :: DKind ts_a1CkF  'Kind) x_a1CVH -> SDType ts_a1CkF us_a1CkG ( 'Type :: DKind ts_a1CkF  'Kind) x_a1CY9 -> SDType ts_a1CkF us_a1CkG ( 'Type :: DKind ts_a1CkF  'Kind) ( '(:->) x_a1CVH x_a1CY9)
+[SPi] :: forall (ts_a1CkH :: [DSort]) (u_X1CkJ :: DKind ts_a1CkH  'Kind) (us_a1CkJ :: [DKind ts_a1CkH  'Kind]) (a_a1CkK :: DKind ts_a1CkH  'Kind) x_a1D0B x_a1D0E. () => PolySing (NDKind ts_a1CkH  'Kind u_X1CkJ) x_a1D0B -> SDType ts_a1CkH ( '(:) u_X1CkJ us_a1CkJ) a_a1CkK x_a1D0E -> SDType ts_a1CkH us_a1CkJ a_a1CkK ( 'Pi x_a1D0B x_a1D0E)
+[SBool] :: forall (ts_a1CkL :: [DSort]) (us_a1CkM :: [DKind ts_a1CkL  'Kind]). () => SDType ts_a1CkL us_a1CkM ( 'Type :: DKind ts_a1CkL  'Kind)  'Bool
+[SNatural] :: forall (ts_a1CkN :: [DSort]) (us_a1CkO :: [DKind ts_a1CkN  'Kind]). () => SDType ts_a1CkN us_a1CkO ( 'Type :: DKind ts_a1CkN  'Kind)  'Natural
+[SList] :: forall (ts_a1CkP :: [DSort]) (us_a1CkQ :: [DKind ts_a1CkP  'Kind]). () => SDType ts_a1CkP us_a1CkQ ((:~>) ( 'Type :: DKind ts_a1CkP  'Kind) ( 'Type :: DKind ts_a1CkP  'Kind))  'List
+[SOptional] :: forall (ts_a1CkR :: [DSort]) (us_a1CkS :: [DKind ts_a1CkR  'Kind]). () => SDType ts_a1CkR us_a1CkS ((:~>) ( 'Type :: DKind ts_a1CkR  'Kind) ( 'Type :: DKind ts_a1CkR  'Kind))  'Optional
+[SRecord] :: forall (ts_a1CkT :: [DSort]) (us_a1CkU :: [DKind ts_a1CkT  'Kind]) (ls_X1CkW :: [Text]) (as_X1CkY :: [DType ts_a1CkT us_a1CkU ( 'Type :: DKind ts_a1CkT  'Kind)]) x_a1D1d. () => PolySing (AggType (DType ts_a1CkT us_a1CkU ( 'Type :: DKind ts_a1CkT  'Kind)) ls_X1CkW as_X1CkY) x_a1D1d -> SDType ts_a1CkT us_a1CkU ( 'Type :: DKind ts_a1CkT  'Kind) ( 'Record x_a1D1d)
+[SUnion] :: forall (ts_a1CkX :: [DSort]) (us_a1CkY :: [DKind ts_a1CkX  'Kind]) (ls_X1Cl0 :: [Text]) (as_X1Cl2 :: [DType ts_a1CkX us_a1CkY ( 'Type :: DKind ts_a1CkX  'Kind)]) x_a1Dbr. () => PolySing (AggType (DType ts_a1CkX us_a1CkY ( 'Type :: DKind ts_a1CkX  'Kind)) ls_X1Cl0 as_X1Cl2) x_a1Dbr -> SDType ts_a1CkX us_a1CkY ( 'Type :: DKind ts_a1CkX  'Kind) ( 'Union x_a1Dbr)
+[STRecordLit] :: forall (ts_a1Cl1 :: [DSort]) (ls_X1Cl3 :: [Text]) (as_X1Cl5 :: [DKind ts_a1Cl1  'Kind]) (at_X1Cl7 :: AggType (DKind ts_a1Cl1  'Kind) ls_X1Cl3 as_X1Cl5) (us_a1Cl5 :: [DKind ts_a1Cl1  'Kind]) x_a1DlF x_a1DmL. () => SingSing (AggType (DKind ts_a1Cl1  'Kind) ls_X1Cl3 as_X1Cl5) at_X1Cl7 ( 'WS x_a1DlF) -> PolySing (Prod (DType ts_a1Cl1 us_a1Cl5) as_X1Cl5) x_a1DmL -> SDType ts_a1Cl1 us_a1Cl5 ( 'TRecord at_X1Cl7) ( 'TRecordLit x_a1DlF x_a1DmL)
+[STUnionLit] :: forall (ts_a1Cl6 :: [DSort]) (ls_X1Cl8 :: [Text]) (as_X1Cla :: [DKind ts_a1Cl6  'Kind]) (at_X1Clc :: AggType (DKind ts_a1Cl6  'Kind) ls_X1Cl8 as_X1Cla) (a_X1Cle :: DKind ts_a1Cl6  'Kind) (us_a1Clb :: [DKind ts_a1Cl6  'Kind]) x_a1DpA x_a1DqG x_a1DqL. () => SingSing (AggType (DKind ts_a1Cl6  'Kind) ls_X1Cl8 as_X1Cla) at_X1Clc ( 'WS x_a1DpA) -> PolySing (Index as_X1Cla a_X1Cle) x_a1DqG -> SDType ts_a1Cl6 us_a1Clb a_X1Cle x_a1DqL -> SDType ts_a1Cl6 us_a1Clb ( 'TUnion at_X1Clc) ( 'TUnionLit x_a1DpA x_a1DqG x_a1DqL)
+data SNDType (ts_a1DE3 :: [DSort]) (us_a1DE4 :: [DKind ts_a1DE3 'Kind]) (a_a1DE5 :: DKind ts_a1DE3 'Kind) (b_a1Ec4 :: DType ts_a1DE3 us_a1DE4 a_a1DE5) (x_a1EkK :: NDType (ts_a1DE3 :: [DSort]) (us_a1DE4 :: [DKind ts_a1DE3 'Kind]) (a_a1DE5 :: DKind ts_a1DE3 'Kind) (b_a1Ec4 :: DType ts_a1DE3 us_a1DE4 a_a1DE5))
+[SNDT] :: forall (ts_a1DE6 :: [DSort]) (us_a1DE7 :: [DKind ts_a1DE6  'Kind]) (a_a1DE8 :: DKind ts_a1DE6  'Kind) (x_X1DEa :: DType ts_a1DE6 us_a1DE7 a_a1DE8) x_a1EkL. () => SingSing (DType ts_a1DE6 us_a1DE7 a_a1DE8) x_X1DEa ( 'WS x_a1EkL) -> SNDType ts_a1DE6 us_a1DE7 a_a1DE8 (TNormalize ts_a1DE6 us_a1DE7 a_a1DE8 x_X1DEa) ( 'NDT x_a1EkL)
+data SPrim (ts_a1Em4 :: [DSort]) (us_a1Em5 :: [DKind ts_a1Em4 'Kind]) (a_a1EHy :: [DType ts_a1Em4 us_a1Em5 ( 'Type :: DKind ts_a1Em4 'Kind)]) (b_a1EHz :: DType ts_a1Em4 us_a1Em5 ( 'Type :: DKind ts_a1Em4 'Kind)) (x_a1EMt :: Prim (ts_a1Em4 :: [DSort]) (us_a1Em5 :: [DKind ts_a1Em4 'Kind]) (a_a1EHy :: [DType ts_a1Em4 us_a1Em5 ( 'Type :: DKind ts_a1Em4 'Kind)]) (b_a1EHz :: DType ts_a1Em4 us_a1Em5 ( 'Type :: DKind ts_a1Em4 'Kind)))
+[SBoolLit] :: forall (ts_a1Em6 :: [DSort]) (us_a1Em7 :: [DKind ts_a1Em6  'Kind]) x_a1EMu. () => PolySing Bool x_a1EMu -> SPrim ts_a1Em6 us_a1Em7 ('[] :: [DType ts_a1Em6 us_a1Em7 ( 'Type :: DKind ts_a1Em6  'Kind)]) ( 'Bool :: DType ts_a1Em6 us_a1Em7 ( 'Type :: DKind ts_a1Em6  'Kind)) ( 'BoolLit x_a1EMu)
+[SBoolAnd] :: forall (ts_a1Em8 :: [DSort]) (us_a1Em9 :: [DKind ts_a1Em8  'Kind]). () => SPrim ts_a1Em8 us_a1Em9 ( '(:) ( 'Bool :: DType ts_a1Em8 us_a1Em9 ( 'Type :: DKind ts_a1Em8  'Kind)) ( '(:) ( 'Bool :: DType ts_a1Em8 us_a1Em9 ( 'Type :: DKind ts_a1Em8  'Kind)) ('[] :: [DType ts_a1Em8 us_a1Em9 ( 'Type :: DKind ts_a1Em8  'Kind)]))) ( 'Bool :: DType ts_a1Em8 us_a1Em9 ( 'Type :: DKind ts_a1Em8  'Kind))  'BoolAnd
+[SBoolOr] :: forall (ts_a1Ema :: [DSort]) (us_a1Emb :: [DKind ts_a1Ema  'Kind]). () => SPrim ts_a1Ema us_a1Emb ( '(:) ( 'Bool :: DType ts_a1Ema us_a1Emb ( 'Type :: DKind ts_a1Ema  'Kind)) ( '(:) ( 'Bool :: DType ts_a1Ema us_a1Emb ( 'Type :: DKind ts_a1Ema  'Kind)) ('[] :: [DType ts_a1Ema us_a1Emb ( 'Type :: DKind ts_a1Ema  'Kind)]))) ( 'Bool :: DType ts_a1Ema us_a1Emb ( 'Type :: DKind ts_a1Ema  'Kind))  'BoolOr
+[SNaturalLit] :: forall (ts_a1Emc :: [DSort]) (us_a1Emd :: [DKind ts_a1Emc  'Kind]) x_a1EMv. () => PolySing Natural x_a1EMv -> SPrim ts_a1Emc us_a1Emd ('[] :: [DType ts_a1Emc us_a1Emd ( 'Type :: DKind ts_a1Emc  'Kind)]) ( 'Natural :: DType ts_a1Emc us_a1Emd ( 'Type :: DKind ts_a1Emc  'Kind)) ( 'NaturalLit x_a1EMv)
+[SNaturalFold] :: forall (ts_a1Eme :: [DSort]) (us_a1Emf :: [DKind ts_a1Eme  'Kind]). () => SPrim ts_a1Eme us_a1Emf ('[] :: [DType ts_a1Eme us_a1Emf ( 'Type :: DKind ts_a1Eme  'Kind)]) ((:->) ( 'Natural :: DType ts_a1Eme us_a1Emf ( 'Type :: DKind ts_a1Eme  'Kind)) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Eme  'Kind ( 'Type :: DKind ts_a1Eme  'Kind))) ((:->) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Eme  'Kind) us_a1Emf) ( 'Type :: DKind ts_a1Eme  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Eme  'Kind) us_a1Emf) ( 'Type :: DKind ts_a1Eme  'Kind)))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Eme  'Kind) us_a1Emf) ( 'Type :: DKind ts_a1Eme  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Eme  'Kind) us_a1Emf) ( 'Type :: DKind ts_a1Eme  'Kind)))))))  'NaturalFold
+[SNaturalBuild] :: forall (ts_a1Emg :: [DSort]) (us_a1Emh :: [DKind ts_a1Emg  'Kind]). () => SPrim ts_a1Emg us_a1Emh ('[] :: [DType ts_a1Emg us_a1Emh ( 'Type :: DKind ts_a1Emg  'Kind)]) ((:->) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emg  'Kind ( 'Type :: DKind ts_a1Emg  'Kind))) ((:->) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emg  'Kind) us_a1Emh) ( 'Type :: DKind ts_a1Emg  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emg  'Kind) us_a1Emh) ( 'Type :: DKind ts_a1Emg  'Kind)))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emg  'Kind) us_a1Emh) ( 'Type :: DKind ts_a1Emg  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emg  'Kind) us_a1Emh) ( 'Type :: DKind ts_a1Emg  'Kind)))))) ( 'Natural :: DType ts_a1Emg us_a1Emh ( 'Type :: DKind ts_a1Emg  'Kind)))  'NaturalBuild
+[SNaturalPlus] :: forall (ts_a1Emi :: [DSort]) (us_a1Emj :: [DKind ts_a1Emi  'Kind]). () => SPrim ts_a1Emi us_a1Emj ( '(:) ( 'Natural :: DType ts_a1Emi us_a1Emj ( 'Type :: DKind ts_a1Emi  'Kind)) ( '(:) ( 'Natural :: DType ts_a1Emi us_a1Emj ( 'Type :: DKind ts_a1Emi  'Kind)) ('[] :: [DType ts_a1Emi us_a1Emj ( 'Type :: DKind ts_a1Emi  'Kind)]))) ( 'Natural :: DType ts_a1Emi us_a1Emj ( 'Type :: DKind ts_a1Emi  'Kind))  'NaturalPlus
+[SNaturalTimes] :: forall (ts_a1Emk :: [DSort]) (us_a1Eml :: [DKind ts_a1Emk  'Kind]). () => SPrim ts_a1Emk us_a1Eml ( '(:) ( 'Natural :: DType ts_a1Emk us_a1Eml ( 'Type :: DKind ts_a1Emk  'Kind)) ( '(:) ( 'Natural :: DType ts_a1Emk us_a1Eml ( 'Type :: DKind ts_a1Emk  'Kind)) ('[] :: [DType ts_a1Emk us_a1Eml ( 'Type :: DKind ts_a1Emk  'Kind)]))) ( 'Natural :: DType ts_a1Emk us_a1Eml ( 'Type :: DKind ts_a1Emk  'Kind))  'NaturalTimes
+[SNaturalIsZero] :: forall (ts_a1Emm :: [DSort]) (us_a1Emn :: [DKind ts_a1Emm  'Kind]). () => SPrim ts_a1Emm us_a1Emn ('[] :: [DType ts_a1Emm us_a1Emn ( 'Type :: DKind ts_a1Emm  'Kind)]) ((:->) ( 'Natural :: DType ts_a1Emm us_a1Emn ( 'Type :: DKind ts_a1Emm  'Kind)) ( 'Bool :: DType ts_a1Emm us_a1Emn ( 'Type :: DKind ts_a1Emm  'Kind)))  'NaturalIsZero
+[SListFold] :: forall (ts_a1Emo :: [DSort]) (us_a1Emp :: [DKind ts_a1Emo  'Kind]). () => SPrim ts_a1Emo us_a1Emp ('[] :: [DType ts_a1Emo us_a1Emp ( 'Type :: DKind ts_a1Emo  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emo  'Kind ( 'Type :: DKind ts_a1Emo  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1Emo ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp) ((:~>) ( 'Type :: DKind ts_a1Emo  'Kind) ( 'Type :: DKind ts_a1Emo  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp) ( 'Type :: DKind ts_a1Emo  'Kind)))) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emo  'Kind ( 'Type :: DKind ts_a1Emo  'Kind))) ((:->) ((:->) ( 'TVar ( 'IS ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp) ( 'Type :: DKind ts_a1Emo  'Kind)) :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp)) ( 'Type :: DKind ts_a1Emo  'Kind))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp)) ( 'Type :: DKind ts_a1Emo  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp)) ( 'Type :: DKind ts_a1Emo  'Kind))))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp)) ( 'Type :: DKind ts_a1Emo  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emo  'Kind) us_a1Emp)) ( 'Type :: DKind ts_a1Emo  'Kind))))))))  'ListFold
+[SListBuild] :: forall (ts_a1Emq :: [DSort]) (us_a1Emr :: [DKind ts_a1Emq  'Kind]). () => SPrim ts_a1Emq us_a1Emr ('[] :: [DType ts_a1Emq us_a1Emr ( 'Type :: DKind ts_a1Emq  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emq  'Kind ( 'Type :: DKind ts_a1Emq  'Kind))) ((:->) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emq  'Kind ( 'Type :: DKind ts_a1Emq  'Kind))) ((:->) ((:->) ( 'TVar ( 'IS ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr) ( 'Type :: DKind ts_a1Emq  'Kind)) :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr)) ( 'Type :: DKind ts_a1Emq  'Kind))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr)) ( 'Type :: DKind ts_a1Emq  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr)) ( 'Type :: DKind ts_a1Emq  'Kind))))) ((:->) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr)) ( 'Type :: DKind ts_a1Emq  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr)) ( 'Type :: DKind ts_a1Emq  'Kind)))))) ((:$) ( 'List :: DType ts_a1Emq ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr) ((:~>) ( 'Type :: DKind ts_a1Emq  'Kind) ( 'Type :: DKind ts_a1Emq  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emq  'Kind) us_a1Emr) ( 'Type :: DKind ts_a1Emq  'Kind))))))  'ListBuild
+[SListAppend] :: forall (ts_a1Ems :: [DSort]) (us_a1Emt :: [DKind ts_a1Ems  'Kind]) (a_X1Emv :: DType ts_a1Ems us_a1Emt ( 'Type :: DKind ts_a1Ems  'Kind)) x_a1EMx. () => SingSing (DType ts_a1Ems us_a1Emt ( 'Type :: DKind ts_a1Ems  'Kind)) a_X1Emv ( 'WS x_a1EMx) -> SPrim ts_a1Ems us_a1Emt ( '(:) ((:$) ( 'List :: DType ts_a1Ems us_a1Emt ((:~>) ( 'Type :: DKind ts_a1Ems  'Kind) ( 'Type :: DKind ts_a1Ems  'Kind))) a_X1Emv) ( '(:) ((:$) ( 'List :: DType ts_a1Ems us_a1Emt ((:~>) ( 'Type :: DKind ts_a1Ems  'Kind) ( 'Type :: DKind ts_a1Ems  'Kind))) a_X1Emv) ('[] :: [DType ts_a1Ems us_a1Emt ( 'Type :: DKind ts_a1Ems  'Kind)]))) ((:$) ( 'List :: DType ts_a1Ems us_a1Emt ((:~>) ( 'Type :: DKind ts_a1Ems  'Kind) ( 'Type :: DKind ts_a1Ems  'Kind))) a_X1Emv) ( 'ListAppend x_a1EMx)
+[SListHead] :: forall (ts_a1Emv :: [DSort]) (us_a1Emw :: [DKind ts_a1Emv  'Kind]). () => SPrim ts_a1Emv us_a1Emw ('[] :: [DType ts_a1Emv us_a1Emw ( 'Type :: DKind ts_a1Emv  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emv  'Kind ( 'Type :: DKind ts_a1Emv  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1Emv ( '(:) ( 'Type :: DKind ts_a1Emv  'Kind) us_a1Emw) ((:~>) ( 'Type :: DKind ts_a1Emv  'Kind) ( 'Type :: DKind ts_a1Emv  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emv  'Kind) us_a1Emw) ( 'Type :: DKind ts_a1Emv  'Kind)))) ((:$) ( 'Optional :: DType ts_a1Emv ( '(:) ( 'Type :: DKind ts_a1Emv  'Kind) us_a1Emw) ((:~>) ( 'Type :: DKind ts_a1Emv  'Kind) ( 'Type :: DKind ts_a1Emv  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emv  'Kind) us_a1Emw) ( 'Type :: DKind ts_a1Emv  'Kind))))))  'ListHead
+[SListLast] :: forall (ts_a1Emx :: [DSort]) (us_a1Emy :: [DKind ts_a1Emx  'Kind]). () => SPrim ts_a1Emx us_a1Emy ('[] :: [DType ts_a1Emx us_a1Emy ( 'Type :: DKind ts_a1Emx  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emx  'Kind ( 'Type :: DKind ts_a1Emx  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1Emx ( '(:) ( 'Type :: DKind ts_a1Emx  'Kind) us_a1Emy) ((:~>) ( 'Type :: DKind ts_a1Emx  'Kind) ( 'Type :: DKind ts_a1Emx  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emx  'Kind) us_a1Emy) ( 'Type :: DKind ts_a1Emx  'Kind)))) ((:$) ( 'Optional :: DType ts_a1Emx ( '(:) ( 'Type :: DKind ts_a1Emx  'Kind) us_a1Emy) ((:~>) ( 'Type :: DKind ts_a1Emx  'Kind) ( 'Type :: DKind ts_a1Emx  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emx  'Kind) us_a1Emy) ( 'Type :: DKind ts_a1Emx  'Kind))))))  'ListLast
+[SListReverse] :: forall (ts_a1Emz :: [DSort]) (us_a1EmA :: [DKind ts_a1Emz  'Kind]). () => SPrim ts_a1Emz us_a1EmA ('[] :: [DType ts_a1Emz us_a1EmA ( 'Type :: DKind ts_a1Emz  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1Emz  'Kind ( 'Type :: DKind ts_a1Emz  'Kind))) ((:->) ((:$) ( 'List :: DType ts_a1Emz ( '(:) ( 'Type :: DKind ts_a1Emz  'Kind) us_a1EmA) ((:~>) ( 'Type :: DKind ts_a1Emz  'Kind) ( 'Type :: DKind ts_a1Emz  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emz  'Kind) us_a1EmA) ( 'Type :: DKind ts_a1Emz  'Kind)))) ((:$) ( 'List :: DType ts_a1Emz ( '(:) ( 'Type :: DKind ts_a1Emz  'Kind) us_a1EmA) ((:~>) ( 'Type :: DKind ts_a1Emz  'Kind) ( 'Type :: DKind ts_a1Emz  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1Emz  'Kind) us_a1EmA) ( 'Type :: DKind ts_a1Emz  'Kind))))))  'ListReverse
+[SSome] :: forall (ts_a1EmB :: [DSort]) (us_a1EmC :: [DKind ts_a1EmB  'Kind]) (a_X1EmE :: DType ts_a1EmB us_a1EmC ( 'Type :: DKind ts_a1EmB  'Kind)) x_a1EOZ. () => SingSing (DType ts_a1EmB us_a1EmC ( 'Type :: DKind ts_a1EmB  'Kind)) a_X1EmE ( 'WS x_a1EOZ) -> SPrim ts_a1EmB us_a1EmC ( '(:) a_X1EmE ('[] :: [DType ts_a1EmB us_a1EmC ( 'Type :: DKind ts_a1EmB  'Kind)])) ((:$) ( 'Optional :: DType ts_a1EmB us_a1EmC ((:~>) ( 'Type :: DKind ts_a1EmB  'Kind) ( 'Type :: DKind ts_a1EmB  'Kind))) a_X1EmE) ( 'Some x_a1EOZ)
+[SNone] :: forall (ts_a1EmE :: [DSort]) (us_a1EmF :: [DKind ts_a1EmE  'Kind]). () => SPrim ts_a1EmE us_a1EmF ('[] :: [DType ts_a1EmE us_a1EmF ( 'Type :: DKind ts_a1EmE  'Kind)]) ( 'Pi ( 'NDK ( 'SType :: SDKind ts_a1EmE  'Kind ( 'Type :: DKind ts_a1EmE  'Kind))) ((:$) ( 'Optional :: DType ts_a1EmE ( '(:) ( 'Type :: DKind ts_a1EmE  'Kind) us_a1EmF) ((:~>) ( 'Type :: DKind ts_a1EmE  'Kind) ( 'Type :: DKind ts_a1EmE  'Kind))) ( 'TVar ( 'IZ :: Index ( '(:) ( 'Type :: DKind ts_a1EmE  'Kind) us_a1EmF) ( 'Type :: DKind ts_a1EmE  'Kind)))))  'None
+data SDTerm (ts_a1EZu :: [DSort]) (us_a1EZv :: [DKind ts_a1EZu 'Kind]) (a_a1FDo :: [DType ts_a1EZu us_a1EZv ( 'Type :: DKind ts_a1EZu 'Kind)]) (b_a1FDp :: DType ts_a1EZu us_a1EZv ( 'Type :: DKind ts_a1EZu 'Kind)) (x_a1FPW :: DTerm (ts_a1EZu :: [DSort]) (us_a1EZv :: [DKind ts_a1EZu 'Kind]) (a_a1FDo :: [DType ts_a1EZu us_a1EZv ( 'Type :: DKind ts_a1EZu 'Kind)]) (b_a1FDp :: DType ts_a1EZu us_a1EZv ( 'Type :: DKind ts_a1EZu 'Kind)))
+[SVar] :: forall (ts_a1EZy :: [DSort]) (us_a1EZz :: [DKind ts_a1EZy  'Kind]) (vs_a1EZw :: [DType ts_a1EZy us_a1EZz ( 'Type :: DKind ts_a1EZy  'Kind)]) (a_a1EZx :: DType ts_a1EZy us_a1EZz ( 'Type :: DKind ts_a1EZy  'Kind)) x_a1FPX. () => PolySing (Index vs_a1EZw a_a1EZx) x_a1FPX -> SDTerm ts_a1EZy us_a1EZz vs_a1EZw a_a1EZx ( 'Var x_a1FPX)
+[SLam] :: forall (ts_a1EZA :: [DSort]) (us_a1EZB :: [DKind ts_a1EZA  'Kind]) (v_X1EZD :: DType ts_a1EZA us_a1EZB ( 'Type :: DKind ts_a1EZA  'Kind)) (vs_a1EZD :: [DType ts_a1EZA us_a1EZB ( 'Type :: DKind ts_a1EZA  'Kind)]) (a_X1EZG :: DType ts_a1EZA us_a1EZB ( 'Type :: DKind ts_a1EZA  'Kind)) x_a1FQ2 x_a1FRZ. () => PolySing (NDType ts_a1EZA us_a1EZB ( 'Type :: DKind ts_a1EZA  'Kind) v_X1EZD) x_a1FQ2 -> SDTerm ts_a1EZA us_a1EZB ( '(:) v_X1EZD vs_a1EZD) a_X1EZG x_a1FRZ -> SDTerm ts_a1EZA us_a1EZB vs_a1EZD ( '(:->) v_X1EZD a_X1EZG) ( 'Lam x_a1FQ2 x_a1FRZ)
+[SApp] :: forall (ts_a1EZF :: [DSort]) (us_a1EZG :: [DKind ts_a1EZF  'Kind]) (vs_a1EZH :: [DType ts_a1EZF us_a1EZG ( 'Type :: DKind ts_a1EZF  'Kind)]) (a_X1EZJ :: DType ts_a1EZF us_a1EZG ( 'Type :: DKind ts_a1EZF  'Kind)) (b_a1EZJ :: DType ts_a1EZF us_a1EZG ( 'Type :: DKind ts_a1EZF  'Kind)) x_a1FSx x_a1FT5. () => SDTerm ts_a1EZF us_a1EZG vs_a1EZH ( '(:->) a_X1EZJ b_a1EZJ) x_a1FSx -> SDTerm ts_a1EZF us_a1EZG vs_a1EZH a_X1EZJ x_a1FT5 -> SDTerm ts_a1EZF us_a1EZG vs_a1EZH b_a1EZJ ( 'App x_a1FSx x_a1FT5)
+[SPoly] :: forall (ts_a1EZK :: [DSort]) (u_X1EZM :: DKind ts_a1EZK  'Kind) (uu_X1EZO :: NDKind ts_a1EZK  'Kind u_X1EZM) (us_a1EZN :: [DKind ts_a1EZK  'Kind]) (vs_a1EZO :: [DType ts_a1EZK us_a1EZN ( 'Type :: DKind ts_a1EZK  'Kind)]) (a_X1EZS :: DType ts_a1EZK ( '(:) u_X1EZM us_a1EZN) ( 'Type :: DKind ts_a1EZK  'Kind)) x_a1FTD x_a1FTG. () => SingSing (NDKind ts_a1EZK  'Kind u_X1EZM) uu_X1EZO ( 'WS x_a1FTD) -> SDTerm ts_a1EZK ( '(:) u_X1EZM us_a1EZN) (Map (ShiftSym ts_a1EZK us_a1EZN ( '(:) u_X1EZM us_a1EZN) u_X1EZM ( 'Type :: DKind ts_a1EZK  'Kind) ( 'InsZ :: Insert us_a1EZN ( '(:) u_X1EZM us_a1EZN) u_X1EZM)) vs_a1EZO) a_X1EZS x_a1FTG -> SDTerm ts_a1EZK us_a1EZN vs_a1EZO ( 'Pi uu_X1EZO a_X1EZS) ( 'Poly x_a1FTD x_a1FTG)
+[SInst] :: forall (ts_a1EZQ :: [DSort]) (u_X1EZS :: DKind ts_a1EZQ  'Kind) (uu_X1EZU :: NDKind ts_a1EZQ  'Kind u_X1EZS) (us_a1EZT :: [DKind ts_a1EZQ  'Kind]) (vs_a1EZU :: [DType ts_a1EZQ us_a1EZT ( 'Type :: DKind ts_a1EZQ  'Kind)]) (b_X1EZY :: DType ts_a1EZQ ( '(:) u_X1EZS us_a1EZT) ( 'Type :: DKind ts_a1EZQ  'Kind)) (a_X1F00 :: DType ts_a1EZQ us_a1EZT u_X1EZS) x_a1GHW x_a1GHZ x_a1GIx. () => SingSing (NDKind ts_a1EZQ  'Kind u_X1EZS) uu_X1EZU ( 'WS x_a1GHW) -> SDTerm ts_a1EZQ us_a1EZT vs_a1EZU ( 'Pi uu_X1EZU b_X1EZY) x_a1GHZ -> SingSing (DType ts_a1EZQ us_a1EZT u_X1EZS) a_X1F00 ( 'WS x_a1GIx) -> SDTerm ts_a1EZQ us_a1EZT vs_a1EZU (Sub ts_a1EZQ ( '(:) u_X1EZS us_a1EZT) us_a1EZT u_X1EZS ( 'Type :: DKind ts_a1EZQ  'Kind) ( 'DelZ :: Delete ( '(:) u_X1EZS us_a1EZT) us_a1EZT u_X1EZS) a_X1F00 b_X1EZY) ( 'Inst x_a1GHW x_a1GHZ x_a1GIx)
+[SP] :: forall (ts_a1EZX :: [DSort]) (us_a1EZY :: [DKind ts_a1EZX  'Kind]) (as_X1F00 :: [DType ts_a1EZX us_a1EZY ( 'Type :: DKind ts_a1EZX  'Kind)]) (a_a1F00 :: DType ts_a1EZX us_a1EZY ( 'Type :: DKind ts_a1EZX  'Kind)) (vs_a1F01 :: [DType ts_a1EZX us_a1EZY ( 'Type :: DKind ts_a1EZX  'Kind)]) x_a1GJ6 x_a1GJF. () => PolySing (Prim ts_a1EZX us_a1EZY as_X1F00 a_a1F00) x_a1GJ6 -> PolySing (Prod (DTerm ts_a1EZX us_a1EZY vs_a1F01) as_X1F00) x_a1GJF -> SDTerm ts_a1EZX us_a1EZY vs_a1F01 a_a1F00 ( 'P x_a1GJ6 x_a1GJF)
+[SListLit] :: forall (ts_a1F02 :: [DSort]) (us_a1F03 :: [DKind ts_a1F02  'Kind]) (a_X1F05 :: DType ts_a1F02 us_a1F03 ( 'Type :: DKind ts_a1F02  'Kind)) (vs_a1F05 :: [DType ts_a1F02 us_a1F03 ( 'Type :: DKind ts_a1F02  'Kind)]) x_a1GOx x_a1GQu. () => PolySing (NDType ts_a1F02 us_a1F03 ( 'Type :: DKind ts_a1F02  'Kind) a_X1F05) x_a1GOx -> PolySing [DTerm ts_a1F02 us_a1F03 vs_a1F05 a_X1F05] x_a1GQu -> SDTerm ts_a1F02 us_a1F03 vs_a1F05 ((:$) ( 'List :: DType ts_a1F02 us_a1F03 ((:~>) ( 'Type :: DKind ts_a1F02  'Kind) ( 'Type :: DKind ts_a1F02  'Kind))) a_X1F05) ( 'ListLit x_a1GOx x_a1GQu)
+[SOptionalLit] :: forall (ts_a1F06 :: [DSort]) (us_a1F07 :: [DKind ts_a1F06  'Kind]) (a_X1F09 :: DType ts_a1F06 us_a1F07 ( 'Type :: DKind ts_a1F06  'Kind)) (vs_a1F09 :: [DType ts_a1F06 us_a1F07 ( 'Type :: DKind ts_a1F06  'Kind)]) x_a1GZA x_a1H1x. () => PolySing (NDType ts_a1F06 us_a1F07 ( 'Type :: DKind ts_a1F06  'Kind) a_X1F09) x_a1GZA -> PolySing (Maybe (DTerm ts_a1F06 us_a1F07 vs_a1F09 a_X1F09)) x_a1H1x -> SDTerm ts_a1F06 us_a1F07 vs_a1F09 ((:$) ( 'Optional :: DType ts_a1F06 us_a1F07 ((:~>) ( 'Type :: DKind ts_a1F06  'Kind) ( 'Type :: DKind ts_a1F06  'Kind))) a_X1F09) ( 'OptionalLit x_a1GZA x_a1H1x)
+[SRecordLit] :: forall (ts_a1F0a :: [DSort]) (us_a1F0b :: [DKind ts_a1F0a  'Kind]) (ls_X1F0d :: [Text]) (as_X1F0f :: [DType ts_a1F0a us_a1F0b ( 'Type :: DKind ts_a1F0a  'Kind)]) (at_X1F0h :: AggType (DType ts_a1F0a us_a1F0b ( 'Type :: DKind ts_a1F0a  'Kind)) ls_X1F0d as_X1F0f) (vs_a1F0f :: [DType ts_a1F0a us_a1F0b ( 'Type :: DKind ts_a1F0a  'Kind)]) x_a1HaD x_a1HkR. () => SingSing (AggType (DType ts_a1F0a us_a1F0b ( 'Type :: DKind ts_a1F0a  'Kind)) ls_X1F0d as_X1F0f) at_X1F0h ( 'WS x_a1HaD) -> PolySing (Prod (DTerm ts_a1F0a us_a1F0b vs_a1F0f) as_X1F0f) x_a1HkR -> SDTerm ts_a1F0a us_a1F0b vs_a1F0f ( 'Record at_X1F0h) ( 'RecordLit x_a1HaD x_a1HkR)
+[SUnionLit] :: forall (ts_a1F0g :: [DSort]) (us_a1F0h :: [DKind ts_a1F0g  'Kind]) (ls_X1F0j :: [Text]) (as_X1F0l :: [DType ts_a1F0g us_a1F0h ( 'Type :: DKind ts_a1F0g  'Kind)]) (at_X1F0n :: AggType (DType ts_a1F0g us_a1F0h ( 'Type :: DKind ts_a1F0g  'Kind)) ls_X1F0j as_X1F0l) (a_X1F0p :: DType ts_a1F0g us_a1F0h ( 'Type :: DKind ts_a1F0g  'Kind)) (vs_a1F0m :: [DType ts_a1F0g us_a1F0h ( 'Type :: DKind ts_a1F0g  'Kind)]) x_a1HpJ x_a1HzX x_a1HA2. () => SingSing (AggType (DType ts_a1F0g us_a1F0h ( 'Type :: DKind ts_a1F0g  'Kind)) ls_X1F0j as_X1F0l) at_X1F0n ( 'WS x_a1HpJ) -> PolySing (Index as_X1F0l a_X1F0p) x_a1HzX -> SDTerm ts_a1F0g us_a1F0h vs_a1F0m a_X1F0p x_a1HA2 -> SDTerm ts_a1F0g us_a1F0h vs_a1F0m ( 'Union at_X1F0n) ( 'UnionLit x_a1HpJ x_a1HzX x_a1HA2)
+data SAggType (k_a1AGC :: Type) (ls_a1AGD :: [Text]) (as_a1AGE :: [k_a1AGC]) (x_a1ALH :: AggType (k_a1AGC :: Type) (ls_a1AGD :: [Text]) (as_a1AGE :: [k_a1AGC]))
+[SATZ] :: forall (k_a1AGF :: Type). () => SAggType k_a1AGF ('[] :: [Text]) ('[] :: [k_a1AGF])  'ATZ
+[SATS] :: forall (k_a1AGG :: Type) (l_X1AGI :: Text) (a_X1AGK :: k_a1AGG) (ls_X1AGM :: [Text]) (as_X1AGO :: [k_a1AGG]) x_a1ALI x_a1ALK x_a1ALN. () => SingSing Text l_X1AGI ( 'WS x_a1ALI) -> PolySing (WrappedSing k_a1AGG a_X1AGK) x_a1ALK -> SAggType k_a1AGG ls_X1AGM as_X1AGO x_a1ALN -> SAggType k_a1AGG ( '(:) l_X1AGI ls_X1AGM) ( '(:) a_X1AGK as_X1AGO) ( 'ATS x_a1ALI x_a1ALK x_a1ALN)
 sShift :: SInsert us qs a ins -> SDType ts us b x -> SDType ts qs b (Shift ts us qs a b ins x)
 sShift1 :: SDType ts us b x -> SDType ts (a : us) b (Shift ts us (a : us) a b  'InsZ x)
 sSub :: SDelete us qs a del -> SDType ts qs a x -> SDType ts us b r -> SDType ts qs b (Sub ts us qs a b del x r)
@@ -644,8 +708,22 @@ skNormalize :: SDKind ts a x -> SDKind ts a (KNormalize ts a x)
 stNormalize :: SDType ts us a x -> SDType ts us a (TNormalize ts us a x)
 data KShiftSym ts ps a b :: Insert ts ps a -> DKind ts b ~> DKind ps b
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
+data ShiftSortSym ts ps us a (ins :: Insert ts ps a) :: DType ts us 'Type ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
 type family Map (f :: a ~> b) (xs :: [a]) :: [b]
 data MapSym (f :: a ~> b) :: [a] ~> [b]
+
+module Dhall.Typed.Context
+data Context ts us :: [DType ts us 'Type] -> Type
+[CtxNil] :: Context '[] '[] '[]
+[ConsSort] :: Text -> SDSort t -> Context ts us vs -> Context (t : ts) (Map (KShiftSym ts (t : ts) t  'Kind  'InsZ) us) (Map (ShiftSortSym ts (t : ts) us t  'InsZ) vs)
+[ConsKind] :: Text -> NDKind ts  'Kind u -> Context ts us vs -> Context ts (u : us) (Map (ShiftSym ts us (u : us) u  'Type  'InsZ) vs)
+[ConsType] :: Text -> NDType ts us  'Type v -> Context ts us vs -> Context ts us (v : vs)
+data ContextItem ts us :: [DType ts us 'Type] -> Type
+[TCISort] :: Index ts t -> SDSort t -> ContextItem ts us vs
+[TCIKind] :: Index us u -> NDKind ts  'Kind u -> ContextItem ts us vs
+[TCIType] :: Index vs v -> NDType ts us  'Type v -> ContextItem ts us vs
+lookupCtx :: forall ts us vs. () => Text -> Integer -> Context ts us vs -> Maybe (ContextItem ts us vs)
+data ShiftSortSym ts ps us a (ins :: Insert ts ps a) :: DType ts us 'Type ~> DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type
 
 module Dhall.Typed
 toTyped :: forall ts us vs. () => Context ts us vs -> Expr () X -> Either TypeMessage (SomeDExpr ts us vs)
@@ -654,3 +732,4 @@ fromDTerm :: DTerm ts us vs a -> Expr () X
 fromDType :: DType ts us a -> Expr () X
 fromDKind :: DKind ts a -> Expr () X
 fromDSort :: DSort -> Expr () X
+instance GHC.Show.Show Dhall.Typed.TypeMessage
