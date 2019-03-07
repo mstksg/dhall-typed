@@ -54,6 +54,7 @@ module Dhall.Typed.Core (
   ) where
 
 import           Data.Kind
+import           Data.Type.List.Edit
 import           Dhall.Typed.Core.Internal
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
@@ -62,7 +63,15 @@ import           Dhall.Typed.Type.Singletons
 import           Unsafe.Coerce
 
 skNormalize :: SDKind ts a x -> SDKind ts a (KNormalize ts a x)
-skNormalize = undefined
+skNormalize = \case
+    SKVar i -> SKVar i
+    SKLam tt x -> SKLam tt (skNormalize x)
+    SKApp f x -> case f of
+      SKLam _ f' -> skNormalize (skSub SDelZ x f')
+      -- _           -> SKApp (skNormalize f) (skNormalize x)  -- this is a problem
+    x :%~> y -> skNormalize x :%~> skNormalize y
+    SKPi tt x -> SKPi tt (skNormalize x)
+    SType -> SType
 
 stNormalize :: SDType ts us a x -> SDType ts us a (TNormalize ts us a x)
 stNormalize = undefined

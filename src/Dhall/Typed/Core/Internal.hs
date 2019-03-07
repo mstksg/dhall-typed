@@ -61,6 +61,7 @@ import           Data.Sequence                      (Seq(..))
 import           Data.Singletons.Prelude.Maybe      (Maybe_)
 import           Data.Singletons.TH hiding          (Sum)
 import           Data.Text                          (Text)
+import           Data.Type.List.Edit
 import           Data.Type.Universe
 import           Dhall.Typed.Type.Index
 import           Dhall.Typed.Type.N
@@ -191,7 +192,11 @@ data KBindings (ts :: [DSort]) (ps :: [DSort]) where
     KBKind :: DKind ts t
            -> KBindings (t ': ts) ps
            -> KBindings ts ps
-            
+
+-- genPolySingWith defaultGPSO
+--   { gpsoPSK    = GOHead [d| instance PolySingKind (KBindings ts ps) |]
+--   , gpsoSingEq = GOHead [d| instance SingEq (KBindings ts ps) (KBindings ts ps) |]
+--   } ''KBindings
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -206,9 +211,9 @@ data KBindings (ts :: [DSort]) (ps :: [DSort]) where
 -- variables.
 data DKind :: [DSort] -> DSort -> Type where
     KVar  :: Index ts a -> DKind ts a
-    KLet  :: KBindings ts ps
-          -> DKind ps a
-          -> DKind ts a
+    -- KLet  :: KBindings ts ps
+    --       -> DKind ps a
+    --       -> DKind ts a
     KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
     KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
@@ -237,15 +242,20 @@ genPolySingWith defaultGPSO
   , gpsoSingEq = GOHead [d| instance SingEq (DKind ts a) (DKind ts b) |]
   } ''DKind
 
-type family MaybeKVar (ts :: [DSort]) (a :: DSort) (b :: DSort) (x :: DKind ts a) (i :: Maybe (Index ts b)) :: DKind ts b where
-    MaybeKVar ts a a x 'Nothing  = x
-    MaybeKVar ts a b x ('Just i) = 'KVar i
-    MaybeKVar ts a b x i         = TL.TypeError ('TL.Text "No MaybeKVar")
+type family MaybeKVar
+            (ts :: [DSort])
+            (a :: DSort)
+            (b :: DSort)
+            (x :: DKind ts a)
+            (i :: DeletedIx ts a b)
+        :: DKind ts b where
+    MaybeKVar ts a a x 'GotDeleted  = x
+    MaybeKVar ts a b x ('NotDeleted i) = 'KVar i
 
 -- | Substitute in a kind for all occurrences of a kind variable of sort
 -- @a@ indicated by the 'Delete' within a kind of osrt @b@.
 type family KSub ts ps a b (del :: Delete ts ps a) (x :: DKind ps a) (r :: DKind ts b) :: DKind ps b where
-    KSub ts ps a b del x ('KVar i) = MaybeKVar ps a b x (Del ts ps a b del i)
+    KSub ts ps a b del x ('KVar i) = MaybeKVar ps a b x (DeleteIndex ts ps a b del i)
     KSub ts ps a (t ':*> b) del x ('KLam (tt :: SDSort t) r) =
       'KLam tt (KSub (t ': ts) (t ': ps) a b ('DelS del) (KShift ps (t ': ps) t a 'InsZ x) r)
     KSub ts ps a b     del x ('KApp (f :: DKind ts (c ':*> b)) r) =
@@ -296,7 +306,7 @@ type instance Apply (KShiftSym ts ps a b i) x = KShift ts ps a b i x
 -- for a new bound variable of sort @a@, to be inserted at the position
 -- indicated by the 'Insert'.
 type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind ps b where
-    KShift ts ps a b ins ('KVar i) = 'KVar (Ins ts ps a b ins i)
+    KShift ts ps a b ins ('KVar i) = 'KVar (InsertIndex ts ps a b ins i)
     KShift ts ps a (t ':*> b) ins ('KLam (tt :: SDSort t) x) =
       'KLam tt (KShift (t ': ts) (t ': ps) a b ('InsS ins) x)
     KShift ts ps a b     ins ('KApp (f :: DKind ts (c ':*> b)) x) =
@@ -416,7 +426,7 @@ data TBindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (a :: DKind ts 'Kind)
     TBType :: DType ts us u
            -> TBindings ts (u ': us) a ps qs b
            -> TBindings ts us a ps qs b
-            
+
 
 -- | Represents the possible types encountered in Dhall.  A value of type
 --
@@ -440,9 +450,9 @@ data TBindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (a :: DKind ts 'Kind)
 -- automatically, but it's possible create nonsensical types with 'TVar'.
 data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
     TVar  :: Index us a -> DType ts us a
-    TLet  :: TBindings ts us a qs rs b
-          -> DType qs rs b
-          -> DType ts us a
+    -- TLet  :: TBindings ts us a qs rs b
+    --       -> DType qs rs b
+    --       -> DType ts us a
     TLam  :: NDKind ts 'Kind u
           -> DType ts (u ': us) a
           -> DType ts us (u ':~> a)
@@ -664,7 +674,7 @@ data Bindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (vs :: [DType ts us 'Type
     BTerm :: DTerm ts us vs v
           -> Bindings ts us (v ': vs) a ps qs rs b
           -> Bindings ts us       vs  a ps qs rs b
-            
+
 -- | Represents the possible terms encountered in Dhall.  A value of type
 --
 -- @
@@ -684,9 +694,9 @@ data Bindings (ts :: [DSort]) (us :: [DKind ts 'Kind]) (vs :: [DType ts us 'Type
 -- terms) are not yet supported.
 data DTerm ts (us :: [DKind ts 'Kind]) :: [DType ts us 'Type] -> DType ts us 'Type -> Type where
     Var  :: Index vs a -> DTerm ts us vs a
-    Let  :: Bindings ts us vs a ps qs rs b
-         -> DTerm ps qs rs b
-         -> DTerm ts us vs a
+    -- Let  :: Bindings ts us vs a ps qs rs b
+    --      -> DTerm ps qs rs b
+    --      -> DTerm ts us vs a
     Lam  :: NDType ts us 'Type v
          -> DTerm ts us (v ': vs) a
          -> DTerm ts us vs (v ':-> a)

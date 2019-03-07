@@ -37,12 +37,13 @@ library:
   source-dirs: src
   exposed-modules:
   - Dhall.Typed
+  - Dhall.Typed.Context
   - Dhall.Typed.Core
   - Dhall.Typed.LC
   - Dhall.Typed.Plugin
+  - Dhall.Typed.Type.Bool
   - Dhall.Typed.Type.Index
   - Dhall.Typed.Type.N
-  - Dhall.Typed.Type.Bool
   - Dhall.Typed.Type.Option
   - Dhall.Typed.Type.Prod
   - Dhall.Typed.Type.Singletons
@@ -50,7 +51,7 @@ library:
   dependencies:
   - containers
   - data-default
-  - decidable
+  - decidable >= 0.1.5
   - dhall
   - ghc
   - ghc-tcplugins-extra
@@ -60,17 +61,21 @@ library:
   - template-haskell
   - text
   - th-desugar
+  - list-witnesses
 
-# executables:
-#   dhall-typed-exe:
-#     main:                Main.hs
-#     source-dirs:         app
-#     ghc-options:
-#     - -threaded
-#     - -rtsopts
-#     - -with-rtsopts=-N
-#     dependencies:
-#     - dhall-typed
+executables:
+  dhall-typed:
+    main:                dhall-typed.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - dhall-typed
+    - dhall
+    - text
+    - prettyprinter
 
 # tests:
 #   dhall-typed-test:

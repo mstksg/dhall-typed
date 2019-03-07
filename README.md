@@ -92,3 +92,5 @@ Todo
 *   `let` statements being able to bind values "lower-level" than the final
     result.  This is never technically necessary, but it would be nice to have
     a 1-to-1 correspondence with Dhall terms.
+*   Compilation currently takes 37 minutes, so that should probably be
+    addressed :)

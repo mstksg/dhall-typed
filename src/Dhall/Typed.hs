@@ -76,6 +76,7 @@ import qualified Language.Haskell.TH.Desugar         as TH
 data TypeMessage = TM (D.TypeMessage () D.X)
                  | TMNoPolyKind
                  | TMUnexpected
+  deriving Show
 
 m2e :: MonadError e m => e -> Maybe a -> m a
 m2e n = maybe (throwError n) pure
