@@ -327,8 +327,9 @@ piToTyped ctx l m x = runEitherFail TMUnexpected $ liftEF (toTyped ctx m) >>= \c
     SomeDExpr (DESort t0@(toPolySing->SomePS t)) -> liftEF (toTyped (ConsSort l t ctx) x) >>= \case
       SomeDExpr DEOrder -> throwError $ TM D.Untyped
       SomeDExpr (DESort x') -> pure . SomeDExpr $ DESort (t0 :*> x')
-      SomeDExpr (DEKind (SomeKind tx x')) -> pure . SomeDExpr . DEKind $
-        SomeKind tx (KPi t x')
+      SomeDExpr (DEKind (SomeKind tx x')) -> do
+        SKind <- pure tx <?> TM (D.InvalidOutputType x)
+        pure . SomeDExpr . DEKind . SomeKind tx $ KPi t x'
       SomeDExpr (DEType _) -> throwError TMNoPolyKind
       SomeDExpr (DETerm _) -> throwError . TM $ D.InvalidOutputType x
     SomeDExpr (DEKind (SomeKind t u0@(toPolySing->SomePS u))) -> do
@@ -340,8 +341,9 @@ piToTyped ctx l m x = runEitherFail TMUnexpected $ liftEF (toTyped ctx m) >>= \c
           SKind <- pure tx <?> TM (D.InvalidOutputType x)
           pure . SomeDExpr . DEKind $
             SomeKind SKind (u0 :~> x')
-        SomeDExpr (DEType (SomeType (NDK tx) x')) -> pure . SomeDExpr . DEType $
-          SomeType (NDK tx) (Pi (NDK u) x')
+        SomeDExpr (DEType (SomeType (NDK tx) x')) -> do
+          SType <- pure (skNormalize tx) <?> TM (D.InvalidOutputType x)
+          pure $ SomeDExpr . DEType . SomeType (NDK tx) $ Pi (NDK u) x'
         SomeDExpr (DETerm _) -> throwError . TM $ D.InvalidOutputType x
     SomeDExpr (DEType (SomeType (NDK u) v0@(toPolySing->SomePS v))) -> do
       SType <- pure (skNormalize u) <?> TM (D.InvalidInputType m)

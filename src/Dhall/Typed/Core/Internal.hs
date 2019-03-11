@@ -217,7 +217,7 @@ data DKind :: [DSort] -> DSort -> Type where
     KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
     KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
     (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
-    KPi   :: SDSort t -> DKind (t ': ts) a -> DKind ts a
+    KPi   :: SDSort t -> DKind (t ': ts) 'Kind -> DKind ts 'Kind
     Type  :: DKind ts 'Kind
     TRecord :: AggType (DKind ts 'Kind) ls as
             -> DKind ts 'Kind
@@ -261,8 +261,8 @@ type family KSub ts ps a b (del :: Delete ts ps a) (x :: DKind ps a) (r :: DKind
     KSub ts ps a b     del x ('KApp (f :: DKind ts (c ':*> b)) r) =
       'KApp (KSub ts ps a (c ':*> b) del x f) (KSub ts ps a c del x r)
     KSub ts ps a 'Kind del x (r ':~> u) = KSub ts ps a 'Kind del x r ':~> KSub ts ps a 'Kind del x r
-    KSub ts ps a  b         del x ('KPi (tt :: SDSort t) r)
-        = 'KPi tt (KSub (t ': ts) (t ': ps) a b ('DelS del) (KShift ps (t ': ps) t a 'InsZ x) r)
+    KSub ts ps a 'Kind del x ('KPi (tt :: SDSort t) r)
+        = 'KPi tt (KSub (t ': ts) (t ': ps) a 'Kind ('DelS del) (KShift ps (t ': ps) t a 'InsZ x) r)
     KSub ts ps a 'Kind del x 'Type = 'Type
     KSub ts ps a 'Kind del x ('TRecord (at :: AggType (DKind ts 'Kind) ls as))
                 = 'TRecord (KSubAT ts ps a del ls as x at)
@@ -313,8 +313,8 @@ type family KShift ts ps a b (ins :: Insert ts ps a) (x :: DKind ts b) :: DKind 
       'KApp (KShift ts ps a (c ':*> b) ins f) (KShift ts ps a c ins x)
     KShift ts ps a 'Kind ins (x ':~> y) =
         KShift ts ps a 'Kind ins x ':~> KShift ts ps a 'Kind ins y
-    KShift ts ps a b ins ('KPi (tt :: SDSort t) x) =
-      'KPi tt (KShift (t ': ts) (t ': ps) a b ('InsS ins) x)
+    KShift ts ps a 'Kind ins ('KPi (tt :: SDSort t) x) =
+      'KPi tt (KShift (t ': ts) (t ': ps) a 'Kind ('InsS ins) x)
     KShift ts ps a 'Kind ins 'Type = 'Type
     KShift ts ps a 'Kind ins ('TRecord (at :: AggType (DKind ts 'Kind) ls as))
                 = 'TRecord (KShiftAT ts ps a ins ls as at)
@@ -352,7 +352,45 @@ type family KShiftRec (ts :: [DSort])
     KShiftRec ts ps a (l ': ls) (f ': fs) ins ('ATS m ('WS r) at) (y ':< ys) =
         KShift ts ps a f ins y ':< KShiftRec ts ps a ls fs ins at ys
 
+data KEq ts a :: DKind ts a -> DKind ts a -> Type where
+    KERefl  :: KEq ts a x x
+    KESym   :: KEq ts a x y -> KEq ts a y x
+    KETrans :: KEq ts a x y -> KEq ts a y z -> KEq ts a x z
+    KEArrow :: KEq ts 'Kind x y -> KEq ts 'Kind x' y' -> KEq ts 'Kind (x ':~> x') (y ':~> y')
+    KEAbs   :: KEq ts a x y
+             -> KEq ts (t ':*> a)
+                       ('KLam (tt :: SDSort t) (KShift ts (t ': ts) t a 'InsZ x))
+                       ('KLam (tt :: SDSort t) (KShift ts (t ': ts) t a 'InsZ y))
+    KEAll    :: KEq ts 'Kind x y
+             -> KEq ts 'Kind ('KPi (tt :: SDSort t) (KShift ts (t ': ts) t 'Kind 'InsZ x))
+                             ('KPi (tt :: SDSort t) (KShift ts (t ': ts) t 'Kind 'InsZ y))
+    KEApp    :: KEq ts (a ':*> b) x y
+             -> KEq ts a x' y'
+             -> KEq ts b ('KApp x x') ('KApp y y')
+    KEAppAbs :: KEq ts b ('KApp ('KLam (ta :: SDSort a) (f :: DKind (a ': ts) b)) (x :: DKind ts a))
+                         (KSub (a ': ts) ts a b 'DelZ x f)
 
+testEq :: KEq '[] 'Kind ('KApp ('KLam 'SKind ('KVar 'IZ)) 'Type) 'Type
+testEq = KEAppAbs @'Kind @'[] @'Kind @'SKind @('KVar 'IZ) @'Type
+
+-- type family KSub ts ps a b (del :: Delete ts ps a) (x :: DKind ps a) (r :: DKind ts b) :: DKind ps b where
+
+-- data KNorm ts a :: DKind ts a -> DKind ts a -> Type where
+--     KNVar :: KNorm ts a ('KVar i) ('KVar i)
+--     KNLam :: KNorm (t ': ts) a          x            x'
+--           -> KNorm ts        (t ':*> a) ('KLam tt x) ('KLam tt x')
+    -- KNormalize ts a ('KApp ('KLam (tt :: SDSort t) f) x) =
+    --   KNormalize ts a (KSub (t ': ts) ts t a 'DelZ x f)
+    -- KNApp ::
+    -- KLam  :: SDSort t -> DKind (t ': ts) a -> DKind ts (t ':*> a)
+    -- KApp  :: DKind ts (a ':*> b) -> DKind ts a -> DKind ts b
+    -- (:~>) :: DKind ts 'Kind -> DKind ts 'Kind -> DKind ts 'Kind
+    -- KPi   :: SDSort t -> DKind (t ': ts) 'Kind -> DKind ts 'Kind
+    -- Type  :: DKind ts 'Kind
+    -- TRecord :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
+    -- TUnion  :: AggType (DKind ts 'Kind) ls as
+    --         -> DKind ts 'Kind
 
 -- | Ideally we would want this to be encodable within the type.  But the
 -- main problem here is checking if the LHS of an application is a variable
@@ -365,7 +403,7 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts a ('KApp (f :: DKind ts (r ':*> a)) x) =
       'KApp (KNormalize ts (r ':*> a) f) (KNormalize ts r x)
     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
-    KNormalize ts a          ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) a x)
+    KNormalize ts 'Kind      ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) 'Kind x)
     KNormalize ts 'Kind      'Type        = 'Type
     KNormalize ts a t = TL.TypeError ('TL.Text "No KNormalize")
 
@@ -468,8 +506,8 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: NDKind ts 'Kind u
-          -> DType ts (u ': us) a
-          -> DType ts us a
+          -> DType ts (u ': us) 'Type
+          -> DType ts us 'Type
 
     Bool     :: DType ts us 'Type
     Natural  :: DType ts us 'Type
@@ -603,7 +641,7 @@ type family TNormalize (ts :: [DSort])
                  (TNormalize ts us ('KPi tt b) f)
                  x
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
-    TNormalize ts us a ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) a x)
+    TNormalize ts us 'Type ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) 'Type x)
     TNormalize ts us 'Type 'Bool = 'Bool
     TNormalize ts us 'Type 'Natural = 'Natural
     TNormalize ts us ('Type ':~> 'Type) 'List = 'List
