@@ -370,8 +370,8 @@ data KEq ts a :: DKind ts a -> DKind ts a -> Type where
     KEAppAbs :: KEq ts b ('KApp ('KLam (ta :: SDSort a) (f :: DKind (a ': ts) b)) (x :: DKind ts a))
                          (KSub (a ': ts) ts a b 'DelZ x f)
 
-testEq :: KEq '[] 'Kind ('KApp ('KLam 'SKind ('KVar 'IZ)) 'Type) 'Type
-testEq = KEAppAbs @'Kind @'[] @'Kind @'SKind @('KVar 'IZ) @'Type
+-- testEq :: KEq '[] 'Kind ('KApp ('KLam 'SKind ('KVar 'IZ)) 'Type) 'Type
+-- testEq = KEAppAbs @'Kind @'[] @'Kind @'SKind @('KVar 'IZ) @'Type
 
 -- type family KSub ts ps a b (del :: Delete ts ps a) (x :: DKind ps a) (r :: DKind ts b) :: DKind ps b where
 
@@ -405,7 +405,6 @@ type family KNormalize ts a (x :: DKind ts a) :: DKind ts a where
     KNormalize ts 'Kind      (x ':~> y)   = KNormalize ts 'Kind x ':~> KNormalize ts 'Kind y
     KNormalize ts 'Kind      ('KPi (tt :: SDSort t) x)  = 'KPi tt (KNormalize (t ': ts) 'Kind x)
     KNormalize ts 'Kind      'Type        = 'Type
-    KNormalize ts a t = TL.TypeError ('TL.Text "No KNormalize")
 
 -- | Version of 'SDKind' that exposes itself in normal form.
 data NDKind ts a :: DKind ts a -> Type where
@@ -503,6 +502,10 @@ data DType ts :: [DKind ts 'Kind] -> DKind ts 'Kind -> Type where
           -> DType ts us ('KPi tt b)
           -> SubbedKind ts t a b sk
           -> DType ts us sk
+    TInst2 :: SingSing DSort t ('WS tt)
+           -> DType ts us ('KPi tt b)
+           -> SDKind ts t a
+           -> DType ts us (KSub (t ': ts) ts t 'Kind 'DelZ a b)
 
     (:->) :: DType ts us 'Type -> DType ts us 'Type -> DType ts us 'Type
     Pi    :: NDKind ts 'Kind u
@@ -586,13 +589,36 @@ type family Sub ts us qs a b (del :: Delete us qs a) (x :: DType ts qs a) (r :: 
 data ShiftSym ts us qs a b :: Insert us qs a -> DType ts us b ~> DType ts qs b
 type instance Apply (ShiftSym ts us qs a b i) x = Shift ts us qs a b i x
 
+type family SubKind
+                (ts :: [DSort])
+                (ps :: [DSort])
+                (us :: [DKind ts 'Kind])
+                (t :: DSort)
+                (a :: DKind ts 'Kind)
+                (del :: Delete ts ps t)
+                (x :: DKind ps t)
+                (r :: DType ts us a)
+            :: DType ps (Map (KSubSym ts ps t 'Kind del x) us) (KSub ts ps t 'Kind del x a)
+
 -- | Shift all type variables in a type expression of kind @b@ to account
 -- for a new bound variable of kind @a@, to be inserted at the position
 -- indicated by the 'Insert'.
-type family Shift ts us qs a b (ins :: Insert us qs a) (x :: DType ts us b) :: DType ts qs b where
+type family Shift (ts :: [DSort])
+                  (us :: [DKind ts 'Kind])
+                  (qs :: [DKind ts 'Kind])
+                  (a :: DKind ts 'Kind)
+                  (b :: DKind ts 'Kind)
+                  (ins :: Insert us qs a)
+                  (x :: DType ts us b)
+                :: DType ts qs b where
 
-type family ShiftSort ts ps us a (ins :: Insert ts ps a) (x :: DType ts us 'Type)
-                        :: DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type where
+type family ShiftSort (ts :: [DSort])
+                      (ps :: [DSort])
+                      (us :: [DKind ts 'Kind])
+                      a
+                      (ins :: Insert ts ps a)
+                      (x :: DType ts us 'Type)
+                   :: DType ps (Map (KShiftSym ts ps a 'Kind ins) us) 'Type where
 
 
 data ShiftSortSym ts ps us a (ins :: Insert ts ps a)
@@ -616,10 +642,8 @@ type family TNormalize (ts :: [DSort])
     TNormalize ts us a          ('TVar i   ) = 'TVar i
     TNormalize ts us (u ':~> a) ('TLam (uu :: NDKind ts 'Kind u) x)
             = 'TLam uu (TNormalize ts (u ': us) a x)
-    TNormalize ts us a ('TApp ('TLam u f) x)
-            = TL.TypeError ('TL.Text "Normalization of anonymous type function application not yet supported.")
-    -- TNormalize ts us a ('TApp ('TLam (NDK (uu :: SDKind ts 'Kind u)) f) x)
-    --     = TNormalize ts a (Sub (t ': ts) ts t a 'DelZ x f)
+    TNormalize ts us a ('TApp ('TLam uu (f :: DType ts (u ': us) a)) x)
+        = TNormalize ts us a (Sub ts (u ': us) us u a 'DelZ x f)
     TNormalize ts us a ('TApp (f :: DType ts us (r ':~> a)) x) =
         'TApp (TNormalize ts us (r ':~> a) f) (TNormalize ts us r x)
     TNormalize ts us ('KPi tt a)
@@ -628,18 +652,37 @@ type family TNormalize (ts :: [DSort])
         )
         = 'TPoly ('SiSi ss)     -- sorts are always normalized
                  (TNormalize (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) a x)
-    TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
-                                ('TPoly ('SiSi ss) f)
-                                (x :: SubbedKind ts t a b sk)
-                        )
-        = TL.TypeError ('TL.Text "Normalization of anonymous kind-polymorphic type function application not yet supported.")
-    TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
-                                (f :: DType ts us ('KPi tt b))
-                                (x :: SubbedKind ts t a b sk)
-                        )
-        = 'TInst ('SiSi ss)
-                 (TNormalize ts us ('KPi tt b) f)
-                 x
+    -- TNormalize ts us sk ('TInst2 ('SiSi ss :: SingSing DSort t ('WS tt))
+    --                              ('TPoly ('SiSi ss) (f :: DType (t ': ts) (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us) b))
+    --                              (xx :: SDKind ts t x)
+    --                             -- (x :: SubbedKind ts t a b sk)
+    --                     )
+    --     = SubKind (t ': ts) ts
+    --              (Map (KShiftSym ts (t ': ts) t 'Kind 'InsZ) us)
+    --              t
+    --              b
+    --              'DelZ
+    --              x
+    --              f
+-- type family ShiftSort ts ps us a (ins :: Insert ts ps a) (x :: DType ts us 'Type)
+-- type family SubKind
+--                 (ts :: [DSort])
+--                 (ps :: [DSort])
+--                 (us :: [DKind ts 'Kind])
+--                 (a :: DKind ts 'Kind)
+--                 (del :: Delete ts ps 'Kind)
+--                 (x :: DKind ps 'Kind)
+--                 (r :: DType ts us a)
+--             :: DType ps (Map (KSubSym ts ps 'Kind 'Kind del x) us) (KSub ts ps 'Kind 'Kind del x a)
+
+        -- = TL.TypeError ('TL.Text "Normalization of anonymous kind-polymorphic type function application not yet supported.")
+    -- TNormalize ts us sk ('TInst ('SiSi ss :: SingSing DSort t ('WS tt))
+    --                             (f :: DType ts us ('KPi tt b))
+    --                             (x :: SubbedKind ts t a b sk)
+    --                     )
+    --     = 'TInst ('SiSi ss)
+    --              (TNormalize ts us ('KPi tt b) f)
+    --              x
     TNormalize ts us 'Type (x ':-> y) = TNormalize ts us 'Type x ':-> TNormalize ts us 'Type y
     TNormalize ts us 'Type ('Pi (uu :: NDKind ts 'Kind u) x) = 'Pi uu (TNormalize ts (u ': us) 'Type x)
     TNormalize ts us 'Type 'Bool = 'Bool
